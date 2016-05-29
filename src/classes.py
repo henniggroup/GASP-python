@@ -402,11 +402,11 @@ class OrganismCreator(object):
     or PoscarsOrganismCreator.
     '''
     
-    def create_organisms(self):
+    def create_organism(self):
         '''
-        Creates the organisms for the initial population.
+        Creates an organism for the initial population.
         
-        Returns a list of organisms whose energies have been calculated.
+        Returns an organism.
         
         Args:
             TODO: think about what data this method needs (e.g. objective function data, etc.) and add it 
@@ -417,12 +417,7 @@ class OrganismCreator(object):
         # The general outline of this method (to be implemented in subclasses) is:
         #     1. Get the information needed to create the organisms (path to poscars, random vol, 
         #        stoichiometry, etc.)
-        #     2. Get the information needed to submit an energy calc (energy code, objective function, etc.)
-        #     3. For each organism:
-        #            - create the organism
-        #            - check against constraints
-        #            - if it passes, add it to wholePop list and submit for energy evaluation
-        #            - if not, throw it away
+        #     2. Create an organism, and update isFinished
         
 
 
@@ -439,12 +434,13 @@ class RandomOrganismCreator(OrganismCreator):
             This includes how many to make and whether to scale their volumes (and if yes, to what value).
             It will also need stoichiometry information so it knows what types of atoms to use.
         '''
+   #     self.numberToMake = 30 # the number of orgs to make with this creator
     
-    def create_organisms(self):
+    def create_organism(self):
         '''
-        Creates random organisms for the initial population.
+        Creates a random organism for the initial population.
         
-        Returns a list of organisms whose energies have been calculated.
+        Returns a random organism.
         
         Args:
         
@@ -453,13 +449,6 @@ class RandomOrganismCreator(OrganismCreator):
         '''
         # This method will need to create random offspring organisms using the methods specified in 
         # needed_parameters and submit them in batches of N at a time.
-        #
-        # Will need to have methods to create random structures and submit organisms for energy calculations.
-        #
-        # Some of the needed data will be N, the objective function data, and data concerning the external code
-        #
-        # Once an organism is created and it passes the constraints, it should be added to the wholePop list
-        # before relaxation. After relaxation, it should be added to the wholePop list again
         
 
 
@@ -476,27 +465,23 @@ class PoscarOrganismCreator(OrganismCreator):
             This includes how many to make and whether to scale their volumes (and if yes, to what value).
             It will also need stoichiometry information so it knows what types of atoms to use.
         '''
+     #  self.numberToMake = 30 # the number of orgs to make with this creator
     
     def create_organisms(self):
         '''
-        Creates organisms for the initial population from poscar files.
+        Creates an organism for the initial population from a poscar file.
         
-        Returns a list of organisms whose energies have been calculated.
+        Returns an organism.
         
         Args:
         
             TODO: think about what data this method needs (e.g. objective function data, etc.) and add it 
                 to the argument list.
         '''
-        # This method will need to create organisms from poscar files and submit them in batches of N at a time.
+        # This method will need to create organisms from poscar files. It will need to keep track of which ones it has
+        # done so that it doesn't make the same one twice (maybe just using list methods could take care of this)
         #
-        # Will need to have methods to read in a structure from a poscar file and submit organisms for energy 
-        # calculations.
-        #
-        # Some of the needed data will be N, the objective function data, and data concerning the external code
-        #
-        # Once an organism is created and it passes the constraints, it should be added to the wholePop list
-        # before relaxation. After relaxation, it should be added to the wholePop list again
+        # Will need to have methods to read in a structure from a poscar file 
 
 
 
@@ -521,10 +506,11 @@ class RedundancyGuard(object):
         #    is enough...
     
     
-    def checkStructures(self, org, list_of_organisms):
+    def checkRedundancy(self, org, list_of_organisms):
         '''
-        Checks if an organism's structure is redundant with that of any organism in a list of organisms,
-        according to the tolerances in the StructureMatcher.
+        Checks if an organism is redundant with any organism in a list of organisms, according to the 
+        tolerances in the StructureMatcher. If the organism to check has a value and the d-value constraint
+        is being used, then a d-value comparison will be done as well.
         
         Returns the organism that org is redundant with. If it's not redundant, returns None
         
@@ -533,29 +519,8 @@ class RedundancyGuard(object):
             
             list_of_organsisms: list of organisms against which to check for redundancy.
         ''' 
-        # TODO: implement me. Use StructureMatcher
-    
-    
-    def checkPool(self, org, pool):
-        '''
-        Checks if an organism is redundant with with any organism in the pool. This includes 
-        both structure comparisons and also d-value comparisons, if specified.
-        
-        Returns the organism from the pool that org is redundant with. If it's not redundant, returns None.
-        
-        Args:
-            org: organism to check for redundancy
-            
-            pool: the current pool
-        '''   
-        # TODO: implement me.
-        #
-        # start by checking just the structures - call checkStructures(org, pool.toList())
-        # if a duplicate is found AND the new structure has a lower objective function value,
-        #    do a pool.replaceOrganism() and exit the method
-        # 2. if not a redundant structure, then check the d-value constraint, if it's specified. 
-        #        if a duplicate is found with this criteria, do a pool.replaceOrganism() and exit
-        #        the method
+        # TODO: implement me. Use StructureMatcher. 
+        # Must also work if list_of_organisms is empty (will be the case for the first structure made)
         
 
 

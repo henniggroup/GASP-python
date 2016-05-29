@@ -38,9 +38,32 @@ others?
 #     method up to this level. Think about how to wait after submitting N jobs, how to do constraints 
 #     and redundancy checks, and how to keep a wholePop list of all the structures, both relaxed and 
 #     unrelaxed.
+
 initial_population = []
-for creator in organism_creators:
-    initial_population.extend(creator.create_organisms())
+num_running = 0  # the number of calculations currently running
+if creator == PoscarOrganismCreator:
+    num_created = 0
+    while (num_running < N and num_created < creator.numberToMake)
+        new_org = creator.create_organism()
+        creator.numberToMake++
+            developed_org = development.develop(new_org)
+            if developed_org != None:
+                redundant_org = redundancy_guard.check_structures(developed_org, whole_pop)
+                if redundant_org == None:
+                    whole_pop.append(developed_org)
+                    energy_calculator.doEnergyCalculation(developed_org)
+                    num_running = num_running++
+                    
+                    # when the calc finishes, we need to
+                    # 1. decrement num_running
+                    # 2. develop the relaxed org
+                    # 3. check relaxed org for redundancy (including possible d-value)
+                    # 4. add the relaxed org to the whole_pop list
+                    
+# this is looking pretty messy. Maybe it would be better to keep most of the details of creating the organisms in methods
+# of the creators...
+            
+
 
 # create the pool
 pool = Pool(initial_population, other args)
@@ -58,9 +81,9 @@ while the stopping criteria are not met:
     next_org = waiting_queue.popleft()  # or something similar
     
     # check if redundant with the pool 
-    redundant_pool_org = redundancy_guard.checkPool(next_org, pool)
-    if (redundant_pool_org != None):
-        pool.replaceOrganism(redundant_pool_org, next_org) # TODO: only swap if new on is better...
+    redundant_pool_org = redundancy_guard.checkRedundancy(next_org, pool.toList())
+    if (redundant_pool_org != None and next_org.value < redundant_pool_org.value):
+        pool.replaceOrganism(redundant_pool_org, next_org)
     else:
         # add it to the pool
         pool.addOrganism(offspring)
