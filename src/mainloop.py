@@ -1,5 +1,4 @@
 '''
-Line added from chromebook
 Outline of the algorithm
 
 
