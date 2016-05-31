@@ -14,6 +14,8 @@ organism_creators = []
 for name in dict_of_parameters['Initial Population']
     Name = str(name)
     organism_creators.append(Name(name))
+# TODO: sort the list of creators so that the num_attempts ones are at the front and the num_successes ones are
+# at the back
 
 # create variation objects (Mutation, Mating, etc.) and put them in a list
 variations = []
@@ -27,11 +29,12 @@ structure_matcher = StructureMatcher(input)
 redundancy_guard = RedundancyGuard(structure_matcher, other_inputs)
 development = Development(niggli_params, constraint_params)
 offspring_generator = OffspringGenerator(variations, development, redundancy_guard, 10000)
-energy_calculator = "energy code name" + "EnergyCalulator"(energy_code_params)
+energy_calculator = "energy code name" + "EnergyCalculator"(energy_code_params)
 waiting_queue = deque()         # queue to hold the organisms that have finished their energy calculations and are
                                 # waiting to be added to the pool
-whole_pop = []                  # holds every org seen, both relaxed and unrelaxed, to all redundancy checking
+whole_pop = []                  # holds every organism that has been submitted for energy calculation, both relaxed and unrelaxed
 others?
+
 
 # populate the initial population
 # TODO: unpack/expand this a little more. We want to move some of the detail of the create_organisms
@@ -41,27 +44,23 @@ others?
 
 initial_population = []
 num_running = 0  # the number of calculations currently running
-if creator == PoscarOrganismCreator:
-    num_created = 0
-    while (num_running < N and num_created < creator.numberToMake)
-        new_org = creator.create_organism()
-        creator.numberToMake++
-            developed_org = development.develop(new_org)
-            if developed_org != None:
-                redundant_org = redundancy_guard.check_structures(developed_org, whole_pop)
-                if redundant_org == None:
-                    whole_pop.append(developed_org)
-                    energy_calculator.doEnergyCalculation(developed_org)
-                    num_running = num_running++
-                    
-                    # when the calc finishes, we need to
-                    # 1. decrement num_running
-                    # 2. develop the relaxed org
-                    # 3. check relaxed org for redundancy (including possible d-value)
-                    # 4. add the relaxed org to the whole_pop list
-                    
-# this is looking pretty messy. Maybe it would be better to keep most of the details of creating the organisms in methods
-# of the creators...
+for creator in organism_creators:
+    while creator.isFinished == False:
+        if num_running < N:
+            new_organism = creator.create_organism() # this handles development and redundancy checking
+            if new_organism != None:
+                energy_calculator.doEnergyCalculation(new_organism) # this will have to be done on a thread I think...
+                num_running = num_running + 1
+                
+                # when the calc finishes, we need to:
+                # 1. decrement num_running
+                # 2. develop the relaxed org
+                # 3. check relaxed org for redundancy (including possible d-value)
+                # 4. possible add the relaxed org to initial_population 
+                # 4. add the relaxed org to whole_pop
+                # 5. for creators that stop based on number of successes (instead of just attempts), need to increment 
+                #    the creator's counter if the structure gets added to the initial population
+                # note: maybe most of these tasks could be handled by the doEne
             
 
 

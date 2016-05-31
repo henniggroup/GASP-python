@@ -404,9 +404,9 @@ class OrganismCreator(object):
     
     def create_organism(self):
         '''
-        Creates an organism for the initial population.
+        Creates an organism for the initial population. Handles development and redundancy checking.
         
-        Returns an organism.
+        Returns a developed, non-redundant organism, or None if the organism failed development and redundancy checking
         
         Args:
             TODO: think about what data this method needs (e.g. objective function data, etc.) and add it 
@@ -415,9 +415,10 @@ class OrganismCreator(object):
         raise NotImplementedError("Please implement this method.")
         #
         # The general outline of this method (to be implemented in subclasses) is:
-        #     1. Get the information needed to create the organisms (path to poscars, random vol, 
-        #        stoichiometry, etc.)
-        #     2. Create an organism, and update isFinished
+        #     1. create an organism
+        #     2. develop the organism
+        #     3. check for redundancy 
+        #     4. update isFinished
         
 
 
@@ -435,20 +436,24 @@ class RandomOrganismCreator(OrganismCreator):
             It will also need stoichiometry information so it knows what types of atoms to use.
         '''
    #     self.numberToMake = 30 # the number of orgs to make with this creator
+        self.numMade = 0 # the number of structures s  
     
     def create_organism(self):
         '''
         Creates a random organism for the initial population.
         
-        Returns a random organism.
+        Returns a developed, non-redundant organism, or None if the organism failed development or redundancy checking
         
         Args:
         
-            TODO: think about what data this method needs (e.g. objective function data, etc.) and add it 
-                to the argument list.
+            TODO: think about what data this method needs and add it to the argument list.
         '''
-        # This method will need to create random offspring organisms using the methods specified in 
-        # needed_parameters and submit them in batches of N at a time.
+        self.isFinished = False
+        # This method will need to:
+        #     1. create a random organism
+        #     2. develop the organism
+        #     3. check for redundancy 
+        #     4. update isFinished (can only update this after the energy calculation though...)
         
 
 
@@ -458,7 +463,7 @@ class PoscarOrganismCreator(OrganismCreator):
     '''
     def __init__(self, needed_parameters):
         '''
-        Creates a RandomOrganismCreator.
+        Creates a PoscarOrganismCreator.
         
         Args:
             needed_parameters: all the parameters needed for creating the random organisms.
@@ -466,22 +471,24 @@ class PoscarOrganismCreator(OrganismCreator):
             It will also need stoichiometry information so it knows what types of atoms to use.
         '''
      #  self.numberToMake = 30 # the number of orgs to make with this creator
+        self.numMade = 0 # the number of structures attempted to made from poscar files 
+
     
-    def create_organisms(self):
+    def create_organism(self):
         '''
         Creates an organism for the initial population from a poscar file.
         
-        Returns an organism.
+        Returns a developed, non-redundant organism, or None if the organism failed development or redundancy checking
         
         Args:
         
-            TODO: think about what data this method needs (e.g. objective function data, etc.) and add it 
-                to the argument list.
+            TODO: think about what data this method needs and add it to the argument list.
         '''
-        # This method will need to create organisms from poscar files. It will need to keep track of which ones it has
-        # done so that it doesn't make the same one twice (maybe just using list methods could take care of this)
-        #
-        # Will need to have methods to read in a structure from a poscar file 
+        # This method will need to:
+        #     1. create an organism from poscar file
+        #     2. develop the organism
+        #     3. check for redundancy
+        #     4. increment numMade, and update isFinished 
 
 
 
@@ -632,12 +639,14 @@ class EnergyCalculator(object):
     or GulpEnergyCalculator.
     '''
     
-    def doEnergyCalculation(self, org):
+    def doEnergyCalculation(self, org, whole_pop):
         '''
         Calculates the energy of an organism.
         
         Args:
             org: the organism whose energy we want to calculate
+            
+            whole_pop: the list containing all the organisms that the algorithm has submitted for energy calculations
         '''
         raise NotImplementedError("Please implement this method.")
         # TODO: think about how to impelement this. There are two main parts: preparing for the calculation (writing
@@ -680,17 +689,20 @@ class VaspEnergyCalculator(EnergyCalculator):
         # TODO: implement me. Just keeping the paths to the input files should be enough
     
     
-    def doEnergyCalculation(self, org):
+    def doEnergyCalculation(self, org, whole_pop):
          '''
         Calculates the energy of an organism using VASP.
         
         Args:
             org: the organism whose energy we want to calculate
+            
+            whole_pop: the list containing all the organisms that the algorithm has submitted for energy calculations
         '''
         # TODO: implement me
-        # 1. prepare input files for calculation
-        # 2. submit calculation, by running external script
-        # 3. when finished
+        # 1. append the unrelaxed organism to the whole_pop list
+        # 2. prepare input files for calculation
+        # 3. submit calculation, by running external script
+        # 4. when finished
         #        - develop relaxed organism
         #        - add relaxed organism to whole_pop list
         #        - add relaxed organism to waiting_queue
