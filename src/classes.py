@@ -6,6 +6,7 @@ from _pyio import __metaclass__
 # import collections.deque
 from _collections import deque
 import random  # TODO: need to make sure all random numbers from the same PRNG
+import threading
 # TODO: import other needed stuff from pymatgen
 
 '''
@@ -41,7 +42,7 @@ class Organism(object):
     An organism
     '''
 
-    def __init__(self, structure, value=None, fitness=None, select_prob=None):
+    def __init__(self, structure, value=None, fitness=None, select_prob=None, isActive=False):
         '''
         Creates an organism
         
@@ -56,12 +57,15 @@ class Organism(object):
             
             select_prob: The selection probability of this organism. Ranges from 0 to 1, including
                 both endpoints.
+                
+            isActive: Whether this organism is currently part of the pool or initial population
         '''
         # initialize instance variables
         self.structure = structure
         self.value = value
         self.fitness = fitness
         self.select_prob = select_prob 
+        self.isActive = isActive
         self._id = IDGenerator.makeID(); # unique id number for this organism. Should not be changed.
     
     # this keeps the id (sort of) immutable by causing an exception to be raised if the user tries to 
@@ -115,7 +119,7 @@ class Pool(object):
     
     def addOrganism(self, org):
         '''
-        Adds a new organism to the pool. 
+        Adds a new organism to the pool, and also to whole_pop.
         
         If the new organism better than one of the orgs currently in the promotion set, then it is added 
         to the promotion set, and the worst org in the promotion set is moved to the back of the queue. 
@@ -126,7 +130,9 @@ class Pool(object):
         '''
         # TODO: implement me. Look at deque methods...
         # 1. If doing a pd search, will need to transform value from epa to distance from current best convex hull
-        # 2. Once value is updated (in necessary), decide whether to place in promotion set or queue, based on org values
+        # 2. Once value is updated (if necessary), decide whether to place in promotion set or queue, based on org values
+        # 3. Add organism to whole_pop (whole_pop.append(org))
+        # 4. Set org.isActive = True
         
         self.numAdds = self.numAdds + 1
         
@@ -145,6 +151,7 @@ class Pool(object):
         # TODO: implement me
         # 1. determine if old_org is in promotion set or queue
         # 2. do the replacement
+        # 3. set old_org.isActive = False and newOrg.isActive = True
         # 3. if the new_org is either the best or worst in the pool, will need to update fitnesses and selection probs
     
     
@@ -402,11 +409,12 @@ class OrganismCreator(object):
     or PoscarsOrganismCreator.
     '''
     
-    def create_organism(self):
+    def createOrganism(self):
         '''
-        Creates an organism for the initial population. Handles development and redundancy checking.
+        Creates an organism for the initial population. Handles development and redundancy checking, and adds valid
+        organism to whole_pop.
         
-        Returns a developed, non-redundant organism, or None if the organism failed development and redundancy checking
+        Returns a developed, non-redundant organism, or None if one could not be created
         
         Args:
             TODO: think about what data this method needs (e.g. objective function data, etc.) and add it 
@@ -417,8 +425,10 @@ class OrganismCreator(object):
         # The general outline of this method (to be implemented in subclasses) is:
         #     1. create an organism
         #     2. develop the organism
-        #     3. check for redundancy 
-        #     4. update isFinished
+        #     3. if the organism fails development, make another one and try again
+        #     4. check for redundancy 
+        #     5. if the organism fails redundancy, make another one and try again 
+        #     6. add successful organism to whole_pop
         
 
 
@@ -426,7 +436,7 @@ class RandomOrganismCreator(OrganismCreator):
     '''
     Creates random organisms for the initial population
     '''
-    def __init__(self, needed_parameters):
+    def __init__(self, needed_parameters, development, redundancy_guard, num_to_make, num_made=0, when_stop="successes", is_finished=False):
         '''
         Creates a RandomOrganismCreator.
         
@@ -434,26 +444,55 @@ class RandomOrganismCreator(OrganismCreator):
             needed_parameters: all the parameters needed for creating the random organisms.
             This includes how many to make and whether to scale their volumes (and if yes, to what value).
             It will also need stoichiometry information so it knows what types of atoms to use.
+            
+            development: the Development object (for cell reduction and structure constraints)
+            
+            redundancy_guard: the redundancyGuard object 
+            
+            num_to_make: the number of organisms to make with this creator. TODO: this will probably included in needed_parameters
+            
+            when_stop: the criteria for when this creator is finished ("successes" or "attempts") TODO: this will probably included in needed_parameters
+            
+            num_successes: the number of organisms successfully added to the initial population from this creator
+            
+            is_finished: whether the creator has made enough organisms
         '''
-   #     self.numberToMake = 30 # the number of orgs to make with this creator
-        self.numMade = 0 # the number of structures s  
+        self.development = development
+        self.redundancy_guard = redundancy_guard
+        self.num_to_make = num_to_make
+        self.num_made = num_made
+        self.when_stop = when_stop
+        self.is_finished = is_finished
     
-    def create_organism(self):
+    def createOrganism(self):
         '''
-        Creates a random organism for the initial population.
+        Creates a random organism for the initial population. Handles development and redundancy checking, and adds valid
+        organism to whole_pop.
         
-        Returns a developed, non-redundant organism, or None if the organism failed development or redundancy checking
+        Returns a developed, non-redundant organism
         
         Args:
         
             TODO: think about what data this method needs and add it to the argument list.
         '''
-        self.isFinished = False
         # This method will need to:
         #     1. create a random organism
         #     2. develop the organism
-        #     3. check for redundancy 
-        #     4. update isFinished (can only update this after the energy calculation though...)
+        #     3. if the organism fails development, make another one and try again
+        #     4. check for redundancy 
+        #     5. if the organism fails redundancy, make another one and try again
+        #     6. add successful organism to whole_pop
+        #     7. return the successful organism
+        
+    
+    def updateStatus(self):
+        '''
+        Increments num_made, and if necessary, updates is_finished
+        '''
+        self.num_made = self.num_made + 1
+        if self.num_made == self.num_to_make:
+            self.is_finished = True
+        
         
 
 
@@ -461,7 +500,7 @@ class PoscarOrganismCreator(OrganismCreator):
     '''
     Creates organisms from poscar files for the initial population.
     '''
-    def __init__(self, needed_parameters):
+    def __init__(self, needed_parameters, development, redundancy_guard, num_to_make, num_made=0, when_stop="attempts", is_finished=False):
         '''
         Creates a PoscarOrganismCreator.
         
@@ -469,26 +508,58 @@ class PoscarOrganismCreator(OrganismCreator):
             needed_parameters: all the parameters needed for creating the random organisms.
             This includes how many to make and whether to scale their volumes (and if yes, to what value).
             It will also need stoichiometry information so it knows what types of atoms to use.
+            
+            development: the Development object (for cell reduction and structure constraints)
+            
+            redundancy_guard: the redundancyGuard object 
+            
+            num_to_make: the number of organisms to make with this creator. TODO: this will probably included in needed_parameters
+            
+            when_stop: the criteria for when this creator is finished ("successes" or "attempts") TODO: this will probably included in needed_parameters
+            
+            num_successes: the number of organisms successfully added to the initial population from this creator
+            
+            is_finished: whether the creator has made enough organisms
         '''
      #  self.numberToMake = 30 # the number of orgs to make with this creator
-        self.numMade = 0 # the number of structures attempted to made from poscar files 
+        self.development = development
+        self.redundancy_guard = redundancy_guard
+        self.num_to_make = num_to_make
+        self.num_made = num_made
+        self.when_stop = when_stop
+        self.is_finished = is_finished
 
     
-    def create_organism(self):
+    def createOrganism(self):
         '''
-        Creates an organism for the initial population from a poscar file.
+        Creates an organism for the initial population from a poscar file. Handles development and redundancy checking, 
+        and adds valid organism to whole_pop.
         
-        Returns a developed, non-redundant organism, or None if the organism failed development or redundancy checking
+        Returns a developed, non-redundant organism, or None if one could not be created
         
         Args:
         
             TODO: think about what data this method needs and add it to the argument list.
         '''
         # This method will need to:
-        #     1. create an organism from poscar file
+        #     1. create an organism from a poscar file
         #     2. develop the organism
-        #     3. check for redundancy
-        #     4. increment numMade, and update isFinished 
+        #     3. if the organism fails development, make another one from the next poscar file
+        #     4. check for redundancy
+        #     5. if the organism fails redundancy, make another one from the next poscar file
+        #     6. add successful organism to whole_pop
+        #     7. increment num_made, and update is_finished if needed
+        #          self.updateStatus()
+        
+        
+    def updateStatus(self):
+        '''
+        Increments num_made, and if necessary, updates is_finished
+        '''
+        self.num_made = self.num_made + 1
+        if self.num_made == self.num_to_make:
+            self.is_finished = True
+        
 
 
 
@@ -511,23 +582,50 @@ class RedundancyGuard(object):
         '''
         # TODO: implement me. Maybe just keeping copies of the relevant dictionaries as instance variable
         #    is enough...
+        
+    def checkRedundancy(self, new_organism, whole_pop):
+        '''
+        Checks for redundancy, both structural and if specified, energy (d-value)
+        
+        Returns the organism with which new_organism is redundant, or None if no redundancy
+        '''
+    #    for organism in whole_pop:
+    #        if checkStructureRedundancy(new_organism, organism) != None:
+    #            return organism
+    #        if new_organism.value != None and dvalueSet == True and checkEnergyRedundancy(new_organism, organism) != None:
+    #            return organism    
+    #    return None    # should only get here if no organisms are redundant with the new organism
+
     
     
-    def checkRedundancy(self, org, list_of_organisms):
+    def checkStructureRedundancy(self, org1, org2):
         '''
         Checks if an organism is redundant with any organism in a list of organisms, according to the 
-        tolerances in the StructureMatcher. If the organism to check has a value and the d-value constraint
-        is being used, then a d-value comparison will be done as well.
+        tolerances in the StructureMatcher.
         
         Returns the organism that org is redundant with. If it's not redundant, returns None
         
         Args:
-            org: organism to check for redundancy.
+            org1: organism to check for redundancy.
             
-            list_of_organsisms: list of organisms against which to check for redundancy.
+            org2: organism to which org1 is compared.
         ''' 
         # TODO: implement me. Use StructureMatcher. 
-        # Must also work if list_of_organisms is empty (will be the case for the first structure made)
+        
+        
+    def checkEnergyRedundancy(self, org1, org2):
+        '''
+        Checks if an organism is redundant with any organism in a list of organisms, according to the 
+        d-value specified.
+        
+        Returns the organism that org is redundant with. If it's not redundant, returns None
+        
+        Args:
+            org1: organism to check for redundancy.
+            
+            org2: organism to which org1 is compared.
+        ''' 
+        # TODO: implement me.
         
 
 
@@ -592,7 +690,7 @@ class OffspringGenerator(object):
         
     def makeOffspringOrganism(self, pool, whole_pop):
         '''
-        Generates a valid offspring organism using the variations.
+        Generates a valid offspring organism using the variations and adds it to whole_pop.
         
         Returns an unrelaxed offspring organism.
         
@@ -607,7 +705,9 @@ class OffspringGenerator(object):
             num_tries = 0
             while (num_tries < self.num_tries_limit):
                 offspring = variation.doVariation()
-                if (self.development.develop(offspring) != None) and (self.redundancy_guard.checkStructures(offspring, whole_pop) == None):
+                offspring = self.development.develop(offspring)
+                if (offspring != None) and (self.redundancy_guard.checkRedundancy(offspring, whole_pop) == None):
+                    whole_pop.append(offspring)
                     return offspring
                 else:
                     num_tries = num_tries + 1
@@ -639,14 +739,15 @@ class EnergyCalculator(object):
     or GulpEnergyCalculator.
     '''
     
-    def doEnergyCalculation(self, org, whole_pop):
+    def doEnergyCalculation(self, org):
         '''
-        Calculates the energy of an organism.
+        Calculates the energy of an organism
+        
+        Returns an organism that has been parsed from the output files of the energy code, or None if the calculation 
+        failed. Does not do development or redundancy checking.
         
         Args:
             org: the organism whose energy we want to calculate
-            
-            whole_pop: the list containing all the organisms that the algorithm has submitted for energy calculations
         '''
         raise NotImplementedError("Please implement this method.")
         # TODO: think about how to impelement this. There are two main parts: preparing for the calculation (writing
@@ -676,7 +777,7 @@ class EnergyCalculator(object):
         
         
 
-class VaspEnergyCalculator(EnergyCalculator):
+class VaspEnergyCalculator(object):
     '''
     Calculates the energy of an organism using VASP.
     '''
@@ -689,23 +790,64 @@ class VaspEnergyCalculator(EnergyCalculator):
         # TODO: implement me. Just keeping the paths to the input files should be enough
     
     
-    def doEnergyCalculation(self, org, whole_pop):
+    def doEnergyCalculation(self, org):
          '''
-        Calculates the energy of an organism using VASP.
+        Calculates the energy of an organism using VASP
+        
+        Returns an organism that has been parsed from the output files of the energy code, or None if the calculation 
+        failed. Does not do development or redundancy checking.
+        
+        Args:
+            org: the organism whose energy we want to calculate
+        '''
+        # TODO: implement me
+        # 1. prepare input files for calculation
+        # 2. submit calculation (by running external script)
+        # 3. when external script returns, parse organism from the energy code output files
+        
+
+
+class InitialPopulation():
+    '''
+    The initial population of organisms
+    '''
+    
+    def __init__(self, whole_pop):
+        '''
+        Args:
+            whole_pop: the list containing the organisms seen by the algorithm for redundancy checking
+        '''
+        self.initial_population = []
+    
+    
+    def addOrganism(self, org, whole_pop):
+         '''
+        Adds a relaxed organism to the initial population and updates whole_pop.
         
         Args:
             org: the organism whose energy we want to calculate
             
             whole_pop: the list containing all the organisms that the algorithm has submitted for energy calculations
         '''
+      #  initial_population.append(org)
+      #  org.isActive = True
+      #  whole_pop.append(org)
+      
+      
+    def replaceOrganism(self, old_org, new_org):
+        '''
+        Replaces an organism in the initial population with a new organism.
+        
+        Precondition: the old_org is a current member of the initial population
+        
+        Args:
+            old_org: the organism in the initial population to replace
+            new_org: the new organism to replace the old one
+        '''
         # TODO: implement me
-        # 1. append the unrelaxed organism to the whole_pop list
-        # 2. prepare input files for calculation
-        # 3. submit calculation, by running external script
-        # 4. when finished
-        #        - develop relaxed organism
-        #        - add relaxed organism to whole_pop list
-        #        - add relaxed organism to waiting_queue
+        # 1. do the replacement
+        # 2. set old_org.isActive = False and newOrg.isActive = True
+        # 3. whole_pop.append(new_org)
     
 
         

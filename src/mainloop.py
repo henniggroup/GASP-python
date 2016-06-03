@@ -1,7 +1,6 @@
 '''
 Outline of the algorithm
 
-
 # get the parameters from the input file, and store them as nested dictionaries
 parameters_parser = ParametersParser(path_to_input_file)
 dict_of_parameters = parameters_parser.parse()
@@ -35,73 +34,90 @@ waiting_queue = deque()         # queue to hold the organisms that have finished
 whole_pop = []                  # holds every organism that has been submitted for energy calculation, both relaxed and unrelaxed
 others?
 
-
-# populate the initial population
-# TODO: unpack/expand this a little more. We want to move some of the detail of the create_organisms
-#     method up to this level. Think about how to wait after submitting N jobs, how to do constraints 
-#     and redundancy checks, and how to keep a wholePop list of all the structures, both relaxed and 
-#     unrelaxed.
-
-initial_population = []
-num_running = 0  # the number of calculations currently running
+# create the initial population
+initial_population = InitialPopulation(whole_pop)
+threads = []  # list of threads to do the energy calculations
 for creator in organism_creators:
-    while creator.isFinished == False:
-        if num_running < N:
-            new_organism = creator.create_organism() # this handles development and redundancy checking
+    while not creator.isFinished:
+        # start by making N threads
+        if len(threads) < N:
+            new_organism = creator.create_organism() # this handles development and redundancy checking, but could fail for poscar creator...
             if new_organism != None:
-                energy_calculator.doEnergyCalculation(new_organism) # this will have to be done on a thread I think...
-                num_running = num_running + 1
-                
-                # when the calc finishes, we need to:
-                # 1. decrement num_running
-                # 2. develop the relaxed org
-                # 3. check relaxed org for redundancy (including possible d-value)
-                # 4. possible add the relaxed org to initial_population 
-                # 4. add the relaxed org to whole_pop
-                # 5. for creators that stop based on number of successes (instead of just attempts), need to increment 
-                #    the creator's counter if the structure gets added to the initial population
-                # note: maybe most of these tasks could be handled by the doEne
-            
+                thread = Thread(target=energy_calculator.doEnergyCalculation, args=(new_organism))
+                thread.start()
+                threads.append(thread)
+        else:
+            # check for dead threads
+            for thread in threads:
+                if not thread.isAlive:
+                    # TODO: need to figure out how to get the return value from a dead thread
+                    relaxed_org = thread.return_value  
+                    if relaxed_org != None:
+                        developed_org = development.develop(relaxed_org)
+                        if developed_org != None:
+                            redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                            if redundant_org != None:
+                                if redundant_org.isActive and redundant_org.value > developed_org.value:
+                                    initial_population.replaceOrganism(redundant_org, developed_org)
+                            else:
+                                initial_population.add(developed_org)
+                                if creator.when_stop == "successes": # update status of success-based creators
+                                    creator.updateStatus()
+                                
+                    # remove the dead thread and make another one
+                    threads.remove(thread)
+                    new_organism = creator.create_organism() # this handles development and redundancy checking, but could fail for poscar creator...
+                    if new_organism != None:
+                        thread = Thread(target=energy_calculator.doEnergyCalculation, args=(new_organism))
+                        thread.start()
+                        threads.append(thread)
 
 
 # create the pool
 pool = Pool(initial_population, other args)
+threads = []  # list of threads to do the energy calculations (overwrite the old list used in initial population)
 
 # create the initial batch of N offspring organisms and submit them for energy calculations
 for i in range(0, N):
     unrelaxed_offspring = offspring_generator.makeOffspringOrganism(pool, whole_pop)
-    whole_pop.append(unrelaxed_offspring)
-    energy_calculator.doEnergyCalculation(unrelaxed_offspring) # this handles threads, development, whole_pop and waiting q  
+    thread = Thread(target=energy_calculator.doEnergyCalculation, args=(new_organism))
+    thread.start()
+    threads.append(thread)
 
 # continue the search until stopping criteria are met
 while the stopping criteria are not met:
-
-    # fetch next offspring in line
-    next_org = waiting_queue.popleft()  # or something similar
-    
-    # check if redundant with the pool 
-    redundant_pool_org = redundancy_guard.checkRedundancy(next_org, pool.toList())
-    if (redundant_pool_org != None and next_org.value < redundant_pool_org.value):
-        pool.replaceOrganism(redundant_pool_org, next_org)
-    else:
-        # add it to the pool
-        pool.addOrganism(offspring)
-        
-        # check if we've added enough new offspring orgs to the pool that we can trim off the initial
-        # population orgs from the queue. poolSize and numPromoted are user inputs.
-        if (pool.numAdds == (poolSize - numPromoted)):
-            for i in range(0, len(pool.queue) - (poolSize - numPromoted)):
-                pool.queue.popleft()
+    # check for dead threads
+    for thread in threads:
+        if not thread.isAlive:
+            # TODO: need to figure out how to get the return value from a dead thread
+            relaxed_org = thread.return_value  
+            if relaxed_org != None:
+                developed_org = development.develop(relaxed_org)
+                if developed_org != None:
+                    redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                    if redundant_org != None and redundant_org.isActive and redundant_org.value > developed_org.value:
+                            pool.replaceOrganism(redundant_org, developed_org)
+                    else:
+                        pool.add(developed_org)
+                        # check if we've added enough new offspring orgs to the pool that we can trim off the initial
+                        # population orgs from the queue. poolSize and numPromoted are user inputs.
+                        if (pool.numAdds == (poolSize - numPromoted)):
+                            for i in range(0, len(pool.queue) - (poolSize - numPromoted)):
+                                pool.queue.popleft()
                 
-        # check if we've already added more than enough offspring to the pool to allow trimming off the 
-        # orgs from the initial population, in which case it has already happened.
-        elif (pool.numAdds > (poolSize - numPromoted)):
-            pool.queue.popleft()
-            
-        # now create a new organism from the pool and submit it for an energy calculation
-        pool.calculateFitnesses()
-        pool.calculateSelectionProbs()
-        offspring = offspring_generator.makeOffspringOorganism(pool, whole_pop) # this handles development and redundancy
-        energy_calculator.doEnergyCalculation(offspring)                        # use threads
+                        # check if we've already added more than enough offspring to the pool to allow trimming off the 
+                        # orgs from the initial population, in which case it has already happened, and we just need to
+                        # remove one organism from the pool
+                        elif (pool.numAdds > (poolSize - numPromoted)):
+                            pool.queue.popleft()
+                                                
+            # remove the dead thread and make another one
+            threads.remove(thread)
+            pool.calculateFitnesses()
+            pool.calculateSelectionProbs()
+            offspring = offspring_generator.makeOffspringOrganism(pool, whole_pop) # this handles development and redundancy
+            thread = Thread(target=energy_calculator.doEnergyCalculation, args=(offspring))
+            thread.start()
+            threads.append(thread)
 
 '''
