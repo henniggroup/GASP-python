@@ -1,5 +1,47 @@
+# Outline of the algorithm
+import yaml
+import sys
+import os
+import classes
+
+# get the pash to the input file (in yaml format)
+#input_file = os.path.abspath(sys.argv[1]) 
+
+# parse the input file as nested dictionaries
+#with open(input_file, 'r') as f:
+with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
+    parameters = yaml.load(f)
+    
+# make the composition space object
+composition_space = classes.CompositionSpace(parameters['CompositionSpace'])
+#print(composition_space.end_points)
+
+# make the constraints object
+constraints = classes.Constraints(parameters['Constraints'], composition_space.end_points)
+
+# make the geometry object (include needed constraints)
+geometry = classes.Geometry(parameters['Geometry'])
+
+# make the development object
+
+# make the redundancy_guard object
+
+# make the creator objects
+
+#for i in parameters['InitialPopulation']:
+#    if i == 'random':
+#        print('make RandomOrgCreator')
+#    elif i == 'fromPoscars':
+#        print('make PoscarOrgCreator')
+        
+    #print parameters['InitialPopulation'][i]
+
+# construct the creators and put them in a list
+#creators = []
+
+
 '''
-Outline of the algorithm
+
 
 # get the parameters from the input file, and store them as nested dictionaries
 parameters_parser = ParametersParser(path_to_input_file)
@@ -24,7 +66,7 @@ for name in dict_of_parameters['Variations']:
 
 # create other objects we'll need
 id_generator = IDGenerator()    # id generator - do we need this up here? Not sure...
-structure_matcher = StructureMatcher(input)
+structure_matcher = pymatgen.analysis.structure_matcher.StructureMatcher(input)
 redundancy_guard = RedundancyGuard(structure_matcher, other_inputs)
 development = Development(niggli_params, constraint_params)
 offspring_generator = OffspringGenerator(variations, development, redundancy_guard, 10000)

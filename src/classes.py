@@ -1,6 +1,8 @@
 from __future__ import division, unicode_literals, print_function
 
 from pymatgen.core.structure import Structure
+from pymatgen.core.composition import Composition
+from pymatgen.core.periodic_table import Element
 # from abc import abstractmethod, ABCMeta
 from _pyio import __metaclass__
 # import collections.deque
@@ -186,48 +188,6 @@ class Pool(object):
         '''
         # TODO: implement me
         
-
-
-class ParametersParser(object):
-    '''
-    A parser for the input parameters.
-    
-    This class is a singleton.
-    '''
-    
-    def __init__(self, path_to_input_file):
-        '''
-        Creates a parser for the input parameters
-        
-        Args:
-            path_to_input_file: the path to the file containing the search parameters
-        '''
-        self._input_file = path_to_input_file
-    
-    def parse(self):
-        '''
-        Parses the input file
-        
-        Returns a dictionary of dictionaries containing all the input parameters. The dictionary 
-            names correspond to the section headers (e.g. Constraints, Variations). Note that some 
-            sections will have multiple subsections, for example the Variations sections will have 
-            Mutation, Mating, etc. subsections. For cases like these, the keys of the Variations dict 
-            will be the subsection names, and the values will themselves be dicts containing the data 
-            for the given subsection.
-        '''
-        # TODO: implement me
-        #
-        # The exact details of how the parsing is done will depend on how we decide to format the input file,
-        # but the basic idea is:
-        #
-        #    1. Read the input file into a string or list of strings
-        #    2. Make a dictionary to hold everything
-        #    3. For each section header:
-        #        create a key in the master dictionary with that name
-        #        create a dictionary containing the parameters and make it the value for the key
-        #        do this recursively if a subsection header is encountered instead of a list of data
-        #    4. Return the master dictionary
-        
         
 
 class Variation(object):
@@ -401,6 +361,65 @@ class NumStoichsMut(Variation):
         
         
         
+class Geometry(object):
+    '''
+    Used to store the geometry data for non-bulk searches
+    
+    This class is a singleton
+    '''
+    
+    def __init__(self, geometry_parameters):
+        '''
+        Creates a geometry object
+        
+        Args:
+            geometry_parameters: a dictionary of parameters
+        '''
+        # default values
+        self.default_shape = 'bulk'
+        self.default_padding = 10 # this will only be used for non-bulk shapes
+        
+        # if entire "Geometry block was set to default or left blank"
+        self.geometry_parameters = geometry_parameters
+        self.geometry_parameters = geometry_parameters
+        if self.geometry_parameters == None or self.geometry_parameters == 'default':
+            self.shape = self.default_shape
+            self.padding = None
+        else:
+            # check each one and see if it's been left blank or set to default
+            self.shape = geometry_parameters['shape']
+            if self.shape == None or self.shape == 'default':
+                self.shape = self.default_shape
+                self.padding = None
+            elif self.shape != 'bulk':
+                self.padding = geometry_parameters['padding']
+                if self.padding == None or self.padding == 'default':
+                    self.padding = self.default_padding
+            
+        
+       
+class CompositionSpace(object):
+    '''
+    Represents the composition space to be searched by the algorithm.
+    
+    This class is a singleton.
+    '''
+    
+    def __init__(self, end_points):
+        '''
+        Creates a CompositionSpace object, which is list of pymatgen.core.composition objects
+        
+        TODO: possible cast the elements of endpoints to pymatgen.core.composition.Composition objects
+              (I tried before but I kept getting this error: "TypeError: 'unicode' object is not callable")
+        
+        Args:
+            end_points: the list dictionaries, with each one representing a compositions
+        '''
+        self.end_points = end_points
+        
+            
+       
+        
 class OrganismCreator(object):
     '''
     Creates organisms for the initial population
@@ -436,7 +455,7 @@ class RandomOrganismCreator(OrganismCreator):
     '''
     Creates random organisms for the initial population
     '''
-    def __init__(self, needed_parameters, development, redundancy_guard, num_to_make, num_made=0, when_stop="successes", is_finished=False):
+    def __init__(self, num_to_make, volume, composition_space, development, redundancy_guard, num_made=0, when_stop="successes", is_finished=False):
         '''
         Creates a RandomOrganismCreator.
         
@@ -521,7 +540,6 @@ class PoscarOrganismCreator(OrganismCreator):
             
             is_finished: whether the creator has made enough organisms
         '''
-     #  self.numberToMake = 30 # the number of orgs to make with this creator
         self.development = development
         self.redundancy_guard = redundancy_guard
         self.num_to_make = num_to_make
@@ -570,7 +588,7 @@ class RedundancyGuard(object):
     This is a singleton class.
     '''
     
-    def __init__(self, structure_matcher, other_params):
+    def __init__(self, structure_matcher, d_value):
         '''
         Creates a redundancy guard.
         
@@ -580,52 +598,138 @@ class RedundancyGuard(object):
             other_params: other optional parameters for identifying redundant structures, like
                 d-value, etc.
         '''
-        # TODO: implement me. Maybe just keeping copies of the relevant dictionaries as instance variable
-        #    is enough...
+        self.structure_matcher = structure_matcher
+        self.d_value = d_value
+
         
     def checkRedundancy(self, new_organism, whole_pop):
         '''
-        Checks for redundancy, both structural and if specified, energy (d-value)
+        Checks for redundancy, both structural and if specified, value (d-value)
         
         Returns the organism with which new_organism is redundant, or None if no redundancy
+        
+        Args:
+            new_organism: the organism to check for redundancy
+            
+            whole_pop: the list containing all organisms to check against
         '''
-    #    for organism in whole_pop:
-    #        if checkStructureRedundancy(new_organism, organism) != None:
-    #            return organism
-    #        if new_organism.value != None and dvalueSet == True and checkEnergyRedundancy(new_organism, organism) != None:
-    #            return organism    
-    #    return None    # should only get here if no organisms are redundant with the new organism
+        for organism in whole_pop:
+            if self.structure_matcher.fit(new_organism.structure, organism.structure) == True:
+                print("message that new_organism failed structural redundancy")
+                return organism
+            if new_organism.value != None and self.d_value != None and abs(new_organism.value - organism.value) < self.d_value:
+                print("message that new_organism failed value redundancy")
+                return organism    
+        return None    # should only get here if no organisms are redundant with the new organism
+        
 
+
+class Constraints(object):
+    '''
+    Represents the general constraints imposed on structures considered by the algorithm. 
+    '''
     
-    
-    def checkStructureRedundancy(self, org1, org2):
+    def __init__(self, constraints_parameters, composition_space):
         '''
-        Checks if an organism is redundant with any organism in a list of organisms, according to the 
-        tolerances in the StructureMatcher.
-        
-        Returns the organism that org is redundant with. If it's not redundant, returns None
+        Sets the general constraints imposed on structures. Assigns default values if needed.
         
         Args:
-            org1: organism to check for redundancy.
+            constraints_parameters: a dictionary of parameters
             
-            org2: organism to which org1 is compared.
-        ''' 
-        # TODO: implement me. Use StructureMatcher. 
-        
-        
-    def checkEnergyRedundancy(self, org1, org2):
+            composition_space: a CompositionSpace object describing the composition space to be searched
         '''
-        Checks if an organism is redundant with any organism in a list of organisms, according to the 
-        d-value specified.
+        # default values
+        self.default_min_num_atoms = 2
+        self.default_max_num_atoms = 20
+        self.default_min_lattice_length = 0.5
+        self.default_max_lattice_length = 20
+        self.default_min_lattice_angle = 40
+        self.default_max_lattice_angle = 140
         
-        Returns the organism that org is redundant with. If it's not redundant, returns None
+        # set defaults if entire "Constraints" block was set to default or left blank
+        self.constraints_parameters = constraints_parameters
+        if self.constraints_parameters == None or self.constraints_parameters == 'default':
+            self.set_all_to_defaults()
+        else:
+            # check each one and see if it's been left blank or set to default
+            self.min_num_atoms = constraints_parameters['min_num_atoms']
+            if self.min_num_atoms == None or self.min_num_atoms == 'default':
+                self.min_num_atoms = self.default_min_num_atoms
+                
+            self.max_num_atoms = constraints_parameters['max_num_atoms']
+            if self.max_num_atoms == None or self.max_num_atoms == 'default':
+                self.max_num_atoms = self.default_max_num_atoms
+                
+            self.min_lattice_length = constraints_parameters['min_lattice_length']
+            if self.min_lattice_length == None or self.min_lattice_length == 'default':
+                self.min_lattice_length = self.default_min_lattice_length
+            
+            self.max_lattice_length = constraints_parameters['max_lattice_length']
+            if self.max_lattice_length == None or self.max_lattice_length == 'default':
+                self.max_lattice_length = self.default_max_lattice_length
+                
+            self.min_lattice_angle = constraints_parameters['min_lattice_angle']
+            if self.min_lattice_angle == None or self.min_lattice_angle == 'default':
+                self.min_lattice_angle = self.default_min_lattice_angle
+                
+            self.max_lattice_angle = constraints_parameters['max_lattice_angle']
+            if self.max_lattice_angle == None or self.max_lattice_angle == 'default':
+                self.max_lattice_angle = self.default_max_lattice_angle
+        
+            self.per_species_mids = constraints_parameters['per_species_mids']
+            if self.per_species_mids == None or self.per_species_mids == 'default':
+                self.set_all_mids_to_defaults(composition_space)     
+            else:
+                # check each pair and set to default if needed
+                for key in self.per_species_mids:
+                    if self.per_species_mids[key] == None or self.per_species_mids[key] == 'default':
+                        elements = key.split()
+                        radius1 = Element(elements[0]).atomic_radius
+                        radius2 = Element(elements[1]).atomic_radius
+                        self.per_species_mids[key] = 0.8*(radius1 + radius2) 
+                
+                
+    def set_all_to_defaults(self, composition_space):
+        '''
+        Sets all general constraints (those in Constraints block of input file) to default values
         
         Args:
-            org1: organism to check for redundancy.
-            
-            org2: organism to which org1 is compared.
-        ''' 
-        # TODO: implement me.
+            composition_space: the composition space object
+        '''
+        self.min_num_atoms = self.min_num_atoms
+        self.max_num_atoms = self.max_num_atoms
+        self.min_lattice_length = self.min_lattice_length
+        self.max_lattice_length = self.max_lattice_length
+        self.min_lattice_angle = self.default_min_lattice_angle
+        self.max_lattice_angle = self.default_max_lattice_angle
+        self.set_all_mids_to_defaults(composition_space) 
+        
+        
+    def set_all_mids_to_defaults(self, composition_space):
+        '''
+        Sets all the per-species mids to default values based on atomic radii
+        
+        Args:
+            composition_space: the composition space object
+        '''
+        # get each element type from the composition_space object
+        elements = []
+        for point in composition_space:
+            for key in point:
+                elements.append(key)
+        # remove duplicates from the list of elements
+        elements = list(set(elements))    
+        # get the atomic radius for each element type and put them in a dictionary
+        atomic_radii = {}
+        for element in elements:
+            atomic_radii[element] = Element(element).atomic_radius
+            # compute the mid for each pair of elements from their atomic radii as 80% of the sum of the radii
+        self.per_species_mids = {}
+        for element in elements:
+            for next_element in elements:      
+                self.per_species_mids[element + " " + next_element] = 0.8*(atomic_radii[element] + atomic_radii[next_element])
+        # TODO: maybe remove duplicates, or maybe just leave them - could be helpful to have all representations 
+       
         
 
 
@@ -857,20 +961,20 @@ class InitialPopulation():
 ########## area for casual testing ########## 
 
 # make a structure object
-lattice = [[5,0,0],[0,5,0],[0,0,5]]
-species = ["C", "Si"]
-coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75]]
-structure1 = Structure(lattice, species, coordinates)
+#lattice = [[5,0,0],[0,5,0],[0,0,5]]
+#species = ["C", "Si"]
+#coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75]]
+#structure1 = Structure(lattice, species, coordinates)
 
 # make an organism object
-org1 = Organism(structure1)
+#org1 = Organism(structure1)
 
-print(org1.structure)
-print(org1.fitness)
-print(org1.id)
+#print(org1.structure)
+#print(org1.fitness)
+#print(org1.id)
 
-org1.id = 6
-print(org1.id)
+#org1.id = 6
+#print(org1.id)
 
 ########## end of testing area ##########    
 
@@ -1021,6 +1125,8 @@ Hard Constraints
         minLatticeLength
         maxLatticeAngle
         minLatticeAngle
+        maxClusterDiameter
+        maxWireDiameter
         maxLayerThickness
         maxNumAtoms
         minNumAtoms
@@ -1030,16 +1136,15 @@ Hard Constraints
         
     Convergence Criteria:
         maxFunctionEvals
+        maybe others
    
    Objective Function:
        objectiveFunction <epa|pd>
-       geometry <bulk|sheet|cluster>
-       padding (ignored if geometry is bulk)
-       energyCode <vasp|gulp|more stuff>
-       energyFiles (depends on energyCode. Not sure best way to handle this)
+       geometry <bulk|sheet|wire|cluster>
+           # these should be ignored if geometry is bulk
+           padding # how much vacuum to add (around cluster/wire/sheet)
+           maxSize # how big it can be (diameter for cluster and wire, thickness for sheet. measured from atom-to-atom)
+       energyCode <vasp|gulp|others>
+       energyFiles (depends on energyCode. Not sure best way to handle this...)
         
-        
-    
-       
-
 '''
