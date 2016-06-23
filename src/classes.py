@@ -3,12 +3,15 @@ from __future__ import division, unicode_literals, print_function
 from pymatgen.core.structure import Structure
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element
+from pymatgen.transformations.standard_transformations import RotationTransformation
+from pymatgen.core.operations import SymmOp
 # from abc import abstractmethod, ABCMeta
 from _pyio import __metaclass__
 # import collections.deque
 from _collections import deque
 import random  # TODO: need to make sure all random numbers from the same PRNG
 import threading
+import numpy as np
 # TODO: import other needed stuff from pymatgen
 
 '''
@@ -68,7 +71,7 @@ class Organism(object):
         self.fitness = fitness
         self.select_prob = select_prob 
         self.isActive = isActive
-        self._id = IDGenerator.makeID(); # unique id number for this organism. Should not be changed.
+      #  self._id = IDGenerator.makeID(); # unique id number for this organism. Should not be changed.
     
     # this keeps the id (sort of) immutable by causing an exception to be raised if the user tries to 
     # the set the id with org.id = some_id.
@@ -79,6 +82,51 @@ class Organism(object):
     # TODO: maybe make setter methods for fitness and select_prob that check that they're between 0 and 1. 
     #    The Structure class has checks at initialization, so we don't need to check it again here.
     
+    def rotateToPrincipalDirections(self):
+        '''
+        Rotates the organism's structure into the principal directions. That is, a is parallel to the Cartesian x-axis 
+        and b lies in the Cartesian x-y plane.
+        
+        '''
+        # 1. rotate about the z-axis until a is vertically aligned with the x-axis
+        # 2. rotate about y-axis until a is parallel to the x-axis
+        # 3. rotate about x-axis until b lies in the x-y plane
+        # 4. make sure all vectors are pointing in positive directions
+        
+        # rotate about the z-axis
+        rotation = RotationTransformation([0, 0, 1], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][1], self.structure.lattice.matrix[0][0]))
+        self.structure = rotation.apply_transformation(self.structure)
+        # rotate about the y-axis
+        rotation = RotationTransformation([0, 1, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][2], self.structure.lattice.matrix[0][0]))
+        self.structure = rotation.apply_transformation(self.structure)
+        # rotate about the x-axis
+        rotation = RotationTransformation([1, 0, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[1][2], self.structure.lattice.matrix[1][1]))
+        self.structure = rotation.apply_transformation(self.structure)
+        # make sure they are all pointing in positive directions
+        if self.structure.lattice.matrix[0][0] < 0:
+            # rotate about y-axis to make a positive
+            rotation = RotationTransformation([0, 1, 0], 180)
+            self.structure = rotation.apply_transformation(self.structure)
+        if self.structure.lattice.matrix[1][1] < 0:
+            # rotate about x-axis to make b positive
+            rotation = RotationTransformation([1, 0, 0], 180)
+            self.structure = rotation.apply_transformation(self.structure)
+        if self.structure.lattice.matrix[2][2] < 0:
+            # mirror c across the x-y plane to make it positive
+            reflection = SymmOp([1, 0, 0], [0, 0, 0])
+            # TODO: figure out how to apply this SymmOp object to do the reflection
+            
+            
+            #print(self.structure.lattice.matrix[2][2])
+            #x_component = self.structure.lattice.matrix[2][0]
+            #y_component = self.structure.lattice.matrix[2][1]
+            #z_component = self.structure.lattice.matrix[2][2]
+            
+            #self.structure.lattice = [self.structure.lattice[0], self.structure.lattice[1], [x_component, y_component, -z_component]]
+            
+            #self.structure.lattice.matrix[2][2] = -1*self.structure.lattice.matrix[2][2]
+            #print(self.structure.lattice.matrix[2][2])
+            
 
 
 class Pool(object):
@@ -363,7 +411,7 @@ class NumStoichsMut(Variation):
         
 class Geometry(object):
     '''
-    Used to store the geometry data for non-bulk searches
+    Represents the geometry data.
     
     This class is a singleton
     '''
@@ -395,7 +443,125 @@ class Geometry(object):
                 self.padding = geometry_parameters['padding']
                 if self.padding == None or self.padding == 'default':
                     self.padding = self.default_padding
-            
+                
+    def pad(self, structure):
+        '''
+        Makes an organism's structure conform to the required shape. For sheet, wire and cluster geometries, this 
+        means adding vacuum padding to the cell. For bulk, the structure is unchanged. Used to pad a structure prior to 
+        an energy calculation.
+        
+        Returns a structure that has been modified to conform to the shape (most likely padded with vacuum).
+        
+        Args:
+            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+        '''
+        # rotate structure into principal directions
+        # Call other methods based on the value of self.shape
+        if self.shape == 'sheet':
+            return self.padSheet(structure)
+        elif self.shape == 'wire':
+            return self.padWire(structure)
+        elif self.shape == 'cluster':
+            return self.padCluster(structure)
+        else:
+            return structure
+        
+    def padSheet(self, structure):
+        '''
+        Adds vertical vacuum padding to a sheet, and makes the c-lattice vector normal to the plane of the sheet.
+        
+        Returns a sheet structure that has been padded with vacuum.
+        
+        Args:
+            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+        '''
+        # TODO: implement me
+        # 1. rotate structure to the principal directions
+        #         TODO: see if pymatgen has a method for this
+        # 2. replace c with it's vertical component (make it normal to plane of the sheet) (make sure atomic positions are preserved)
+        
+        # 3. reduce c such that it's equal to the layer thickness (max vertical distance between atoms in the cell)
+        # 4. add padding to c
+        # 5. return padded structure
+        
+    def padWire(self, structure):
+        '''
+        Adds vacuum padding around a wire.
+        
+        Returns a wire structure that has been padded with vacuum.
+        
+        Args:
+            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+        '''
+        # TODO: implement me
+    
+    def padCluster(self, structure):
+        '''
+        Adds vacuum padding around a cluster.
+        
+        Returns a cluster structure that has been padded with vacuum.
+        
+        Args:
+            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+        '''
+        # TODO: implement me
+    
+    
+    def unpad(self, structure):
+        '''
+        Removes vacuum padding to return an organism's structure to a form used by the variations.
+        
+        Returns a structure that has had the vacuum padding removed.
+        
+        Args:
+            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+        '''
+        # rotate structure into principal directions
+        # Call other methods based on the value of self.shape
+        if self.shape == 'sheet':
+            return self.unpadSheet(structure)
+        elif self.shape == 'wire':
+            return self.unpadWire(structure)
+        elif self.shape == 'cluster':
+            return self.unpadCluster(structure)
+        else:
+            return structure
+        
+    
+    def unpadSheet(self, structure):
+        '''
+        Removes vertical vacuum padding from a sheet.
+        
+        Returns a sheet structure with the vertical vacuum padding removed
+        
+        Precondition: the sheet structure is represented with the c-lattice vector perpendicular to the plane of the sheet
+        
+        Args:
+            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+        '''
+        # TODO: implement me
+        
+    def unpadWire(self, structure):
+        '''
+        Removes vacuum padding around a wire.
+        
+        Returns a wire structure with the vertical vacuum padding removed
+        
+        Args:
+            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+        '''
+        # TODO: implement me
+        
+    def unpadCluster(self, structure):
+        '''
+        Removes vacuum padding around a cluster.
+        
+        Returns a wire structure with the vertical vacuum padding removed
+        
+        Args:
+            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+        '''
+        # TODO: implement me
         
        
 class CompositionSpace(object):
@@ -765,8 +931,13 @@ class Development(object):
         '''
         # TODO: implement me
         # 
-        # 1. Do Niggli cell reduction, if specified
-        # 2. Check the structural constraints. Print error message if it failed
+        # 1. Check composition to see if it's in the composition space (could be a little tricky for pd searches...)
+        # 2. Do Niggli cell reduction, if specified
+        # 3. Check the structural constraints. Do most likely to fail first
+        #    - per-species MIDs
+        #    - min and max num atoms
+        #    - min and max lattice angles
+        #    - min and max lattice lengths
 
 
 class OffspringGenerator(object):
@@ -961,13 +1132,19 @@ class InitialPopulation():
 ########## area for casual testing ########## 
 
 # make a structure object
-#lattice = [[5,0,0],[0,5,0],[0,0,5]]
-#species = ["C", "Si"]
-#coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75]]
-#structure1 = Structure(lattice, species, coordinates)
+lattice = [[1,0.5,0], [0.5,1,0], [0,0,-1]]
+species = ["C", "Si"]
+coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75]]
+structure1 = Structure(lattice, species, coordinates)
 
 # make an organism object
-#org1 = Organism(structure1)
+org1 = Organism(structure1)
+
+print(org1.structure.lattice)
+
+org1.rotateToPrincipalDirections()
+print("")
+print(org1.structure.lattice)
 
 #print(org1.structure)
 #print(org1.fitness)

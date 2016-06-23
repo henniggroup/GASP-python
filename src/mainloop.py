@@ -85,6 +85,7 @@ for creator in organism_creators:
         if len(threads) < N:
             new_organism = creator.create_organism() # this handles development and redundancy checking, but could fail for poscar creator...
             if new_organism != None:
+                new_organism.structure = geometry.pad(new_organism.structure) # for bulk search, this does nothing except rotate into principal directions
                 thread = Thread(target=energy_calculator.doEnergyCalculation, args=(new_organism))
                 thread.start()
                 threads.append(thread)
@@ -95,6 +96,7 @@ for creator in organism_creators:
                     # TODO: need to figure out how to get the return value from a dead thread
                     relaxed_org = thread.return_value  
                     if relaxed_org != None:
+                        relaxed_org.structure = geometry.unpad(relaxed_org.structure) # for bulk search, this does nothing except rotate into principal directions
                         developed_org = development.develop(relaxed_org)
                         if developed_org != None:
                             redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
@@ -110,6 +112,7 @@ for creator in organism_creators:
                     threads.remove(thread)
                     new_organism = creator.create_organism() # this handles development and redundancy checking, but could fail for poscar creator...
                     if new_organism != None:
+                        new_organism.structure = geometry.pad(new_organism.structure)
                         thread = Thread(target=energy_calculator.doEnergyCalculation, args=(new_organism))
                         thread.start()
                         threads.append(thread)
@@ -122,6 +125,7 @@ threads = []  # list of threads to do the energy calculations (overwrite the old
 # create the initial batch of N offspring organisms and submit them for energy calculations
 for i in range(0, N):
     unrelaxed_offspring = offspring_generator.makeOffspringOrganism(pool, whole_pop)
+    unrelaxed_offspring.structure = geometry.pad(unrelaxed_offspring.structure) 
     thread = Thread(target=energy_calculator.doEnergyCalculation, args=(new_organism))
     thread.start()
     threads.append(thread)
@@ -134,6 +138,7 @@ while the stopping criteria are not met:
             # TODO: need to figure out how to get the return value from a dead thread
             relaxed_org = thread.return_value  
             if relaxed_org != None:
+                relaxed_org.structure = geometry.unpad(relaxed_org.structure) 
                 developed_org = development.develop(relaxed_org)
                 if developed_org != None:
                     redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
@@ -158,6 +163,7 @@ while the stopping criteria are not met:
             pool.calculateFitnesses()
             pool.calculateSelectionProbs()
             offspring = offspring_generator.makeOffspringOrganism(pool, whole_pop) # this handles development and redundancy
+            offspring.structure = geometry.pad(offspring.structure) 
             thread = Thread(target=energy_calculator.doEnergyCalculation, args=(offspring))
             thread.start()
             threads.append(thread)
