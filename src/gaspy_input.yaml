@@ -1,10 +1,8 @@
 # YAML input file for Python GASP
 
-# defines the composition or region of composition space to search 
+# defines the composition or region of composition space to search, as a list of dictionaries of element symbol - amount pairs. Each dictionary is a composition
 # after parsing this, we need to have some sort of check to make sure the endpoints are valid
 # also, based on this, determine whether we are doing a phase diagram search or not (so we know which objective funtion to use)
-# TODO: this should make CompositonSpace map to a list of lists, where each inner list represents a composition, and each element of an inner list is a dictionary that represents
-# an element and corresponding amount. Maybe try to parse these as pymatgen.core.composition objects
 CompositionSpace:
      - C: 2
        Si: 1
@@ -13,9 +11,27 @@ CompositionSpace:
        Si: 2
 
 
+# the general constraints
+Constraints: 
+     min_num_atoms: 2
+     max_num_atoms: 20
+     min_lattice_length: 0.5
+     max_lattice_length: 20
+     min_lattice_angle: 40
+     max_lattice_angle: 140
+     allow_endpoints: False  # only gets applied when doing phase diagram searches, and only after the initial population. It specifies whether the end point compositionsare permitted after the initial population
+                             # default to true for phase diagram searches (should it?)
+     per_species_mids:   # should default to all possible pairs (from composition space)
+          C C: 2.0 
+          C Si: 2.5
+          Si Si: 3.0
+
+
+# species the geometries of the structures to search for
 Geometry:
-     shape: sheet # <bulk|sheet|wire|cluster> defaults to bulk
-     padding: 12   # the (actual - i.e. atom-to-atom) amount of vacuum padding added around non-bulk geometries. Not used for bulk, and defaults to 10 angstroms for other geometries
+     shape: wire # <bulk|sheet|wire|cluster> defaults to bulk
+     max_size: 5  # a constraint on the size (in Angstroms, atom-to-atom), for non-bulk geometries. For sheet, it's the layer thickness, for wire and cluster, it's the diameter. Defaults to inf
+    # padding: 12   # the (actual - i.e. atom-to-atom) amount of vacuum padding added around non-bulk geometries. Not used for bulk, and defaults to 10 angstroms for other geometries
 
 
 
@@ -98,20 +114,6 @@ InitialPopulation:
 #	num_parents: 20 # this should default to pool_size
 #	selection_power: 1 # this should default to 1
 
-
-Constraints: # should probably set default values for these
-     min_num_atoms: 2
-     max_num_atoms: 20
-     min_lattice_length: 0.5
-     max_lattice_length: 20
-     min_lattice_angle: 40
-     max_lattice_angle: 140
-     allow_end_points: true # only gets applied when doing phase diagram searches. It specifies whether the end point compositions are permitted after the initial population
-                             # default to true for phase diagram searches
-     per_species_mids: # should default to all possible pairs (from composition space)
-          C C: default
-          Si Si: default
-          Si C: 1.1
 
 #StoppingCriteria:
 #	max_energy_calcs: # should also have a default value for this, maybe dependent on composition (fixed vs binary vs ternary, etc.) 

@@ -12,6 +12,7 @@ from _collections import deque
 import random  # TODO: need to make sure all random numbers from the same PRNG
 import threading
 import numpy as np
+from numpy import inf
 # TODO: import other needed stuff from pymatgen
 
 '''
@@ -82,7 +83,7 @@ class Organism(object):
     # TODO: maybe make setter methods for fitness and select_prob that check that they're between 0 and 1. 
     #    The Structure class has checks at initialization, so we don't need to check it again here.
     
-    def rotateToPrincipalDirections(self):
+  #  def rotateToPrincipalDirections(self):
         '''
         Rotates the organism's structure into the principal directions. That is, a is parallel to the Cartesian x-axis 
         and b lies in the Cartesian x-y plane.
@@ -94,26 +95,26 @@ class Organism(object):
         # 4. make sure all vectors are pointing in positive directions
         
         # rotate about the z-axis
-        rotation = RotationTransformation([0, 0, 1], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][1], self.structure.lattice.matrix[0][0]))
-        self.structure = rotation.apply_transformation(self.structure)
+ #       rotation = RotationTransformation([0, 0, 1], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][1], self.structure.lattice.matrix[0][0]))
+ #       self.structure = rotation.apply_transformation(self.structure)
         # rotate about the y-axis
-        rotation = RotationTransformation([0, 1, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][2], self.structure.lattice.matrix[0][0]))
-        self.structure = rotation.apply_transformation(self.structure)
+ #       rotation = RotationTransformation([0, 1, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][2], self.structure.lattice.matrix[0][0]))
+ #       self.structure = rotation.apply_transformation(self.structure)
         # rotate about the x-axis
-        rotation = RotationTransformation([1, 0, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[1][2], self.structure.lattice.matrix[1][1]))
-        self.structure = rotation.apply_transformation(self.structure)
+ #       rotation = RotationTransformation([1, 0, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[1][2], self.structure.lattice.matrix[1][1]))
+ #       self.structure = rotation.apply_transformation(self.structure)
         # make sure they are all pointing in positive directions
-        if self.structure.lattice.matrix[0][0] < 0:
+ #       if self.structure.lattice.matrix[0][0] < 0:
             # rotate about y-axis to make a positive
-            rotation = RotationTransformation([0, 1, 0], 180)
-            self.structure = rotation.apply_transformation(self.structure)
-        if self.structure.lattice.matrix[1][1] < 0:
+ #          rotation = RotationTransformation([0, 1, 0], 180)
+ #           self.structure = rotation.apply_transformation(self.structure)
+ #       if self.structure.lattice.matrix[1][1] < 0:
             # rotate about x-axis to make b positive
-            rotation = RotationTransformation([1, 0, 0], 180)
-            self.structure = rotation.apply_transformation(self.structure)
-        if self.structure.lattice.matrix[2][2] < 0:
+ #           rotation = RotationTransformation([1, 0, 0], 180)
+ #           self.structure = rotation.apply_transformation(self.structure)
+ #       if self.structure.lattice.matrix[2][2] < 0:
             # mirror c across the x-y plane to make it positive
-            reflection = SymmOp([1, 0, 0], [0, 0, 0])
+ #           reflection = SymmOp([1, 0, 0], [0, 0, 0])
             # TODO: figure out how to apply this SymmOp object to do the reflection
             
             
@@ -411,7 +412,7 @@ class NumStoichsMut(Variation):
         
 class Geometry(object):
     '''
-    Represents the geometry data.
+    Represents the geometry data, including any geometry-specific constraints (max_size, etc.)
     
     This class is a singleton
     '''
@@ -425,24 +426,46 @@ class Geometry(object):
         '''
         # default values
         self.default_shape = 'bulk'
+        self.default_max_size = inf
         self.default_padding = 10 # this will only be used for non-bulk shapes
         
-        # if entire "Geometry block was set to default or left blank"
         self.geometry_parameters = geometry_parameters
-        self.geometry_parameters = geometry_parameters
+        
+        # if entire Geometry block was set to default or left blank
         if self.geometry_parameters == None or self.geometry_parameters == 'default':
             self.shape = self.default_shape
+            self.max_size = self.default_max_size
             self.padding = None
         else:
-            # check each one and see if it's been left blank or set to default
-            self.shape = geometry_parameters['shape']
-            if self.shape == None or self.shape == 'default':
+            # check each one and see if it's been left blank or set to default, or not included at all
+            try:
+                self.shape = geometry_parameters['shape']
+                if self.shape == None or self.shape == 'default':
+                    self.shape = self.default_shape
+                    self.max_size = self.default_max_size
+                    self.padding = None
+                elif self.shape != 'bulk':
+                    # set max size, and check if was left blank or set to None or 'default'
+                    try:
+                        self.max_size = geometry_parameters['max_size']
+                        if self.max_size == None or self.max_size == 'default':
+                            self.max_size = self.default_max_size
+                    except KeyError:
+                        self.max_size = self.default_max_size
+                    # set padding, and check if was left blank or set to None or 'default'
+                    try:
+                        self.padding = geometry_parameters['padding']
+                        if self.padding == None or self.padding == 'default':
+                            self.padding = self.default_padding
+                    except KeyError:
+                        self.padding = self.default_padding
+            # if shape field was missing, assume bulk and set default values
+            except KeyError:
                 self.shape = self.default_shape
+                self.max_size = self.default_max_size
                 self.padding = None
-            elif self.shape != 'bulk':
-                self.padding = geometry_parameters['padding']
-                if self.padding == None or self.padding == 'default':
-                    self.padding = self.default_padding
+                        
+                        
                 
     def pad(self, structure):
         '''
@@ -571,17 +594,34 @@ class CompositionSpace(object):
     This class is a singleton.
     '''
     
-    def __init__(self, end_points):
+    def __init__(self, endpoints):
         '''
-        Creates a CompositionSpace object, which is list of pymatgen.core.composition objects
-        
-        TODO: possible cast the elements of endpoints to pymatgen.core.composition.Composition objects
-              (I tried before but I kept getting this error: "TypeError: 'unicode' object is not callable")
+        Creates a CompositionSpace object, which is list of pymatgen.core.composition.Composition objects
         
         Args:
-            end_points: the list dictionaries, with each one representing a compositions
+            endpoints: the list dictionaries mapping element symbols to amounts, with each one representing a compositions
         '''
-        self.end_points = end_points
+        for i in range(0, len(endpoints)):
+            endpoints[i] = Composition(endpoints[i])
+            
+        self.endpoints = endpoints
+    
+    def inferObjectiveFunction(self):
+        '''
+        Infers the objective function (energy per atom or phase diagram) based on the composition space
+        '''
+        # if only one composition, then it must be an epa search
+        if len(self.endpoints) == 1:
+            return "epa"
+        # otherwise, compare all the compositions and see if any of them are different
+        else:
+            for point in self.endpoints:
+                for next_point in self.endpoints:
+                    if point.almost_equals(next_point, 0.0, 0.0) == False:
+                        return "pd"
+        # should only get here if there are multiple identical compositions in end_points (which would be weird)
+        return "epa"
+                    
         
             
        
@@ -787,6 +827,21 @@ class RedundancyGuard(object):
                 print("message that new_organism failed value redundancy")
                 return organism    
         return None    # should only get here if no organisms are redundant with the new organism
+    
+
+#class ObjectiveFunction(object):
+#    '''
+#    Represents the quantity we want to optimize.
+#    '''
+    
+#    def __init__(self, composition_space):
+#        '''
+#        Creates an objective function.
+        
+#        Args:
+#            composition_space: a CompositionSpace object
+#        '''
+        
         
 
 
@@ -795,7 +850,7 @@ class Constraints(object):
     Represents the general constraints imposed on structures considered by the algorithm. 
     '''
     
-    def __init__(self, constraints_parameters, composition_space):
+    def __init__(self, constraints_parameters, composition_space, objective_function):
         '''
         Sets the general constraints imposed on structures. Assigns default values if needed.
         
@@ -803,6 +858,8 @@ class Constraints(object):
             constraints_parameters: a dictionary of parameters
             
             composition_space: a CompositionSpace object describing the composition space to be searched
+            
+            objective_function: either 'epa' or 'pd' indicating what type of search is being done
         '''
         # default values
         self.default_min_num_atoms = 2
@@ -811,48 +868,89 @@ class Constraints(object):
         self.default_max_lattice_length = 20
         self.default_min_lattice_angle = 40
         self.default_max_lattice_angle = 140
+        self.default_allow_endpoints = True
         
-        # set defaults if entire "Constraints" block was set to default or left blank
+        # set defaults if constraints_parameters equals 'default' or None
         self.constraints_parameters = constraints_parameters
         if self.constraints_parameters == None or self.constraints_parameters == 'default':
             self.set_all_to_defaults()
         else:
-            # check each one and see if it's been left blank or set to default
-            self.min_num_atoms = constraints_parameters['min_num_atoms']
-            if self.min_num_atoms == None or self.min_num_atoms == 'default':
+            # check each flag to see if it's been included, and if so, whether it has been set to default or left blank
+            # min number of atoms
+            try:
+                self.min_num_atoms = constraints_parameters['min_num_atoms']
+                if self.min_num_atoms == None or self.min_num_atoms == 'default':
+                    self.min_num_atoms = self.default_min_num_atoms
+            except KeyError:
                 self.min_num_atoms = self.default_min_num_atoms
-                
-            self.max_num_atoms = constraints_parameters['max_num_atoms']
-            if self.max_num_atoms == None or self.max_num_atoms == 'default':
+                 
+            # max number of atoms
+            try:
+                self.max_num_atoms = constraints_parameters['max_num_atoms']
+                if self.max_num_atoms == None or self.max_num_atoms == 'default':
+                    self.max_num_atoms = self.default_max_num_atoms
+            except KeyError:
                 self.max_num_atoms = self.default_max_num_atoms
-                
-            self.min_lattice_length = constraints_parameters['min_lattice_length']
-            if self.min_lattice_length == None or self.min_lattice_length == 'default':
+                    
+            # min lattice length
+            try:    
+                self.min_lattice_length = constraints_parameters['min_lattice_length']
+                if self.min_lattice_length == None or self.min_lattice_length == 'default':
+                    self.min_lattice_length = self.default_min_lattice_length
+            except KeyError:
                 self.min_lattice_length = self.default_min_lattice_length
-            
-            self.max_lattice_length = constraints_parameters['max_lattice_length']
-            if self.max_lattice_length == None or self.max_lattice_length == 'default':
-                self.max_lattice_length = self.default_max_lattice_length
+                    
+            # max lattice length
+            try:
+                self.max_lattice_length = constraints_parameters['max_lattice_length']
+                if self.max_lattice_length == None or self.max_lattice_length == 'default':
+                    self.max_lattice_length = self.default_max_lattice_length
+            except KeyError:
+                self.max_lattice_length = self.default_max_lattice_length 
                 
-            self.min_lattice_angle = constraints_parameters['min_lattice_angle']
-            if self.min_lattice_angle == None or self.min_lattice_angle == 'default':
+            # min lattice angle
+            try:    
+                self.min_lattice_angle = constraints_parameters['min_lattice_angle']
+                if self.min_lattice_angle == None or self.min_lattice_angle == 'default':
+                    self.min_lattice_angle = self.default_min_lattice_angle
+            except KeyError:
                 self.min_lattice_angle = self.default_min_lattice_angle
                 
-            self.max_lattice_angle = constraints_parameters['max_lattice_angle']
-            if self.max_lattice_angle == None or self.max_lattice_angle == 'default':
+            # max lattice angle
+            try:    
+                self.max_lattice_angle = constraints_parameters['max_lattice_angle']
+                if self.max_lattice_angle == None or self.max_lattice_angle == 'default':
+                    self.max_lattice_angle = self.default_max_lattice_angle
+            except KeyError:
                 self.max_lattice_angle = self.default_max_lattice_angle
+                
+            # allowing end points
+            try:    
+                self.allow_endpoints = constraints_parameters['allow_endpoints']
+                if self.allow_endpoints == None or self.allow_endpoints == 'default' or objective_function == "epa":
+                    self.allow_endpoints = self.default_allow_endpoints
+            except KeyError:
+                self.allow_endpoints = self.default_allow_endpoints
         
-            self.per_species_mids = constraints_parameters['per_species_mids']
-            if self.per_species_mids == None or self.per_species_mids == 'default':
-                self.set_all_mids_to_defaults(composition_space)     
-            else:
-                # check each pair and set to default if needed
-                for key in self.per_species_mids:
-                    if self.per_species_mids[key] == None or self.per_species_mids[key] == 'default':
-                        elements = key.split()
-                        radius1 = Element(elements[0]).atomic_radius
-                        radius2 = Element(elements[1]).atomic_radius
-                        self.per_species_mids[key] = 0.8*(radius1 + radius2) 
+            # the per-species min interatomic distances
+            try:
+                self.per_species_mids = constraints_parameters['per_species_mids'] 
+                if self.per_species_mids != None and self.per_species_mids != 'default':
+                    # check each pair that's been specified to see if it needs a default mid
+                    for key in self.per_species_mids:
+                        if self.per_species_mids[key] == None or self.per_species_mids[key] == 'default':
+                            elements = key.split()
+                            radius1 = Element(elements[0]).atomic_radius
+                            radius2 = Element(elements[1]).atomic_radius
+                            self.per_species_mids[key] = 0.8*(radius1 + radius2)
+                    # check to see if any pairs are missing, and if so, add them and set to default values
+                    self.set_some_mids_to_defaults(composition_space)
+                # if the per_species_mids block has been left blank or set to default, then set all the pairs to defaults
+                else:
+                    self.set_all_mids_to_defaults(composition_space)
+            # if the per_species_mids block wasn't set in the input file, just assign defaults to everything
+            except KeyError:
+                self.set_all_mids_to_defaults(composition_space)
                 
                 
     def set_all_to_defaults(self, composition_space):
@@ -879,23 +977,57 @@ class Constraints(object):
             composition_space: the composition space object
         '''
         # get each element type from the composition_space object
+        elements = self.get_all_elements(composition_space)   
+        # compute the per_species_mids based on atomic radii
+        self.per_species_mids = {}
+        for i in range(0, len(elements)):
+            for j in range(i, len(elements)):
+                self.per_species_mids[str(elements[i].symbol + " " + elements[j].symbol)] = 0.8*(elements[i].atomic_radius + elements[j].atomic_radius)
+        
+    
+    def set_some_mids_to_defaults(self, composition_space):
+        '''
+        Compares all the possible pairs of elements to what is contained in self.per_species_mids. If any pairs are missing, add them with default values.
+        
+        Args:
+            composition_space: the composition space object
+        ''' 
+        # get each element type from the composition_space object
+        elements = self.get_all_elements(composition_space)
+        # list to hold lists of missing pairs
+        missing_pairs = []
+        # scan through every possible pair to check if it's already included in self.per_species_mids
+        for i in range(0, len(elements)):
+            for j in range(i, len(elements)):
+                # check both orders
+                test_key1 = elements[i].symbol + " " + elements[j].symbol
+                test_key2 = elements[j].symbol + " " + elements[i].symbol
+                if test_key1 not in self.per_species_mids and test_key2 not in self.per_species_mids:
+                    missing_pairs.append(test_key1)
+                        
+        # calculate the per species mids for all the missing pairs and add them to self.per_species_mids
+        for pair in missing_pairs:
+            p = pair.split()
+            self.per_species_mids[str(pair)] = 0.8*(Element(p[0]).atomic_radius + Element(p[1]).atomic_radius)
+            
+            
+        
+    def get_all_elements(self, composition_space):
+        '''
+        Returns a list of all the elements (as pymatgen.core.periodic_table.Element objects) that are in the composition space
+        
+         Args:
+            composition_space: the composition space object
+        '''
+        # get each element type from the composition_space object
         elements = []
-        for point in composition_space:
+        for point in composition_space.endpoints:
             for key in point:
                 elements.append(key)
         # remove duplicates from the list of elements
-        elements = list(set(elements))    
-        # get the atomic radius for each element type and put them in a dictionary
-        atomic_radii = {}
-        for element in elements:
-            atomic_radii[element] = Element(element).atomic_radius
-            # compute the mid for each pair of elements from their atomic radii as 80% of the sum of the radii
-        self.per_species_mids = {}
-        for element in elements:
-            for next_element in elements:      
-                self.per_species_mids[element + " " + next_element] = 0.8*(atomic_radii[element] + atomic_radii[next_element])
-        # TODO: maybe remove duplicates, or maybe just leave them - could be helpful to have all representations 
-       
+        elements = list(set(elements)) 
+        return elements
+        
         
 
 
@@ -932,12 +1064,15 @@ class Development(object):
         # TODO: implement me
         # 
         # 1. Check composition to see if it's in the composition space (could be a little tricky for pd searches...)
-        # 2. Do Niggli cell reduction, if specified
-        # 3. Check the structural constraints. Do most likely to fail first
+        #        - also for pd, check allow_endpoints constraint if we're not in the initial population
+        # 2. Do Niggli cell reduction, if specified (might be different versions of this for different geometries...)
+        # 3. Scale volume, if specified
+        # 4. Check the structural constraints. Do most likely to fail first
         #    - per-species MIDs
         #    - min and max num atoms
         #    - min and max lattice angles
         #    - min and max lattice lengths
+        #    - check any geometry-related constraints (max_size, etc)
 
 
 class OffspringGenerator(object):
@@ -1132,19 +1267,19 @@ class InitialPopulation():
 ########## area for casual testing ########## 
 
 # make a structure object
-lattice = [[1,0.5,0], [0.5,1,0], [0,0,-1]]
-species = ["C", "Si"]
-coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75]]
-structure1 = Structure(lattice, species, coordinates)
+#lattice = [[1,0.5,0], [0.5,1,0], [0,0,-1]]
+#species = ["C", "Si"]
+#coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75]]
+#structure1 = Structure(lattice, species, coordinates)
 
 # make an organism object
-org1 = Organism(structure1)
+#org1 = Organism(structure1)
 
-print(org1.structure.lattice)
+#print(org1.structure.lattice)
 
-org1.rotateToPrincipalDirections()
-print("")
-print(org1.structure.lattice)
+#org1.rotateToPrincipalDirections()
+#print("")
+#print(org1.structure.lattice)
 
 #print(org1.structure)
 #print(org1.fitness)

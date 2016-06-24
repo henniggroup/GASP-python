@@ -9,18 +9,40 @@ import classes
 
 # parse the input file as nested dictionaries
 #with open(input_file, 'r') as f:
-with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
+#    parameters = yaml.load(f)
+
+#with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
+#    parameters = yaml.load(f)
+
+
+with open('/n/srv/brevard/python_GA/gaspy/src/gaspy_input.yaml', 'r') as f:
     parameters = yaml.load(f)
+
     
 # make the composition space object
-composition_space = classes.CompositionSpace(parameters['CompositionSpace'])
-#print(composition_space.end_points)
+try:
+    composition_space = classes.CompositionSpace(parameters['CompositionSpace'])
+except KeyError:
+    print("Input file must contain a CompositionSpace block.")
+
+# get the objective function (energy per atom or phase diagram) from the composition space
+objective_function = composition_space.inferObjectiveFunction()
 
 # make the constraints object
-constraints = classes.Constraints(parameters['Constraints'], composition_space.end_points)
+try:
+    constraints = classes.Constraints(parameters['Constraints'], composition_space, objective_function)
+except KeyError:
+    # if no Constraints block is given in the input file, then just use default values for everything
+    constraints = classes.Constraints('default', composition_space, objective_function)
 
-# make the geometry object (include needed constraints)
-geometry = classes.Geometry(parameters['Geometry'])
+# make the geometry object
+try:
+    geometry = classes.Geometry(parameters['Geometry'])
+except KeyError:
+    # if no Geometry block is given in the input file, then just use default values for everything
+    geometry = classes.Geometry('default')
+    
+
 
 # make the development object
 
