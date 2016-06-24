@@ -1,0 +1,123 @@
+# YAML input file for Python GASP
+
+# defines the composition or region of composition space to search 
+# after parsing this, we need to have some sort of check to make sure the endpoints are valid
+# also, based on this, determine whether we are doing a phase diagram search or not (so we know which objective funtion to use)
+# TODO: this should make CompositonSpace map to a list of lists, where each inner list represents a composition, and each element of an inner list is a dictionary that represents
+# an element and corresponding amount. Maybe try to parse these as pymatgen.core.composition objects
+CompositionSpace:
+     - C: 2
+       Si: 1
+
+     - C: 1
+       Si: 2
+
+
+Geometry:
+     shape: sheet # <bulk|sheet|wire|cluster> defaults to bulk
+     padding: 12   # the (actual - i.e. atom-to-atom) amount of vacuum padding added around non-bulk geometries. Not used for bulk, and defaults to 10 angstroms for other geometries
+
+
+
+# says which energy code to use, and where the needed input files are
+#EnegyCode: # should only have one specified
+
+#	vasp:
+#		incar: path to incar file
+#		kpoints: path to kpoints file
+#		potcars: # one for each element
+#			C: path to C potcar file
+#			Si: path to Si potcar file
+
+#	gulp: # TODO: the input files needed for gulp
+
+#	lammps: # TODO: the input files needed for lammps
+
+
+InitialPopulation:
+
+     random:
+          number: 30 # number to make
+          volume: 15 # volume per atom to scale the random structures to (default is no scaling)
+
+     fromPoscars:
+          number: 10 # number of poscar files
+          path: path/to/poscars # path to directory containing the poscar files
+
+     # TODO: maybe include other options, like getting structures from a database or something
+
+
+#Pool:
+#	size: # total number of organisms in the pool
+#	num_promoted: # the number of organisms in the promotion set. For phase diagram searching, this is always the ones on the convex hull (i.e., this is ignored)
+
+
+#Geometry:
+#	type: <bulk|sheet|wire|cluster> # should default to bulk
+#	max_size: # For sheet, the max layer thickness. For the wire and cluster, the max diameter. Not used for bulk
+#	vacuum_padding: # The distance between atoms through vacuum
+
+
+#RedundancyGuard:
+#	lattice_length_tol:  # fractional length tolerance (ltol argument of structure_matcher). Defaults to 0.2
+#	lattice_angle_tol:  # angle tolerance in degrees (angle_tol argument of structure_matcher). Defaults to 5
+#	site_tol:  # site tolerance - fraction of average free length per atom (stol argument of structure_matcher). Defaults to 0.3 	
+#	d_value: # for checking redundancy based on value. Defaults to zero
+
+
+#Variations:
+
+#	Mating:
+#		fraction: 0.7  # the fraction of offspring created with this variation
+#		thickness_mean: 0.5 # TODO: look up what exactly this is
+#		thickness_sigma: 0.1 # TODO: same as above
+#		major_shift_frac: 0.1 # TODO: same as above 
+#		minor_shift_frac: 0.1 # TODO: same as above
+#		grow_parents: True # TODO: same as above
+#		doubling_prob: 0.2 # probability of doubling one of the parent structures prior to mating
+
+#	Mutation:
+#		fraction: 0.1 # the fraction of offspring organisms created with this variation
+#		frac_perturbed: 0.5 # the fraction of atoms in the cell that are perturbed
+#		sigma_atoms: 0.5 # the standard deviation of atomic perturbations
+#		sigma_lattice: 0.1 # TODO: something about the applied strain - look it up exactly
+
+#	Permutation:
+#		fraction: 0.1 # the fraction of offspring created with this variation
+#		mean_swaps: 1 # average number of swaps to do per cell
+#		sigma_swaps: 1 # the standard deviation of the number of swaps to do per cell
+#		pairs_to_swap: # which pairs of atomic species to allow swapping 
+#			Si: C # for example...	
+
+#	NumStoichsMut:
+#		fraction: 0.1 # the fraction of offspring created with this variation
+#		mean: 0 # mean number of stoichiometries worth of atoms added or removed
+#		sigma: 1 # standard deviation of the number of stoichiometries worth of atoms added or removed
+
+#Selection:
+#	num_parents: 20 # this should default to pool_size
+#	selection_power: 1 # this should default to 1
+
+
+Constraints: # should probably set default values for these
+     min_num_atoms: 2
+     max_num_atoms: 20
+     min_lattice_length: 0.5
+     max_lattice_length: 20
+     min_lattice_angle: 40
+     max_lattice_angle: 140
+     allow_end_points: true # only gets applied when doing phase diagram searches. It specifies whether the end point compositions are permitted after the initial population
+                             # default to true for phase diagram searches
+     per_species_mids: # should default to all possible pairs (from composition space)
+          C C: default
+          Si Si: default
+          Si C: 1.1
+
+#StoppingCriteria:
+#	max_energy_calcs: # should also have a default value for this, maybe dependent on composition (fixed vs binary vs ternary, etc.) 
+       # TODO: others...
+
+
+
+
+ 
