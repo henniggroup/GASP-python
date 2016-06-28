@@ -3,6 +3,7 @@ import yaml
 import sys
 import os
 import classes
+from pymatgen.io.vasp.inputs import Poscar
 
 # get the pash to the input file (in yaml format)
 #input_file = os.path.abspath(sys.argv[1]) 
@@ -25,15 +26,12 @@ try:
 except KeyError:
     print("Input file must contain a CompositionSpace block.")
 
-# get the objective function (energy per atom or phase diagram) from the composition space
-objective_function = composition_space.inferObjectiveFunction()
-
 # make the constraints object
 try:
-    constraints = classes.Constraints(parameters['Constraints'], composition_space, objective_function)
+    constraints = classes.Constraints(parameters['Constraints'], composition_space)
 except KeyError:
     # if no Constraints block is given in the input file, then just use default values for everything
-    constraints = classes.Constraints('default', composition_space, objective_function)
+    constraints = classes.Constraints('default', composition_space)
 
 # make the geometry object
 try:
@@ -42,9 +40,55 @@ except KeyError:
     # if no Geometry block is given in the input file, then just use default values for everything
     geometry = classes.Geometry('default')
     
-
-
+# make Niggli object
+try:
+    niggli = parameters['Niggli']
+    if niggli == None or niggli == 'default':
+        niggli = True
+except KeyError:
+    # if no Niggli block is given in the input file, set it to True
+    niggli = True
+    
+# make ScaleDensity object
+try:
+    scale_density = parameters['ScaleDensity']
+    if scale_density == None or scale_density == 'default':
+        scale_density = True
+except KeyError:
+    # if no ScaleDensity block is given in the input file, set it to True
+    scale_density = True
+   
 # make the development object
+development = classes.Development(composition_space, constraints, geometry, niggli, scale_density)
+
+#print(composition_space.objective_function)
+
+# make an organism to test out the Development.develop method
+lattice = [[10, 0, 0], [0, 10, 0], [0, 0, 10]]
+species = ["C", "Si"]
+coordinates = [[0.5, 0.5, 0.3],[0.5, 0.5, 0.69]]
+#species = ["C", "Si", "Si"]
+#coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75], [0.5, 0.5, 0.5]]
+#species = ["C", "Si", "Si", "Si"]
+#coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75], [0.3, 0.3, 0.3], [0.5, 0.5, 0.5]]
+structure1 = classes.Structure(lattice, species, coordinates)
+org1 = classes.Organism(structure1)
+
+#undeveloped = Poscar(org1.structure)
+#print(undeveloped.get_string())
+#print("")
+
+developed = development.develop(org1, None)
+
+#if developed != None:
+#    print(Poscar(developed.structure).get_string())
+#else:
+#    print("org failed development")
+
+
+
+
+
 
 # make the redundancy_guard object
 

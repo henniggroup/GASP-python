@@ -3,6 +3,7 @@ from __future__ import division, unicode_literals, print_function
 from pymatgen.core.structure import Structure
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element
+from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.transformations.standard_transformations import RotationTransformation
 from pymatgen.core.operations import SymmOp
 # from abc import abstractmethod, ABCMeta
@@ -12,7 +13,11 @@ from _collections import deque
 import random  # TODO: need to make sure all random numbers from the same PRNG
 import threading
 import numpy as np
-from numpy import inf
+from numpy import inf, Inf
+from pymatgen.phasediagram.maker import CompoundPhaseDiagram
+from pymatgen.phasediagram.entries import PDEntry
+import pymatgen
+from pymatgen.core.lattice import Lattice
 # TODO: import other needed stuff from pymatgen
 
 '''
@@ -55,6 +60,8 @@ class Organism(object):
         Args:
             structure: The structure of this organism, as a pymatgen.core.structure.Structure
             
+            composition: The composition of this organism, as a pymatgen.core.composition.Composition
+            
             value: The objective function value of this organism, which is either the energy
                 per atom (for fixed-composition search) or the distance from the current best
                 convex hull (for phase diagram search).
@@ -68,11 +75,12 @@ class Organism(object):
         '''
         # initialize instance variables
         self.structure = structure
+        self.composition = self.structure.composition
         self.value = value
         self.fitness = fitness
         self.select_prob = select_prob 
         self.isActive = isActive
-      #  self._id = IDGenerator.makeID(); # unique id number for this organism. Should not be changed.
+        #  self._id = IDGenerator.makeID(); # unique id number for this organism. Should not be changed.
     
     # this keeps the id (sort of) immutable by causing an exception to be raised if the user tries to 
     # the set the id with org.id = some_id.
@@ -83,50 +91,124 @@ class Organism(object):
     # TODO: maybe make setter methods for fitness and select_prob that check that they're between 0 and 1. 
     #    The Structure class has checks at initialization, so we don't need to check it again here.
     
-  #  def rotateToPrincipalDirections(self):
+    def rotateToPrincipalDirections(self):
         '''
-        Rotates the organism's structure into the principal directions. That is, a is parallel to the Cartesian x-axis 
-        and b lies in the Cartesian x-y plane.
+        Rotates the organism's structure into the principal directions. That is, a is parallel to the Cartesian x-axis, 
+        b lies in the Cartesian x-y plane and the z-component of c is positive.
         
+        Note: this method doesn't change the fractional coordinates of the sites. However, the Cartesian coordinates may be changed
         '''
-        # 1. rotate about the z-axis until a is vertically aligned with the x-axis
-        # 2. rotate about y-axis until a is parallel to the x-axis
-        # 3. rotate about x-axis until b lies in the x-y plane
-        # 4. make sure all vectors are pointing in positive directions
-        
-        # rotate about the z-axis
- #       rotation = RotationTransformation([0, 0, 1], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][1], self.structure.lattice.matrix[0][0]))
- #       self.structure = rotation.apply_transformation(self.structure)
-        # rotate about the y-axis
- #       rotation = RotationTransformation([0, 1, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][2], self.structure.lattice.matrix[0][0]))
- #       self.structure = rotation.apply_transformation(self.structure)
-        # rotate about the x-axis
- #       rotation = RotationTransformation([1, 0, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[1][2], self.structure.lattice.matrix[1][1]))
- #       self.structure = rotation.apply_transformation(self.structure)
+        # rotate about the z-axis to align a vertically with the x-axis
+        rotation = RotationTransformation([0, 0, 1], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][1], self.structure.lattice.matrix[0][0]))
+        self.structure = rotation.apply_transformation(self.structure)
+        # rotate about the y-axis to make a parallel to the x-axis
+        rotation = RotationTransformation([0, 1, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][2], self.structure.lattice.matrix[0][0]))
+        self.structure = rotation.apply_transformation(self.structure)
+        # rotate about the x-axis to make b lie in the x-y plane
+        rotation = RotationTransformation([1, 0, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[1][2], self.structure.lattice.matrix[1][1]))
+        self.structure = rotation.apply_transformation(self.structure)
         # make sure they are all pointing in positive directions
- #       if self.structure.lattice.matrix[0][0] < 0:
+        if self.structure.lattice.matrix[0][0] < 0:
             # rotate about y-axis to make a positive
- #          rotation = RotationTransformation([0, 1, 0], 180)
- #           self.structure = rotation.apply_transformation(self.structure)
- #       if self.structure.lattice.matrix[1][1] < 0:
+            rotation = RotationTransformation([0, 1, 0], 180)
+            self.structure = rotation.apply_transformation(self.structure)
+        if self.structure.lattice.matrix[1][1] < 0:
             # rotate about x-axis to make b positive
- #           rotation = RotationTransformation([1, 0, 0], 180)
- #           self.structure = rotation.apply_transformation(self.structure)
- #       if self.structure.lattice.matrix[2][2] < 0:
-            # mirror c across the x-y plane to make it positive
- #           reflection = SymmOp([1, 0, 0], [0, 0, 0])
-            # TODO: figure out how to apply this SymmOp object to do the reflection
+            rotation = RotationTransformation([1, 0, 0], 180)
+            self.structure = rotation.apply_transformation(self.structure)
+        if self.structure.lattice.matrix[2][2] < 0:
+            # mirror c across the x-y plane to make it positive - have to build a new lattice to do this
+            # the components of a
+            ax = self.structure.lattice.matrix[0][0]
+            ay = self.structure.lattice.matrix[0][1]
+            az = self.structure.lattice.matrix[0][2]
+            # the components of b
+            bx = self.structure.lattice.matrix[1][0]
+            by = self.structure.lattice.matrix[1][1]
+            bz = self.structure.lattice.matrix[1][2]
+            # the components of c
+            cx = self.structure.lattice.matrix[2][0]
+            cy = self.structure.lattice.matrix[2][1]
+            cz = -1*self.structure.lattice.matrix[2][2]
             
+            self.structure.modify_lattice(Lattice([[ax, ay, az], [bx, by, bz], [cx, cy, cz]]))
+        
+        
+    def reduceSheetCell(self):
+        '''
+        Applies Niggli cell reduction to a sheet structure. 
+        
+        The idea is to make c vertical and add lots of vertical vacuum so that the standard reduction algorithm only changes the a and b lattice vectors
+        '''
+        # rotate into principal directions
+        self.rotateToPrincipalDirections()
+        # get the species and their Cartesian coordinates
+        species = self.structure.species
+        cartesian_coords = self.structure.cart_coords
+        # get the non-zero components of the a and b lattice vectors, and the vertical component of the c lattice vector
+        ax = self.structure.lattice.matrix[0][0]
+        bx = self.structure.lattice.matrix[1][0]
+        by = self.structure.lattice.matrix[1][1]
+        cz = self.structure.lattice.matrix[2][2]
+        # make a new lattice with a ton of vertical vacuum (add 100 Angstroms)
+        padded_lattice = Lattice([[ax, 0.0, 0.0], [bx, by, 0.0], [0.0, 0.0, cz + 100]])
+        # make a new structure with the padded lattice and Cartesian coordinates
+        padded_structure = Structure(padded_lattice, species, cartesian_coords, coords_are_cartesian=True)
+        # do cell reduction on the padded structure (the c lattice vector should still be parallel to z, and a and b should still lie in x-y plane)
+        reduced_structure = padded_structure.get_reduced_structure()
+        # unpad the reduced structure
+        rspecies = reduced_structure.species
+        rcartesian_coords = reduced_structure.cart_coords
+        rax = reduced_structure.lattice.matrix[0][0]
+        ray = reduced_structure.lattice.matrix[0][1]
+        rbx = reduced_structure.lattice.matrix[1][0]
+        rby = reduced_structure.lattice.matrix[1][1]
+        unpadded_lattice = Lattice([[rax, ray, 0.0], [rbx, rby, 0.0], [0.0, 0.0, cz]])
+        
+        self.structure = Structure(unpadded_lattice, rspecies, rcartesian_coords, coords_are_cartesian=True)
+        
+        
+    def getLayerThickness(self):
+        '''
+        Returns the layer thickness of a sheet structure, which is the maximum vertical distance between atoms in the cell.
+        
+        Assumes that the organism has already been rotated into the principal directions, and that plane of the sheet is parallel to the a-b facet.
+        '''
+        # get the Cartesian coordinates of the atoms in the structure
+        cart_coords = self.structure.cart_coords
+        # find the largest and smallest vertical coordinates
+        maxz = -Inf
+        minz = Inf
+        for coord in cart_coords:
+            if coord[2] > maxz:
+                maxz = coord[2]
+            if coord[2] < minz:
+                minz = coord[2]
+        # compute the layer thickness
+        layer_thickness = maxz - minz
+        return layer_thickness
+    
+    
+    def getWireDiameter(self):
+        '''
+        Returns the diameter of a wire structure
+        
+        Assumes that the organism has already been put into wire format (whatever that means)
+        '''
+        # TODO: implement me
+        print("Please implement me.")
+        
+    
+    def getClusterDiameter(self):
+        '''
+        Returns the diameter of a cluster structure
+        
+        Assumes that the organism has already been put into cluster format (whatever that means)
+        '''
+        # TODO: implement me
+        print("Please implement me.")
+        
             
-            #print(self.structure.lattice.matrix[2][2])
-            #x_component = self.structure.lattice.matrix[2][0]
-            #y_component = self.structure.lattice.matrix[2][1]
-            #z_component = self.structure.lattice.matrix[2][2]
-            
-            #self.structure.lattice = [self.structure.lattice[0], self.structure.lattice[1], [x_component, y_component, -z_component]]
-            
-            #self.structure.lattice.matrix[2][2] = -1*self.structure.lattice.matrix[2][2]
-            #print(self.structure.lattice.matrix[2][2])
             
 
 
@@ -436,34 +518,36 @@ class Geometry(object):
             self.shape = self.default_shape
             self.max_size = self.default_max_size
             self.padding = None
-        else:
-            # check each one and see if it's been left blank or set to default, or not included at all
-            try:
-                self.shape = geometry_parameters['shape']
-                if self.shape == None or self.shape == 'default':
+        else:     
+            # check each one and see if it's been left blank or set to default, or not included at all 
+            if 'shape' in geometry_parameters:
+                if geometry_parameters['shape'] == None or geometry_parameters['shape'] == 'default':
                     self.shape = self.default_shape
                     self.max_size = self.default_max_size
                     self.padding = None
-                elif self.shape != 'bulk':
+                elif geometry_parameters['shape'] != 'bulk':
                     # set max size, and check if was left blank or set to None or 'default'
-                    try:
-                        self.max_size = geometry_parameters['max_size']
-                        if self.max_size == None or self.max_size == 'default':
+                    if 'max_size' in geometry_parameters:
+                        if geometry_parameters['max_size'] == None or geometry_parameters['max_size'] == 'default':
                             self.max_size = self.default_max_size
-                    except KeyError:
+                        else:
+                            self.max_size = geometry_parameters['max_size']
+                    else:
                         self.max_size = self.default_max_size
                     # set padding, and check if was left blank or set to None or 'default'
-                    try:
-                        self.padding = geometry_parameters['padding']
-                        if self.padding == None or self.padding == 'default':
+                    if 'padding' in geometry_parameters:
+                        if geometry_parameters['padding'] == None or geometry_parameters['padding'] == 'default':
                             self.padding = self.default_padding
-                    except KeyError:
+                        else:
+                            self.padding = geometry_parameters['padding']
+                    else:
                         self.padding = self.default_padding
             # if shape field was missing, assume bulk and set default values
-            except KeyError:
+            else:
                 self.shape = self.default_shape
                 self.max_size = self.default_max_size
                 self.padding = None
+                    
                         
                         
                 
@@ -605,10 +689,16 @@ class CompositionSpace(object):
             endpoints[i] = Composition(endpoints[i])
             
         self.endpoints = endpoints
+        
+        # for now, let's have the objective live here
+        self.objective_function = self.inferObjectiveFunction()
+    
     
     def inferObjectiveFunction(self):
         '''
         Infers the objective function (energy per atom or phase diagram) based on the composition space
+        
+        Returns either "epa" or "pd"
         '''
         # if only one composition, then it must be an epa search
         if len(self.endpoints) == 1:
@@ -827,21 +917,6 @@ class RedundancyGuard(object):
                 print("message that new_organism failed value redundancy")
                 return organism    
         return None    # should only get here if no organisms are redundant with the new organism
-    
-
-#class ObjectiveFunction(object):
-#    '''
-#    Represents the quantity we want to optimize.
-#    '''
-    
-#    def __init__(self, composition_space):
-#        '''
-#        Creates an objective function.
-        
-#        Args:
-#            composition_space: a CompositionSpace object
-#        '''
-        
         
 
 
@@ -850,7 +925,7 @@ class Constraints(object):
     Represents the general constraints imposed on structures considered by the algorithm. 
     '''
     
-    def __init__(self, constraints_parameters, composition_space, objective_function):
+    def __init__(self, constraints_parameters, composition_space):
         '''
         Sets the general constraints imposed on structures. Assigns default values if needed.
         
@@ -877,65 +952,72 @@ class Constraints(object):
         else:
             # check each flag to see if it's been included, and if so, whether it has been set to default or left blank
             # min number of atoms
-            try:
-                self.min_num_atoms = constraints_parameters['min_num_atoms']
-                if self.min_num_atoms == None or self.min_num_atoms == 'default':
+            if 'min_num_atoms' in constraints_parameters:
+                if constraints_parameters['min_num_atoms'] == None or constraints_parameters['min_num_atoms'] == 'default':
                     self.min_num_atoms = self.default_min_num_atoms
-            except KeyError:
-                self.min_num_atoms = self.default_min_num_atoms
-                 
-            # max number of atoms
-            try:
-                self.max_num_atoms = constraints_parameters['max_num_atoms']
-                if self.max_num_atoms == None or self.max_num_atoms == 'default':
+                else:
+                    self.min_num_atoms = constraints_parameters['min_num_atoms']
+            else:
+                self.min_num_atoms = self.default_min_num_atoms    
+                
+            # max number of atoms   
+            if 'max_num_atoms' in constraints_parameters:
+                if constraints_parameters['max_num_atoms'] == None or constraints_parameters['max_num_atoms'] == 'default':
                     self.max_num_atoms = self.default_max_num_atoms
-            except KeyError:
-                self.max_num_atoms = self.default_max_num_atoms
-                    
-            # min lattice length
-            try:    
-                self.min_lattice_length = constraints_parameters['min_lattice_length']
-                if self.min_lattice_length == None or self.min_lattice_length == 'default':
+                else:
+                    self.max_num_atoms = constraints_parameters['max_num_atoms']
+            else:
+                self.max_num_atoms = self.default_max_num_atoms    
+                
+            # min lattice length    
+            if 'min_lattice_length' in constraints_parameters:
+                if constraints_parameters['min_lattice_length'] == None or constraints_parameters['min_lattice_length'] == 'default':
                     self.min_lattice_length = self.default_min_lattice_length
-            except KeyError:
-                self.min_lattice_length = self.default_min_lattice_length
-                    
-            # max lattice length
-            try:
-                self.max_lattice_length = constraints_parameters['max_lattice_length']
-                if self.max_lattice_length == None or self.max_lattice_length == 'default':
+                else:
+                    self.min_lattice_length = constraints_parameters['min_lattice_length']
+            else:
+                self.min_lattice_length = self.default_min_lattice_length     
+                 
+            # max lattice length    
+            if 'max_lattice_length' in constraints_parameters:
+                if constraints_parameters['max_lattice_length'] == None or constraints_parameters['max_lattice_length'] == 'default':
                     self.max_lattice_length = self.default_max_lattice_length
-            except KeyError:
+                else:
+                    self.max_lattice_length = constraints_parameters['max_lattice_length']
+            else:
                 self.max_lattice_length = self.default_max_lattice_length 
-                
-            # min lattice angle
-            try:    
-                self.min_lattice_angle = constraints_parameters['min_lattice_angle']
-                if self.min_lattice_angle == None or self.min_lattice_angle == 'default':
+             
+            # min lattice angle    
+            if 'min_lattice_angle' in constraints_parameters:
+                if constraints_parameters['min_lattice_angle'] == None or constraints_parameters['min_lattice_angle'] == 'default':
                     self.min_lattice_angle = self.default_min_lattice_angle
-            except KeyError:
+                else:
+                    self.min_lattice_angle = constraints_parameters['min_lattice_angle']
+            else:
                 self.min_lattice_angle = self.default_min_lattice_angle
-                
-            # max lattice angle
-            try:    
-                self.max_lattice_angle = constraints_parameters['max_lattice_angle']
-                if self.max_lattice_angle == None or self.max_lattice_angle == 'default':
+             
+            # max lattice angle    
+            if 'max_lattice_angle' in constraints_parameters:
+                if constraints_parameters['max_lattice_angle'] == None or constraints_parameters['max_lattice_angle'] == 'default':
                     self.max_lattice_angle = self.default_max_lattice_angle
-            except KeyError:
-                self.max_lattice_angle = self.default_max_lattice_angle
-                
-            # allowing end points
-            try:    
-                self.allow_endpoints = constraints_parameters['allow_endpoints']
-                if self.allow_endpoints == None or self.allow_endpoints == 'default' or objective_function == "epa":
+                else:
+                    self.max_lattice_angle = constraints_parameters['max_lattice_angle']
+            else:
+                self.max_lattice_angle = self.default_max_lattice_angle    
+             
+            # allowing endpoints   
+            if 'allow_endpoints' in constraints_parameters:
+                if constraints_parameters['allow_endpoints'] == None or constraints_parameters['allow_endpoints'] == 'default':
                     self.allow_endpoints = self.default_allow_endpoints
-            except KeyError:
+                else:
+                    self.allow_endpoints = constraints_parameters['allow_endpoints']
+            else:
                 self.allow_endpoints = self.default_allow_endpoints
-        
+                  
             # the per-species min interatomic distances
-            try:
-                self.per_species_mids = constraints_parameters['per_species_mids'] 
-                if self.per_species_mids != None and self.per_species_mids != 'default':
+            if 'per_species_mids' in constraints_parameters:
+                if constraints_parameters['per_species_mids'] != None and constraints_parameters['per_species_mids'] != 'default':
+                    self.per_species_mids = constraints_parameters['per_species_mids'] 
                     # check each pair that's been specified to see if it needs a default mid
                     for key in self.per_species_mids:
                         if self.per_species_mids[key] == None or self.per_species_mids[key] == 'default':
@@ -948,9 +1030,10 @@ class Constraints(object):
                 # if the per_species_mids block has been left blank or set to default, then set all the pairs to defaults
                 else:
                     self.set_all_mids_to_defaults(composition_space)
-            # if the per_species_mids block wasn't set in the input file, just assign defaults to everything
-            except KeyError:
+            # if the per_species_mids block wasn't set in the input file, then set all the pairs to defaults
+            else:
                 self.set_all_mids_to_defaults(composition_space)
+            
                 
                 
     def set_all_to_defaults(self, composition_space):
@@ -987,10 +1070,10 @@ class Constraints(object):
     
     def set_some_mids_to_defaults(self, composition_space):
         '''
-        Compares all the possible pairs of elements to what is contained in self.per_species_mids. If any pairs are missing, add them with default values.
+        Compares all the possible pairs of elements to what is contained in self.per_species_mids. If any pairs are missing, adds them with default values.
         
         Args:
-            composition_space: the composition space object
+            composition_space: a CompositionSpace object
         ''' 
         # get each element type from the composition_space object
         elements = self.get_all_elements(composition_space)
@@ -1039,40 +1122,166 @@ class Development(object):
     This is a singleton class.
     '''
     
-    def __init__(self, niggli_reduction_params, structure_constraints_params):
+    def __init__(self, composition_space, constraints, geometry, niggli, scale_density):
         '''
         Creates a Development object.
         
         Args:
-            niggli_reduction_params: dictionary containing data for Niggli cell reduction
-                        
-            structure_constraints: dictionary of structure constraints parameters
+            composition_space: a CompositionSpace object
+            
+            constraints: a Constraints object
+            
+            geometry: a Geometry object
+            
+            niggli: a boolean specifying whether or not to do Niggli cell reduction
         '''
-        # TODO: implement me
-        # I think I can just keep the two dictionaries as instance variables
+        self.composition_space = composition_space
+        self.constraints = constraints
+        self.geometry = geometry
+        self.niggli = niggli
+        self.scale_density = scale_density
         
     
-    def develop(self, organism):
+    def develop(self, organism, pool):
         '''
         Develops an organism.
         
         Returns the developed organism, or None if the organism failed development
         
+        TODO: it might make more sense to return a flag indicating whether the organism survived development, since this method modifies the organism...
+        
         Args:
             organism: the organism to develop
+            
+            pool: the current pool. If this method is called before a pool exists (e.g., while making the initial population)
+                  then pass None as the argument instead.
         '''
-        # TODO: implement me
-        # 
-        # 1. Check composition to see if it's in the composition space (could be a little tricky for pd searches...)
-        #        - also for pd, check allow_endpoints constraint if we're not in the initial population
-        # 2. Do Niggli cell reduction, if specified (might be different versions of this for different geometries...)
-        # 3. Scale volume, if specified
-        # 4. Check the structural constraints. Do most likely to fail first
-        #    - per-species MIDs
-        #    - min and max num atoms
-        #    - min and max lattice angles
-        #    - min and max lattice lengths
-        #    - check any geometry-related constraints (max_size, etc)
+        # check max num atoms constraint
+        if len(organism.structure.sites) > self.constraints.max_num_atoms:
+            print("Organism failed max num atoms constraint - rejecting")
+            return None
+            
+        # check min num atoms constraint
+        if len(organism.structure.sites) < self.constraints.min_num_atoms:
+            print("Organism failed min num atoms constraint - rejecting")
+            return None
+        
+        # check if the organism has the right composition for fixed-composition searches
+        if self.composition_space.objective_function == "epa":
+            if self.composition_space.endpoints[0].almost_equals(organism.composition) == False:
+                print("Organism has incorrect composition - rejecting")
+                return None
+        
+        # check if the organism is in the composition space for phase-diagram searches
+        # This is kind of hacky, but the idea is to use the CompoundPhaseDiagram.transform_entries method to do 
+        # the heavy lifting of determining whether a composition lies in the composition space 
+        elif self.composition_space.objective_function == "pd":
+            # cast all the endpoints to PDEntries, and just make up some energies
+            pdentries = []
+            for endpoint in self.composition_space.endpoints:
+                pdentries.append(PDEntry(endpoint, -10))
+            # also cast the organism we want to check to a PDEntry
+            pdentries.append(PDEntry(organism.composition, -10))
+            # construct the CompoundPhaseDiagram object that we'll use to check if the organism is in the composition space
+            composition_checker = CompoundPhaseDiagram(pdentries, self.composition_space.endpoints)
+            # use the CompoundPhaseDiagram to check if the organism is in the composition space by seeing how many entries it returns
+            if len(composition_checker.transform_entries(pdentries, self.composition_space.endpoints)[0]) == len(self.composition_space.endpoints):
+                print("Organism not in composition space - rejecting")
+                return None
+            else:
+                # check the endpoints if specified and if we're not making the initial population
+                if self.constraints.allow_endpoints == False and pool != None:
+                    for endpoint in self.composition_space.endpoints:
+                        if endpoint.almost_equals(organism.composition):
+                            print("Organism at an endpoint - rejecting")
+                            return None
+                        
+        # optionally do Niggli cell reduction
+        if self.niggli == True:
+            if self.geometry.shape == "bulk":
+                # do normal Niggli cell reduction
+                organism.structure = organism.structure.get_reduced_structure()
+            elif self.geometry.shape == "sheet":
+                # do the sheet Niggli cell redution
+                organism.reduceSheetCell()     
+            # TODO: implement cell reduction for other geometries here if needed (doesn't makes sense for wires or clusters)
+            
+        # rotate the structure into the principal directions
+        organism.rotateToPrincipalDirections()
+                     
+        # optionally scale the density to the average of the densities of the organisms in the promotion set 
+        # TODO: test this once Pool has been implemented
+        if self.scale_density == True and self.composition_space.objective_function == "epa" and pool != None and organism.value == None:
+            # get average volume per atom of the organisms in the promotion set
+            vpa_sum = 0
+            for org in pool.promotionSet:
+                vpa_sum = vpa_sum + org.structure.volume/len(org.structure.sites)
+            vpa_mean = vpa_sum/len(pool.promotionSet)
+            # compute the new volume per atom
+            num_atoms = len(organism.structure.sites)
+            new_vol = vpa_mean*num_atoms
+            # scale to the new volume
+            organism.structure.scale_lattice(new_vol)
+            
+        # check the max and min lattice length constraints
+        lengths = organism.structure.lattice.abc
+        for length in lengths:
+            if length > self.constraints.max_lattice_length:
+                print("Organism failed max lattice length constraint - rejecting")
+                return None
+            elif length < self.constraints.min_lattice_length:
+                print("Organism failed min lattice length constraint - rejecting")
+                return None
+            
+        # check the max and min lattice angle constraints
+        angles = organism.structure.lattice.angles
+        for angle in angles:
+            if angle > self.constraints.max_lattice_angle:
+                print("Organism failed max lattice angle constraint - rejecting")
+                return None
+            elif angle < self.constraints.min_lattice_angle:
+                print("Organism failed min lattice angle constraint - rejecting")
+                return None
+            
+        # check the per-species minimum interatomic distance constraints
+        species_symbols = organism.structure.symbol_set
+        for site in organism.structure.sites:
+            for species_symbol in species_symbols:
+                # get the mid for this particular pair. We don't know the ordering in per_species_mids, so try both
+                test_key1 = species_symbol + " " + site.specie.symbol
+                test_key2 = site.specie.symbol + " " + species_symbol
+                if test_key1 in self.constraints.per_species_mids:
+                    mid = self.constraints.per_species_mids[test_key1]
+                elif test_key2 in self.constraints.per_species_mids:
+                    mid = self.constraints.per_species_mids[test_key2]  
+                # get all the sites within a sphere of radius mid centered on the current site
+                neighbors = organism.structure.get_neighbors(site, mid)
+                # check each neighbor in the sphere to see if it has the forbidden type
+                for neighbor in neighbors:
+                    if neighbor[0].specie.symbol == species_symbol:
+                        print("Organism failed per-species minimum interatomic distance constraint - rejecting")
+                        return None
+            
+        # check the max size constraint for non-bulk geometries
+        if self.geometry.shape == 'sheet':
+            if organism.getLayerThickness() > self.geometry.max_size:
+                print("Organism failed max size constraint - rejecting")
+                return None
+        elif self.geometry.shape == 'wire':
+            if organism.getWireDiameter() > self.geometry.max_size:
+                print("Organism failed max size constraint - rejecting")
+                return None
+        elif self.geometry.shape == 'cluster':
+            if organism.getClusterDiameter() > self.geometry.max_size:
+                print("Organism failed max size constraint - rejecting")
+                return None
+        # TODO: any other geometry-specific constraints checks go here
+        
+        # return the organism if it survived
+        return organism
+                
+                
+            
 
 
 class OffspringGenerator(object):
