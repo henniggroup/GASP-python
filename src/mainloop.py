@@ -9,6 +9,7 @@ from pymatgen.io.vasp.inputs import Poscar
 #input_file = os.path.abspath(sys.argv[1]) 
 
 # parse the input file as nested dictionaries
+# TODO: this should be in try-except clause, since opening the file is something that could fail (e.g., wrong path given, etc.)
 #with open(input_file, 'r') as f:
 #    parameters = yaml.load(f)
 
@@ -21,64 +22,99 @@ with open('/n/srv/brevard/python_GA/gaspy/src/gaspy_input.yaml', 'r') as f:
 
     
 # make the composition space object
-try:
+if 'CompositionSpace' in parameters:
     composition_space = classes.CompositionSpace(parameters['CompositionSpace'])
-except KeyError:
+else:
     print("Input file must contain a CompositionSpace block.")
-
+    
 # make the constraints object
-try:
+if 'Constraints' in parameters:
     constraints = classes.Constraints(parameters['Constraints'], composition_space)
-except KeyError:
+else:
     # if no Constraints block is given in the input file, then just use default values for everything
     constraints = classes.Constraints('default', composition_space)
-
+    
 # make the geometry object
-try:
+if 'Geometry' in parameters:
     geometry = classes.Geometry(parameters['Geometry'])
-except KeyError:
+else:
     # if no Geometry block is given in the input file, then just use default values for everything
     geometry = classes.Geometry('default')
     
-# make Niggli object
-try:
-    niggli = parameters['Niggli']
-    if niggli == None or niggli == 'default':
+# make the niggli object
+if 'Niggli' in parameters:
+    if parameters['Niggli'] == None or parameters['Niggli'] == 'default':
         niggli = True
-except KeyError:
+    else:
+        niggli = parameters['Niggli']
+else:
     # if no Niggli block is given in the input file, set it to True
     niggli = True
     
-# make ScaleDensity object
-try:
-    scale_density = parameters['ScaleDensity']
-    if scale_density == None or scale_density == 'default':
+# make the scale density object
+if 'ScaleDesnsity' in parameters:
+    if parameters['ScaleDensity'] == None or parameters['ScaleDensity'] == 'default':
         scale_density = True
-except KeyError:
+    else:
+        scale_density = parameters['ScaleDensity']
+else:
     # if no ScaleDensity block is given in the input file, set it to True
     scale_density = True
    
 # make the development object
-development = classes.Development(composition_space, constraints, geometry, niggli, scale_density)
+development = classes.Development(niggli, scale_density)
 
-#print(composition_space.objective_function)
+# make the redundancy guard object
+if 'RedundancyGuard' in parameters:
+    redundancy_guard = classes.RedundancyGuard(parameters['RedundancyGuard'])
+else:
+    redundancy_guard = classes.RedundancyGuard('default')
 
-# make an organism to test out the Development.develop method
-lattice = [[10, 0, 0], [0, 10, 0], [0, 0, 10]]
-species = ["C", "Si"]
-coordinates = [[0.5, 0.5, 0.3],[0.5, 0.5, 0.69]]
-#species = ["C", "Si", "Si"]
-#coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75], [0.5, 0.5, 0.5]]
-#species = ["C", "Si", "Si", "Si"]
-#coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75], [0.3, 0.3, 0.3], [0.5, 0.5, 0.5]]
-structure1 = classes.Structure(lattice, species, coordinates)
+
+
+
+# make an organism 
+lattice1 = [[5, 0, 0], [0, 5, 0], [0, 0, 5]]
+species1 = ["C", "Si"]
+coordinates1 = [[0.3, 0.5, 0.5],[0.7, 0.5, 0.5]]
+structure1 = classes.Structure(lattice1, species1, coordinates1)
 org1 = classes.Organism(structure1)
+
+# make another organism 
+lattice2 = [[10, 0, 0], [0, 5, 0], [0, 0, 5]]
+species2 = ["C", "Si", "C", "Si"]
+coordinates2 = [[0.15, 0.5, 0.5],[0.35, 0.5, 0.5], [0.65, 0.5, 0.5], [0.85, 0.5, 0.5]]
+structure2 = classes.Structure(lattice2, species2, coordinates2)
+org2 = classes.Organism(structure2)
+
+d1 = development.develop(org1, composition_space, constraints, geometry, None)
+d2 = development.develop(org2, composition_space, constraints, geometry, None)
+
+print(d1.structure)
+print("")
+print(d2.structure)
+
+# make-shift whole_pop list
+whole_pop = []
+whole_pop.append(d1)
+
+# check for redundancy
+print("")
+redundancy_guard.checkRedundancy(d2, whole_pop)
+
+# see if the structures got changed
+print("")
+print("")
+print(d1.structure)
+print("")
+print(d2.structure)
+
 
 #undeveloped = Poscar(org1.structure)
 #print(undeveloped.get_string())
 #print("")
 
-developed = development.develop(org1, None)
+#developed = development.develop(org1, None)
 
 #if developed != None:
 #    print(Poscar(developed.structure).get_string())
@@ -90,7 +126,7 @@ developed = development.develop(org1, None)
 
 
 
-# make the redundancy_guard object
+
 
 # make the creator objects
 
@@ -121,8 +157,7 @@ organism_creators = []
 for name in dict_of_parameters['Initial Population']
     Name = str(name)
     organism_creators.append(Name(name))
-# TODO: sort the list of creators so that the num_attempts ones are at the front and the num_successes ones are
-# at the back
+# TODO: sort the list of creators so that the num_attempts ones are at the front and the num_successes ones are at the back
 
 # create variation objects (Mutation, Mating, etc.) and put them in a list
 variations = []
@@ -137,8 +172,7 @@ redundancy_guard = RedundancyGuard(structure_matcher, other_inputs)
 development = Development(niggli_params, constraint_params)
 offspring_generator = OffspringGenerator(variations, development, redundancy_guard, 10000)
 energy_calculator = "energy code name" + "EnergyCalculator"(energy_code_params)
-waiting_queue = deque()         # queue to hold the organisms that have finished their energy calculations and are
-                                # waiting to be added to the pool
+waiting_queue = deque()         # queue to hold the organisms that have finished their energy calculations and are waiting to be added to the pool
 whole_pop = []                  # holds every organism that has been submitted for energy calculation, both relaxed and unrelaxed
 others?
 

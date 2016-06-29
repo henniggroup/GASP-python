@@ -14,10 +14,11 @@ import random  # TODO: need to make sure all random numbers from the same PRNG
 import threading
 import numpy as np
 from numpy import inf, Inf
-from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 import pymatgen
 from pymatgen.core.lattice import Lattice
+from pymatgen.analysis.structure_matcher import StructureMatcher
+from pymatgen.analysis.structure_matcher import ElementComparator
 # TODO: import other needed stuff from pymatgen
 
 '''
@@ -511,21 +512,21 @@ class Geometry(object):
         self.default_max_size = inf
         self.default_padding = 10 # this will only be used for non-bulk shapes
         
-        self.geometry_parameters = geometry_parameters
-        
         # if entire Geometry block was set to default or left blank
-        if self.geometry_parameters == None or self.geometry_parameters == 'default':
+        if geometry_parameters == None or geometry_parameters == 'default':
             self.shape = self.default_shape
             self.max_size = self.default_max_size
             self.padding = None
         else:     
             # check each one and see if it's been left blank or set to default, or not included at all 
             if 'shape' in geometry_parameters:
+                # if no shape was given, assume bulk and set everything to default
                 if geometry_parameters['shape'] == None or geometry_parameters['shape'] == 'default':
                     self.shape = self.default_shape
                     self.max_size = self.default_max_size
                     self.padding = None
-                elif geometry_parameters['shape'] != 'bulk':
+                else:
+                    self.shape = geometry_parameters['shape']
                     # set max size, and check if was left blank or set to None or 'default'
                     if 'max_size' in geometry_parameters:
                         if geometry_parameters['max_size'] == None or geometry_parameters['max_size'] == 'default':
@@ -707,7 +708,7 @@ class CompositionSpace(object):
         else:
             for point in self.endpoints:
                 for next_point in self.endpoints:
-                    if point.almost_equals(next_point, 0.0, 0.0) == False:
+                    if not point.almost_equals(next_point, 0.0, 0.0):
                         return "pd"
         # should only get here if there are multiple identical compositions in end_points (which would be weird)
         return "epa"
@@ -756,30 +757,22 @@ class RandomOrganismCreator(OrganismCreator):
         Creates a RandomOrganismCreator.
         
         Args:
-            needed_parameters: all the parameters needed for creating the random organisms.
-            This includes how many to make and whether to scale their volumes (and if yes, to what value).
-            It will also need stoichiometry information so it knows what types of atoms to use.
+            num_to_make: the number of organisms to make with this creator
             
-            development: the Development object (for cell reduction and structure constraints)
+            volume: the volume (per atom) to scale each new random organism to
             
-            redundancy_guard: the redundancyGuard object 
-            
-            num_to_make: the number of organisms to make with this creator. TODO: this will probably included in needed_parameters
+            num_made: the number of organisms made with this creator
             
             when_stop: the criteria for when this creator is finished ("successes" or "attempts") TODO: this will probably included in needed_parameters
             
-            num_successes: the number of organisms successfully added to the initial population from this creator
-            
             is_finished: whether the creator has made enough organisms
         '''
-        self.development = development
-        self.redundancy_guard = redundancy_guard
         self.num_to_make = num_to_make
         self.num_made = num_made
         self.when_stop = when_stop
         self.is_finished = is_finished
     
-    def createOrganism(self):
+    def createOrganism(self, composition_space, constraints, development, redundancy_guard, whole_pop):
         '''
         Creates a random organism for the initial population. Handles development and redundancy checking, and adds valid
         organism to whole_pop.
@@ -787,8 +780,15 @@ class RandomOrganismCreator(OrganismCreator):
         Returns a developed, non-redundant organism
         
         Args:
-        
-            TODO: think about what data this method needs and add it to the argument list.
+            composition_space: a CompositionSpace object
+            
+            constraints: a Constraints object
+            
+            development: a Development object (for cell reduction and structure constraints)
+            
+            redundancy_guard: a redundancyGuard object 
+            
+            whole_pop: the list containing all organisms to check against   
         '''
         # This method will need to:
         #     1. create a random organism
@@ -798,6 +798,53 @@ class RandomOrganismCreator(OrganismCreator):
         #     5. if the organism fails redundancy, make another one and try again
         #     6. add successful organism to whole_pop
         #     7. return the successful organism
+        
+        # make three random lattice vectors that satisfy the length constraints
+        a = constraints.min_lattice_length + random.random()*(constraints.max_lattice_length - constraints.min_lattice_length)
+        b = constraints.min_lattice_length + random.random()*(constraints.max_lattice_length - constraints.min_lattice_length)
+        c = constraints.min_lattice_length + random.random()*(constraints.max_lattice_length - constraints.min_lattice_length)
+        
+        # make three random lattice angles that satisfy the angle constraints
+        alpha = constraints.min_lattice_angle + random.random()*(constraints.max_lattice_angle - constraints.min_lattice_angle)
+        beta = constraints.min_lattice_angle + random.random()*(constraints.max_lattice_angle - constraints.min_lattice_angle)
+        gamma = constraints.min_lattice_angle + random.random()*(constraints.max_lattice_angle - constraints.min_lattice_angle)
+        
+        # build the random lattice
+        random_lattice = Lattice.from_parameters(a, b, c, alpha, beta, gamma)
+        
+        # get a list of elements for the random organism
+        if composition_space.objective_function == 'epa':
+            reduced_formula = composition_space.endpoints[0].reduced_composition
+            atoms_in_formula = reduced_formula.num_atoms
+            max_num_formulas = int(constraints.max_num_atoms/atoms_in_formula)
+            # get a random number of formula units
+            random_num_formulas = random.randint(1, max_num_formulas)
+            # add the right number of each element
+            elements = []
+            for element in reduced_formula:
+                for _ in range(random_num_formulas*reduced_formula[element]):
+                    elements.append(element) 
+        elif composition_space.objective_function == 'pd':
+            # TODO: this doesn't ensure the organism will be in the composition space
+            num_atoms = random.randint(constraints.min_num_atoms, constraints.max_num_atoms)
+            allowed_elements = constraints.get_all_elements(composition_space)
+            elements = []
+            for _ in range(num_atoms):
+                elements.append(allowed_elements[random.randint(0, len(allowed_elements))])
+        
+        # for each random species, generate a set of random fractional coordinates
+        # TODO: this doesn't ensure the structure will satisfy the per-species mids, and in fact most won't. It's fine because they'll just fail development, but there might be a better way...
+        random_coordinates = []
+        for _ in range(num_atoms):
+            random_coordinates.append([random.random(), random.random(), random.random()])
+        
+        # make a random organism from the random lattice, random species, and random coordinates\
+        random_structure = Structure(random_lattice, elements, random_coordinates)
+        random_org = Organism(random_structure)
+        
+        # TODO: development and redundancy
+        
+        
         
     
     def updateStatus(self):
@@ -884,19 +931,100 @@ class RedundancyGuard(object):
     This is a singleton class.
     '''
     
-    def __init__(self, structure_matcher, d_value):
+    def __init__(self, redundancy_parameters):
         '''
         Creates a redundancy guard.
         
         Args:
-            structure_matcher: a StructureMatcher object for comparing organisms' structures.
-            
-            other_params: other optional parameters for identifying redundant structures, like
-                d-value, etc.
+            redundancy parameters: a dictionary of parameters
         '''
-        self.structure_matcher = structure_matcher
-        self.d_value = d_value
-
+        # TODO: are these sensible defaults?
+        # default lattice length tolerance, in fractional coordinates (pymatgen uses 0.2 as default...)
+        self.default_lattice_length_tol = 0.1 
+        # default lattice angle tolerance, in degrees (pymatgen uses 5 as default...)
+        self.default_lattice_angle_tol = 2 
+        # default site tolerance, in fraction of average free length per atom (pymatgen uses 0.3 as default...)
+        self.default_site_tol = 0.1
+        # whether to transform to primitive cells before comparing
+        self.default_use_primitive_cell = True
+        # whether to check if structures are equivalent to supercells of each other
+        self.default_attempt_supercell = True
+        # the d-value interval
+        self.default_d_value = 0
+        
+        # parse the parameters, and set to defaults if necessary
+        if redundancy_parameters == None or redundancy_parameters == 'default':
+            self.set_all_to_defaults()
+        else:
+            # check each flag to see if it's been included, and if so, whether it has been set to default or left blank
+            # lattice length tolerance
+            if 'lattice_length_tol' in redundancy_parameters:
+                if redundancy_parameters['lattice_length_tol'] == None or redundancy_parameters['lattice_length_tol'] == 'default':
+                    self.lattice_length_tol = self.default_lattice_length_tol
+                else:
+                    self.lattice_length_tol = redundancy_parameters['lattice_length_tol']
+            else:
+                self.lattice_length_tol = self.default_lattice_length_tol
+                
+            # lattice angle tolerance
+            if 'lattice_angle_tol' in redundancy_parameters:
+                if redundancy_parameters['lattice_angle_tol'] == None or redundancy_parameters['lattice_angle_tol'] == 'default':
+                    self.lattice_angle_to = self.default_lattice_angle_tol
+                else:
+                    self.lattice_angle_to = redundancy_parameters['lattice_angle_tol']
+            else:
+                self.lattice_angle_to = self.default_lattice_angle_tol
+                
+            # site tolerance
+            if 'site_tol' in redundancy_parameters:
+                if redundancy_parameters['site_tol'] == None or redundancy_parameters['site_tol'] == 'default':
+                    self.site_tol = self.default_site_tol
+                else:
+                    self.site_tol = redundancy_parameters['site_tol']
+            else:
+                self.site_tol = self.default_site_tol
+            
+            # whether to use primitive cells
+            if 'use_primitive_cell' in redundancy_parameters:
+                if redundancy_parameters['use_primitive_cell'] == None or redundancy_parameters['use_primitive_cell'] == 'default':
+                    self.use_primitive_cell = self.default_use_primitive_cell
+                else:
+                    self.use_primitive_cell = redundancy_parameters['use_primitive_cell']
+            else:
+                self.use_primitive_cell = self.default_use_primitive_cell
+            
+            # whether to try matching supercells
+            if 'attempt_supercell' in redundancy_parameters:
+                if redundancy_parameters['attempt_supercell'] == None or redundancy_parameters['attempt_supercell'] == 'default':
+                    self.attempt_supercell = self.default_attempt_supercell
+                else:
+                    self.attempt_supercell = redundancy_parameters['attempt_supercell']
+            else:
+                self.attempt_supercell = self.default_attempt_supercell
+                
+            # d-value
+            if 'd_value' in redundancy_parameters:
+                if redundancy_parameters['d_value'] == None or redundancy_parameters['d_value'] == 'default':
+                    self.d_value = self.default_d_value
+                else:
+                    self.d_value = redundancy_parameters['d_value']
+            else:
+                self.d_value = self.default_d_value
+        
+        # make the StructureMatcher object
+        # The first False is to prevent the matcher from scaling the volumes, and the second False is to prevent subset matching
+        self.structure_matcher = StructureMatcher(self.lattice_length_tol, self.site_tol, self.lattice_angle_to, self.use_primitive_cell, False, self.attempt_supercell, False, ElementComparator())
+        
+    def set_all_to_defaults(self):
+        '''
+        Sets all the redundancy parameters to default values
+        '''
+        self.lattice_length_tol = self.default_lattice_length_tol
+        self.lattice_angle_to = self.default_lattice_angle_tol
+        self.site_tol = self.default_site_tol
+        self.use_primitive_cell = self.default_use_primitive_cell
+        self.attempt_supercell = self.default_attempt_supercell
+        self.d_value = self.default_d_value
         
     def checkRedundancy(self, new_organism, whole_pop):
         '''
@@ -904,19 +1032,25 @@ class RedundancyGuard(object):
         
         Returns the organism with which new_organism is redundant, or None if no redundancy
         
+        TODO: make failure messages more informative - include organism number, etc.
+        
         Args:
             new_organism: the organism to check for redundancy
             
             whole_pop: the list containing all organisms to check against
         '''
         for organism in whole_pop:
-            if self.structure_matcher.fit(new_organism.structure, organism.structure) == True:
-                print("message that new_organism failed structural redundancy")
+            # check if their structures match
+            if self.structure_matcher.fit(new_organism.structure, organism.structure):
+                print("Organism failed structural redundancy")
                 return organism
-            if new_organism.value != None and self.d_value != None and abs(new_organism.value - organism.value) < self.d_value:
-                print("message that new_organism failed value redundancy")
-                return organism    
-        return None    # should only get here if no organisms are redundant with the new organism
+            # if specified and both have values, check if their values match within d-value
+            if self.d_value != None and new_organism.value != None and organism.value != None:
+                if abs(new_organism.value - organism.value) < self.d_value:
+                    print("Organism failed value redundancy")
+                    return organism    
+        # should only get here if no organisms are redundant with the new organism
+        return None    
         
 
 
@@ -933,8 +1067,6 @@ class Constraints(object):
             constraints_parameters: a dictionary of parameters
             
             composition_space: a CompositionSpace object describing the composition space to be searched
-            
-            objective_function: either 'epa' or 'pd' indicating what type of search is being done
         '''
         # default values
         self.default_min_num_atoms = 2
@@ -946,9 +1078,8 @@ class Constraints(object):
         self.default_allow_endpoints = True
         
         # set defaults if constraints_parameters equals 'default' or None
-        self.constraints_parameters = constraints_parameters
-        if self.constraints_parameters == None or self.constraints_parameters == 'default':
-            self.set_all_to_defaults()
+        if constraints_parameters == None or constraints_parameters == 'default':
+            self.set_all_to_defaults(composition_space)
         else:
             # check each flag to see if it's been included, and if so, whether it has been set to default or left blank
             # min number of atoms
@@ -1043,12 +1174,13 @@ class Constraints(object):
         Args:
             composition_space: the composition space object
         '''
-        self.min_num_atoms = self.min_num_atoms
-        self.max_num_atoms = self.max_num_atoms
-        self.min_lattice_length = self.min_lattice_length
-        self.max_lattice_length = self.max_lattice_length
+        self.min_num_atoms = self.default_min_num_atoms
+        self.max_num_atoms = self.default_max_num_atoms
+        self.min_lattice_length = self.default_min_lattice_length
+        self.max_lattice_length = self.default_max_lattice_length
         self.min_lattice_angle = self.default_min_lattice_angle
         self.max_lattice_angle = self.default_max_lattice_angle
+        self.allow_endpoints = self.default_allow_endpoints
         self.set_all_mids_to_defaults(composition_space) 
         
         
@@ -1122,86 +1254,86 @@ class Development(object):
     This is a singleton class.
     '''
     
-    def __init__(self, composition_space, constraints, geometry, niggli, scale_density):
+    def __init__(self, niggli, scale_density):
         '''
         Creates a Development object.
         
         Args:
+            niggli: a boolean indicating whether or not to do Niggli cell reduction
+            
+            scale_density: a boolean indicating whether or not to scale the density
+        '''
+        self.niggli = niggli
+        self.scale_density = scale_density
+        
+    
+    def develop(self, organism, composition_space, constraints, geometry, pool):
+        '''
+        Develops an organism.
+        
+        Returns the developed organism, or None if the organism failed development
+        
+        TODO: make failure messages more informative - include organism number, etc.
+        TODO: it might make more sense to return a flag indicating whether the organism survived development, since this method modifies the organism...
+        
+        Args:
+            organism: the organism to develop
+            
             composition_space: a CompositionSpace object
             
             constraints: a Constraints object
             
             geometry: a Geometry object
             
-            niggli: a boolean specifying whether or not to do Niggli cell reduction
-        '''
-        self.composition_space = composition_space
-        self.constraints = constraints
-        self.geometry = geometry
-        self.niggli = niggli
-        self.scale_density = scale_density
-        
-    
-    def develop(self, organism, pool):
-        '''
-        Develops an organism.
-        
-        Returns the developed organism, or None if the organism failed development
-        
-        TODO: it might make more sense to return a flag indicating whether the organism survived development, since this method modifies the organism...
-        
-        Args:
-            organism: the organism to develop
-            
             pool: the current pool. If this method is called before a pool exists (e.g., while making the initial population)
                   then pass None as the argument instead.
         '''
         # check max num atoms constraint
-        if len(organism.structure.sites) > self.constraints.max_num_atoms:
+        if len(organism.structure.sites) > constraints.max_num_atoms:
             print("Organism failed max num atoms constraint - rejecting")
             return None
             
         # check min num atoms constraint
-        if len(organism.structure.sites) < self.constraints.min_num_atoms:
+        if len(organism.structure.sites) < constraints.min_num_atoms:
             print("Organism failed min num atoms constraint - rejecting")
             return None
         
         # check if the organism has the right composition for fixed-composition searches
-        if self.composition_space.objective_function == "epa":
-            if self.composition_space.endpoints[0].almost_equals(organism.composition) == False:
+        if composition_space.objective_function == "epa":
+            if not composition_space.endpoints[0].almost_equals(organism.composition):
                 print("Organism has incorrect composition - rejecting")
                 return None
         
         # check if the organism is in the composition space for phase-diagram searches
         # This is kind of hacky, but the idea is to use the CompoundPhaseDiagram.transform_entries method to do 
         # the heavy lifting of determining whether a composition lies in the composition space 
-        elif self.composition_space.objective_function == "pd":
+        elif composition_space.objective_function == "pd":
             # cast all the endpoints to PDEntries, and just make up some energies
             pdentries = []
-            for endpoint in self.composition_space.endpoints:
+            for endpoint in composition_space.endpoints:
                 pdentries.append(PDEntry(endpoint, -10))
             # also cast the organism we want to check to a PDEntry
             pdentries.append(PDEntry(organism.composition, -10))
             # construct the CompoundPhaseDiagram object that we'll use to check if the organism is in the composition space
-            composition_checker = CompoundPhaseDiagram(pdentries, self.composition_space.endpoints)
+            composition_checker = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
             # use the CompoundPhaseDiagram to check if the organism is in the composition space by seeing how many entries it returns
-            if len(composition_checker.transform_entries(pdentries, self.composition_space.endpoints)[0]) == len(self.composition_space.endpoints):
+            if len(composition_checker.transform_entries(pdentries, composition_space.endpoints)[0]) == len(composition_space.endpoints):
                 print("Organism not in composition space - rejecting")
                 return None
             else:
                 # check the endpoints if specified and if we're not making the initial population
-                if self.constraints.allow_endpoints == False and pool != None:
-                    for endpoint in self.composition_space.endpoints:
+                if constraints.allow_endpoints == False and pool != None:
+                    for endpoint in composition_space.endpoints:
                         if endpoint.almost_equals(organism.composition):
                             print("Organism at an endpoint - rejecting")
                             return None
                         
         # optionally do Niggli cell reduction
-        if self.niggli == True:
-            if self.geometry.shape == "bulk":
+        if self.niggli:
+            if geometry.shape == "bulk":
                 # do normal Niggli cell reduction
                 organism.structure = organism.structure.get_reduced_structure()
-            elif self.geometry.shape == "sheet":
+            elif geometry.shape == "sheet":
                 # do the sheet Niggli cell redution
                 organism.reduceSheetCell()     
             # TODO: implement cell reduction for other geometries here if needed (doesn't makes sense for wires or clusters)
@@ -1211,7 +1343,7 @@ class Development(object):
                      
         # optionally scale the density to the average of the densities of the organisms in the promotion set 
         # TODO: test this once Pool has been implemented
-        if self.scale_density == True and self.composition_space.objective_function == "epa" and pool != None and organism.value == None:
+        if self.scale_density and composition_space.objective_function == "epa" and pool != None and organism.value == None:
             # get average volume per atom of the organisms in the promotion set
             vpa_sum = 0
             for org in pool.promotionSet:
@@ -1226,20 +1358,20 @@ class Development(object):
         # check the max and min lattice length constraints
         lengths = organism.structure.lattice.abc
         for length in lengths:
-            if length > self.constraints.max_lattice_length:
+            if length > constraints.max_lattice_length:
                 print("Organism failed max lattice length constraint - rejecting")
                 return None
-            elif length < self.constraints.min_lattice_length:
+            elif length < constraints.min_lattice_length:
                 print("Organism failed min lattice length constraint - rejecting")
                 return None
             
         # check the max and min lattice angle constraints
         angles = organism.structure.lattice.angles
         for angle in angles:
-            if angle > self.constraints.max_lattice_angle:
+            if angle > constraints.max_lattice_angle:
                 print("Organism failed max lattice angle constraint - rejecting")
                 return None
-            elif angle < self.constraints.min_lattice_angle:
+            elif angle < constraints.min_lattice_angle:
                 print("Organism failed min lattice angle constraint - rejecting")
                 return None
             
@@ -1250,10 +1382,10 @@ class Development(object):
                 # get the mid for this particular pair. We don't know the ordering in per_species_mids, so try both
                 test_key1 = species_symbol + " " + site.specie.symbol
                 test_key2 = site.specie.symbol + " " + species_symbol
-                if test_key1 in self.constraints.per_species_mids:
-                    mid = self.constraints.per_species_mids[test_key1]
-                elif test_key2 in self.constraints.per_species_mids:
-                    mid = self.constraints.per_species_mids[test_key2]  
+                if test_key1 in constraints.per_species_mids:
+                    mid = constraints.per_species_mids[test_key1]
+                elif test_key2 in constraints.per_species_mids:
+                    mid = constraints.per_species_mids[test_key2]  
                 # get all the sites within a sphere of radius mid centered on the current site
                 neighbors = organism.structure.get_neighbors(site, mid)
                 # check each neighbor in the sphere to see if it has the forbidden type
@@ -1263,16 +1395,16 @@ class Development(object):
                         return None
             
         # check the max size constraint for non-bulk geometries
-        if self.geometry.shape == 'sheet':
-            if organism.getLayerThickness() > self.geometry.max_size:
+        if geometry.shape == 'sheet':
+            if organism.getLayerThickness() > geometry.max_size:
                 print("Organism failed max size constraint - rejecting")
                 return None
-        elif self.geometry.shape == 'wire':
-            if organism.getWireDiameter() > self.geometry.max_size:
+        elif geometry.shape == 'wire':
+            if organism.getWireDiameter() > geometry.max_size:
                 print("Organism failed max size constraint - rejecting")
                 return None
-        elif self.geometry.shape == 'cluster':
-            if organism.getClusterDiameter() > self.geometry.max_size:
+        elif geometry.shape == 'cluster':
+            if organism.getClusterDiameter() > geometry.max_size:
                 print("Organism failed max size constraint - rejecting")
                 return None
         # TODO: any other geometry-specific constraints checks go here
