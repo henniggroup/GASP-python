@@ -54,15 +54,18 @@ RedundancyGuard:
      d_value:   # for checking redundancy based on value. Defaults to zero
 
 
-#InitialPopulation:
+# The parameters for making the initial population. The entire block is optional and if not specified, makes 30 or 40 random organisms for epa and pd searches, respectively. Will also scale volumes to weighted average of elemental volumes
+InitialPopulation:
+     random:
+          number: 10  # number of random structures to make
+          volume: default  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
+                     # <num|random|from_elemental_densities> num - just the number of cubic Angstroms per atom to scale to
+                     #                                       random - no volume scaling - the volume is just the result of the random lattice vectors and atoms
+                     #                                       from_elemental_densities - scales the volume to the weighted average of the volumes per atom of the elemental solids. This is default behavior
 
-#     random:
-#          number: 30 # number to make
-#          volume: 15 # volume per atom to scale the random structures to (default is no scaling)
-
-#     fromPoscars:
-#          number: 10 # number of poscar files
-#          path: path/to/poscars # path to directory containing the poscar files
+     from_files:
+          path_to_folder: /n/srv/brevard/testing/initial_structures/empty
+   # path to directory containing the poscar files # TODO: this should unpad the poscars if needed, so the user doesn't have to (or maybe that happens in the main loop prior to development)
 
      # TODO: maybe include other options, like getting structures from a database or something
      

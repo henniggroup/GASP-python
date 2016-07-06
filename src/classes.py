@@ -1,25 +1,25 @@
 from __future__ import division, unicode_literals, print_function
 
 from pymatgen.core.structure import Structure
+from pymatgen.core.lattice import Lattice
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element
+from pymatgen.analysis.structure_matcher import StructureMatcher
+from pymatgen.analysis.structure_matcher import ElementComparator
 from pymatgen.phasediagram.maker import CompoundPhaseDiagram
+from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.transformations.standard_transformations import RotationTransformation
-from pymatgen.core.operations import SymmOp
+
 # from abc import abstractmethod, ABCMeta
 from _pyio import __metaclass__
 # import collections.deque
 from _collections import deque
 import random  # TODO: need to make sure all random numbers from the same PRNG
 import threading
+from os import listdir
+from os.path import isfile, join, exists
 import numpy as np
 from numpy import inf, Inf
-from pymatgen.phasediagram.entries import PDEntry
-import pymatgen
-from pymatgen.core.lattice import Lattice
-from pymatgen.analysis.structure_matcher import StructureMatcher
-from pymatgen.analysis.structure_matcher import ElementComparator
-# TODO: import other needed stuff from pymatgen
 
 '''
 This module contains all the classes used by the algorithm.
@@ -723,28 +723,21 @@ class OrganismCreator(object):
     
     Not meant to be instantiated, but rather subclassed by particular Creators, like RandomOrganismCreator
     or PoscarsOrganismCreator.
+    
+    TODO: is this even necessary? All it specifies is that a creator should have a createOrganism method that returns an organism or None. 
     '''
     
     def createOrganism(self):
         '''
-        Creates an organism for the initial population. Handles development and redundancy checking, and adds valid
-        organism to whole_pop.
+        Creates an organism for the initial population.
         
-        Returns a developed, non-redundant organism, or None if one could not be created
+        Returns an organism, or None if one could not be created
         
         Args:
             TODO: think about what data this method needs (e.g. objective function data, etc.) and add it 
                 to the argument list.
         '''
         raise NotImplementedError("Please implement this method.")
-        #
-        # The general outline of this method (to be implemented in subclasses) is:
-        #     1. create an organism
-        #     2. develop the organism
-        #     3. if the organism fails development, make another one and try again
-        #     4. check for redundancy 
-        #     5. if the organism fails redundancy, make another one and try again 
-        #     6. add successful organism to whole_pop
         
 
 
@@ -752,53 +745,66 @@ class RandomOrganismCreator(OrganismCreator):
     '''
     Creates random organisms for the initial population
     '''
-    def __init__(self, num_to_make, volume, composition_space, development, redundancy_guard, num_made=0, when_stop="successes", is_finished=False):
+    def __init__(self, random_org_parameters, composition_space):
         '''
         Creates a RandomOrganismCreator.
         
         Args:
-            num_to_make: the number of organisms to make with this creator
+            random_org_parameters: the parameters for generating random organisms
             
-            volume: the volume (per atom) to scale each new random organism to
-            
-            num_made: the number of organisms made with this creator
-            
-            when_stop: the criteria for when this creator is finished ("successes" or "attempts") TODO: this will probably included in needed_parameters
-            
-            is_finished: whether the creator has made enough organisms
+            composition_space: a CompositionSpace object   
         '''
-        self.num_to_make = num_to_make
-        self.num_made = num_made
-        self.when_stop = when_stop
-        self.is_finished = is_finished
-    
-    def createOrganism(self, composition_space, constraints, development, redundancy_guard, whole_pop):
-        '''
-        Creates a random organism for the initial population. Handles development and redundancy checking, and adds valid
-        organism to whole_pop.
+        # the default number of random organisms to make
+        if composition_space.objective_function == 'epa':
+            self.default_number = 30
+        elif composition_space.objective_function == 'pd':
+            self.default_number = 40
+        # the default volume scaling behavior
+        self.default_volume = 'from_elemental_densities'
         
-        Returns a developed, non-redundant organism
+        # if entire random_org_parameters is None or 'default', then set to defaults
+        if random_org_parameters == None or random_org_parameters == 'default':
+            self.number = self.default_number
+            self.volume = self.default_volume
+        
+        # otherwise, parse the parameters and set to defaults if necessary
+        else:
+            if 'number' in random_org_parameters:
+                if random_org_parameters['number'] == None or random_org_parameters['number'] == 'default':
+                    self.number = self.default_number
+                else:
+                    self.number = random_org_parameters['number']
+            else:
+                # if no 'number' tag, then just use the default
+                self.number = self.default_number
+            
+            # get the volume to scale them to 
+            if 'volume' in random_org_parameters:
+                if random_org_parameters['volume'] == None or random_org_parameters['volume'] == 'default':
+                    self.volume = self.default_volume
+                else:
+                    self.volume = random_org_parameters['volume']
+            else:
+                # if no 'volume' tag given, then just do the default
+                self.volume = self.default_volume
+                
+        # variables to keep track of how many have been made, when to stop, and if this creator is finished   
+        # for a random organism creator, num_made is defined as the number of organisms made that have been added to the initial population 
+        self.num_made = 0
+        self.is_successes_based = True
+        self.is_finished = False
+    
+    def createOrganism(self, composition_space, constraints):
+        '''
+        Creates a random organism for the initial population.
+        
+        Returns a random organism, or None if an error was encountered during volume scaling
         
         Args:
             composition_space: a CompositionSpace object
             
-            constraints: a Constraints object
-            
-            development: a Development object (for cell reduction and structure constraints)
-            
-            redundancy_guard: a redundancyGuard object 
-            
-            whole_pop: the list containing all organisms to check against   
+            constraints: a Constraints object 
         '''
-        # This method will need to:
-        #     1. create a random organism
-        #     2. develop the organism
-        #     3. if the organism fails development, make another one and try again
-        #     4. check for redundancy 
-        #     5. if the organism fails redundancy, make another one and try again
-        #     6. add successful organism to whole_pop
-        #     7. return the successful organism
-        
         # make three random lattice vectors that satisfy the length constraints
         a = constraints.min_lattice_length + random.random()*(constraints.max_lattice_length - constraints.min_lattice_length)
         b = constraints.min_lattice_length + random.random()*(constraints.max_lattice_length - constraints.min_lattice_length)
@@ -815,8 +821,8 @@ class RandomOrganismCreator(OrganismCreator):
         # get a list of elements for the random organism
         if composition_space.objective_function == 'epa':
             reduced_formula = composition_space.endpoints[0].reduced_composition
-            atoms_in_formula = reduced_formula.num_atoms
-            max_num_formulas = int(constraints.max_num_atoms/atoms_in_formula)
+            num_atoms_in_formula = reduced_formula.num_atoms
+            max_num_formulas = int(constraints.max_num_atoms/num_atoms_in_formula)
             # get a random number of formula units
             random_num_formulas = random.randint(1, max_num_formulas)
             # add the right number of each element
@@ -825,100 +831,131 @@ class RandomOrganismCreator(OrganismCreator):
                 for _ in range(random_num_formulas*reduced_formula[element]):
                     elements.append(element) 
         elif composition_space.objective_function == 'pd':
-            # TODO: this doesn't ensure the organism will be in the composition space
+            # TODO: this doesn't ensure the organism will be in the composition space. If it's not, it will just fail development, but there might be a better way...
             num_atoms = random.randint(constraints.min_num_atoms, constraints.max_num_atoms)
             allowed_elements = constraints.get_all_elements(composition_space)
             elements = []
             for _ in range(num_atoms):
-                elements.append(allowed_elements[random.randint(0, len(allowed_elements))])
+                elements.append(random.choice(allowed_elements))
         
-        # for each random species, generate a set of random fractional coordinates
-        # TODO: this doesn't ensure the structure will satisfy the per-species mids, and in fact most won't. It's fine because they'll just fail development, but there might be a better way...
+        # for each element, generate a set of random fractional coordinates
+        # TODO: this doesn't ensure the structure will satisfy the per-species mids, and in fact most won't. It's ok because they'll just fail development, but there might be a better way...
         random_coordinates = []
         for _ in range(num_atoms):
             random_coordinates.append([random.random(), random.random(), random.random()])
         
-        # make a random organism from the random lattice, random species, and random coordinates\
+        # make a random organism from the random lattice, random species, and random coordinates
         random_structure = Structure(random_lattice, elements, random_coordinates)
         random_org = Organism(random_structure)
         
-        # TODO: development and redundancy
+        # optionally scale the volume
+        if self.volume == 'from_elemental_densities':
+            # scale the volume to the weighted average of the densities of the elemental constituents
+            # TODO: this would break if pymatgen doesn't have a density for a particular element
+            
+            # compute volumes per atom (in Angstrom^3) of each element in the random organism
+            reduced_composition = random_org.structure.composition.reduced_composition
+            volumes_per_atom = {}
+            for element in reduced_composition:
+                # physical properties and conversion factors
+                atomic_mass = float(element.atomic_mass) # in amu
+                mass_conversion_factor = 1.660539040e-27 # converts amu to kg
+                density = float(element.density_of_solid) # in kg/m^3
+                length_conversion_factor = 1.0e10 # converts meters to Angstroms 
+            
+                # compute the volume (in Angstrom^3) per atom of this element
+                # take the log of the product to prevent numerical issues
+                log_volume_per_atom = np.log(mass_conversion_factor) + np.log(atomic_mass) - np.log(density) + 3.0*np.log(length_conversion_factor)
+                volume_per_atom = np.exp(log_volume_per_atom)                
+                volumes_per_atom[element] = volume_per_atom
         
+            # compute the desired volume per atom by taking the weighted average of the volumes per atom of the constituent elements
+            weighted_sum = 0
+            for element in reduced_composition:
+                # the number of this type of element times it's calculated volume per atom
+                weighted_sum = weighted_sum + reduced_composition[element]*volumes_per_atom[element]
         
+            # normalize by the total number of atoms to get the weighted average
+            mean_vpa = weighted_sum/reduced_composition.num_atoms
         
+            # scale the volume of the random organism to satisfy the computed mean volume per atom
+            # TODO: sometimes this doesn't work. It can either scale the volume to some huge number, or else volume scaling just fails and lattice vectors are assigned nan
+            #       it looks like the second error is caused by a divide-by-zero in the routine pymatgen calls to scale the volume
+            #       the if statement below is to catch these cases, by I should probably contact materials project about it...
+            random_org.structure.scale_lattice(mean_vpa*len(random_org.structure.sites))
+            if str(random_org.structure.lattice.a) == 'nan' or random_org.structure.lattice.a > 100:
+                return None          
+        
+        elif self.volume == 'random':
+            # no volume scaling
+            pass
+        
+        else:
+            # scale to the given volume per atom
+            random_org.structure.scale_lattice(self.volume*len(random_org.structure.sites(self)))  
+        
+        # return the scaled random organism
+        return random_org
     
     def updateStatus(self):
         '''
         Increments num_made, and if necessary, updates is_finished
         '''
         self.num_made = self.num_made + 1
-        if self.num_made == self.num_to_make:
+        if self.num_made == self.number:
             self.is_finished = True
         
         
 
 
-class PoscarOrganismCreator(OrganismCreator):
+class FileOrganismCreator(OrganismCreator):
     '''
-    Creates organisms from poscar files for the initial population.
+    Creates organisms from files (poscar or cif) for the initial population.
     '''
-    def __init__(self, needed_parameters, development, redundancy_guard, num_to_make, num_made=0, when_stop="attempts", is_finished=False):
+    def __init__(self, path_to_folder):
         '''
-        Creates a PoscarOrganismCreator.
+        Creates a FileOrganismCreator.
         
         Args:
-            needed_parameters: all the parameters needed for creating the random organisms.
-            This includes how many to make and whether to scale their volumes (and if yes, to what value).
-            It will also need stoichiometry information so it knows what types of atoms to use.
-            
-            development: the Development object (for cell reduction and structure constraints)
-            
-            redundancy_guard: the redundancyGuard object 
-            
-            num_to_make: the number of organisms to make with this creator. TODO: this will probably included in needed_parameters
-            
-            when_stop: the criteria for when this creator is finished ("successes" or "attempts") TODO: this will probably included in needed_parameters
-            
-            num_successes: the number of organisms successfully added to the initial population from this creator
-            
-            is_finished: whether the creator has made enough organisms
+            path_to_folder: the path to the folder containing the files from which to make organisms
+                            Precondition: the folder exists and contains files
         '''
-        self.development = development
-        self.redundancy_guard = redundancy_guard
-        self.num_to_make = num_to_make
-        self.num_made = num_made
-        self.when_stop = when_stop
-        self.is_finished = is_finished
-
+        # all the files in the given folder
+        self.path_to_folder = path_to_folder
+        self.files = [f for f in listdir(self.path_to_folder) if isfile(join(self.path_to_folder, f))]
+      
+        # variables to keep track of how many have been made, when to stop, and if this creator is finished   
+        # for a file organism creator, num_made is defined as the number of attempts to make organisms from files (usually the number of files provided)
+        self.num_made = 0
+        self.is_successes_based = False
+        self.is_finished = False
     
     def createOrganism(self):
         '''
-        Creates an organism for the initial population from a poscar file. Handles development and redundancy checking, 
-        and adds valid organism to whole_pop.
+        Creates an organism for the initial population from a poscar or cif file. 
         
-        Returns a developed, non-redundant organism, or None if one could not be created
-        
-        Args:
-        
-            TODO: think about what data this method needs and add it to the argument list.
+        Returns an organism, or None if one could not be created
         '''
-        # This method will need to:
-        #     1. create an organism from a poscar file
-        #     2. develop the organism
-        #     3. if the organism fails development, make another one from the next poscar file
-        #     4. check for redundancy
-        #     5. if the organism fails redundancy, make another one from the next poscar file
-        #     6. add successful organism to whole_pop
-        #     7. increment num_made, and update is_finished if needed
-        #          self.updateStatus()
-        
+        # update status each time the method is called, since this is an attempts-based creator
+        self.updateStatus()
+        # TODO: This is kind of annoying. Maybe contact pymatgen and ask if they can add support for files ending in .POSCAR instead of only files starting with POSCAR 
+        if self.files[self.num_made - 1].endswith('.cif') or self.files[self.num_made - 1].startswith('POSCAR'):
+            try:
+                new_struct = Structure.from_file(str(self.path_to_folder) + "/" + str(self.files[self.num_made - 1]))
+            # return None if a structure couldn't be read from a file
+            except ValueError:
+                return None
+            return Organism(new_struct)
+        else:
+            print('Invalid file extension: file must end in .cif or begin with POSCAR')
+            return None
         
     def updateStatus(self):
         '''
         Increments num_made, and if necessary, updates is_finished
         '''
         self.num_made = self.num_made + 1
-        if self.num_made == self.num_to_make:
+        if self.num_made == len(self.files):
             self.is_finished = True
         
 
