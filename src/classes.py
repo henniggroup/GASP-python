@@ -3,12 +3,14 @@ from __future__ import division, unicode_literals, print_function
 from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.composition import Composition
-from pymatgen.core.periodic_table import Element
+from pymatgen.core.periodic_table import Element, Specie
+from pymatgen.core import bonds
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.analysis.structure_matcher import ElementComparator
 from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.transformations.standard_transformations import RotationTransformation
+from pymatgen.command_line.gulp_caller import GulpIO
 
 # from abc import abstractmethod, ABCMeta
 from _pyio import __metaclass__
@@ -16,10 +18,11 @@ from _pyio import __metaclass__
 from _collections import deque
 import random  # TODO: need to make sure all random numbers from the same PRNG
 import threading
-from os import listdir
+from os import listdir, mkdir, getcwd
 from os.path import isfile, join, exists
 import numpy as np
 from numpy import inf, Inf
+from pymatgen.util.convergence import id_generator
 
 '''
 This module contains all the classes used by the algorithm.
@@ -33,12 +36,12 @@ class IDGenerator(object):
     
     This class is a singleton.
     '''
-    
     def __init__(self):
         '''
         Creates an id generator.
         '''
         self.id = 0
+    
     
     def makeID(self):
         '''
@@ -53,35 +56,25 @@ class Organism(object):
     '''
     An organism
     '''
-
-    def __init__(self, structure, value=None, fitness=None, select_prob=None, isActive=False):
+    def __init__(self, structure, id_generator):
         '''
         Creates an organism
         
         Args:
             structure: The structure of this organism, as a pymatgen.core.structure.Structure
             
-            composition: The composition of this organism, as a pymatgen.core.composition.Composition
-            
-            value: The objective function value of this organism, which is either the energy
-                per atom (for fixed-composition search) or the distance from the current best
-                convex hull (for phase diagram search).
-                
-            fitness: The fitness of this organism. Ranges from 0 to 1, including both endpoints.
-            
-            select_prob: The selection probability of this organism. Ranges from 0 to 1, including
-                both endpoints.
-                
-            isActive: Whether this organism is currently part of the pool or initial population
+            id_generator: the instance of IDGenerator used to assign id numbers to all organisms
         '''
         # initialize instance variables
         self.structure = structure
         self.composition = self.structure.composition
-        self.value = value
-        self.fitness = fitness
-        self.select_prob = select_prob 
-        self.isActive = isActive
-        #  self._id = IDGenerator.makeID(); # unique id number for this organism. Should not be changed.
+        self.total_energy = None
+        self.epa = None
+        self.value = None # the objective function value of this organism, which is either the energy per atom (for fixed-composition search) or the distance from the current best convex hull (for phase diagram search).
+        self.fitness = None # the fitness of this organism. Ranges from 0 to 1, including both endpoints
+        self.select_prob = None # the selection probability of this organism. Ranges from 0 to 1, including both endpoints
+        self.is_active = False # whether this organism is currently part of the pool or initial population
+        self._id = id_generator.makeID(); # unique id number for this organism. Should not be changed.
     
     # this keeps the id (sort of) immutable by causing an exception to be raised if the user tries to 
     # the set the id with org.id = some_id.
@@ -90,7 +83,7 @@ class Organism(object):
         return self._id
     
     # TODO: maybe make setter methods for fitness and select_prob that check that they're between 0 and 1. 
-    #    The Structure class has checks at initialization, so we don't need to check it again here.
+    
     
     def rotateToPrincipalDirections(self):
         '''
@@ -135,11 +128,33 @@ class Organism(object):
             self.structure.modify_lattice(Lattice([[ax, ay, az], [bx, by, bz], [cx, cy, cz]]))
         
         
+    def translateAtomsIntoCell(self):
+        '''
+        Translates all the atoms into the cell, so that their fractional coordinates are between 0 and 1
+        '''
+        for i in range(0, len(self.structure.frac_coords)):
+            translation_vector = []
+            for j in range(0, len(self.structure.frac_coords[i])):
+                # compute the needed shift in this dimension
+                dim = self.structure.frac_coords[i][j]
+                if dim > 1.0:
+                    translation_vector.append(-1*int(dim))
+                elif dim < 0.0:
+                    translation_vector.append(-1*int(dim) + 1)
+                # no shift needed in this dimension
+                else:
+                    translation_vector.append(0)
+            # translate the atom by the translation vector
+            self.structure.translate_sites(i, translation_vector, frac_coords = True, to_unit_cell = False)
+        
+        
     def reduceSheetCell(self):
         '''
         Applies Niggli cell reduction to a sheet structure. 
         
         The idea is to make c vertical and add lots of vertical vacuum so that the standard reduction algorithm only changes the a and b lattice vectors
+        
+        TODO: pymatgen's Niggli cell reduction algorithm sometimes moves the atoms' relative positions a little (I've seen up to 0.5 A...). 
         '''
         # rotate into principal directions
         self.rotateToPrincipalDirections()
@@ -165,8 +180,9 @@ class Organism(object):
         rbx = reduced_structure.lattice.matrix[1][0]
         rby = reduced_structure.lattice.matrix[1][1]
         unpadded_lattice = Lattice([[rax, ray, 0.0], [rbx, rby, 0.0], [0.0, 0.0, cz]])
-        
+        # set the organism's structure to the unpadded one, and make sure all the atoms are located inside the cell
         self.structure = Structure(unpadded_lattice, rspecies, rcartesian_coords, coords_are_cartesian=True)
+        self.translateAtomsIntoCell()
         
         
     def getLayerThickness(self):
@@ -175,19 +191,47 @@ class Organism(object):
         
         Assumes that the organism has already been rotated into the principal directions, and that plane of the sheet is parallel to the a-b facet.
         '''
-        # get the Cartesian coordinates of the atoms in the structure
-        cart_coords = self.structure.cart_coords
-        # find the largest and smallest vertical coordinates
-        maxz = -Inf
+        z_extremes = self.getBoundingBox(cart_coords = True)[2]
+        layer_thickness = z_extremes[1] - z_extremes[0]
+        return layer_thickness
+    
+    
+    def getBoundingBox(self, cart_coords = True):
+        '''
+        Returns the smallest and largest coordinates in each dimension of all the sites in the organism's structure
+        
+        Args:
+            frac_coords: whether to give the result in Cartesian or fractional coordinates
+            
+        TODO: maybe there's a cleaner way to do this...
+        '''
+        # get coordinates of the atoms in the structure
+        if cart_coords:
+            coords = self.structure.cart_coords
+        else:
+            coords = self.structure.frac_coords
+        # find the largest and smallest coordinates in each dimenstion
+        minx = Inf
+        maxx = -Inf
+        miny = Inf
+        maxy = -Inf
         minz = Inf
-        for coord in cart_coords:
-            if coord[2] > maxz:
-                maxz = coord[2]
+        maxz = -Inf
+        for coord in coords:
+            if coord[0] < minx:
+                minx = coord[0]
+            if coord[0] > maxx:
+                maxx = coord[0]
+            if coord[1] < miny:
+                miny = coord[1]
+            if coord[1] > maxy:
+                maxy = coord[1]
             if coord[2] < minz:
                 minz = coord[2]
-        # compute the layer thickness
-        layer_thickness = maxz - minz
-        return layer_thickness
+            if coord[2] > maxz:
+                maxz = coord[2]
+        bounds = [[minx, maxx], [miny, maxy], [minz, maxz]]
+        return bounds
     
     
     def getWireDiameter(self):
@@ -207,11 +251,11 @@ class Organism(object):
         Assumes that the organism has already been put into cluster format (whatever that means)
         '''
         # TODO: implement me
-        print("Please implement me.")
-        
+        print("Please implement me.")     
+        # this is just for testing
+        return 0   
             
             
-
 
 class Pool(object):
     '''
@@ -222,7 +266,6 @@ class Pool(object):
         
     This class is a singleton.
     '''
-
     def __init__(self, pool_params_dict, initial_population, selection_probability_dict):
         '''
         Creates a pool of organisms
@@ -259,6 +302,8 @@ class Pool(object):
         to the promotion set, and the worst org in the promotion set is moved to the back of the queue. 
         Otherwise, the new org is just appended to the back of the queue.
         
+        TODO: whenever a structure gets added to the pool, we need to print it to the garun output file in poscar format
+        
         Args:
             org: the organism.Organism to add.
         '''
@@ -277,6 +322,8 @@ class Pool(object):
         as the old one.
         
         Precondition: the old_org is a member of the current pool.
+        
+        TODO: whenever a structure gets added to the pool (even via replacement), we need to print it to the garun output file in poscar format
         
         Args:
             old_org: the organism in the pool to replace
@@ -329,7 +376,6 @@ class Variation(object):
     Not meant to be instantiated, but rather subclassed by particular Variations, like Mating,
     Mutation, etc.
     '''
-    
     def doVariation(self):
         '''
         Creates an offspring organism from parent organism(s).
@@ -371,7 +417,6 @@ class Mating(Variation):
     
     This class is a singleton.
     '''
-
     def __init__(self, mating_params):
         '''
         Creates a mating operator
@@ -383,6 +428,7 @@ class Mating(Variation):
         '''
         # TODO: initialize the instance variables using the values in the dict. Maybe just keeping a 
         # copy of the dict as an instance variable is enough...
+    
     
     def doVariation(self):
         '''
@@ -403,7 +449,6 @@ class Mutation(Variation):
     
     This class is a singleton.
     '''
-    
     def __init__(self, mutation_params):
         '''
         Creates a mutation operator
@@ -435,7 +480,6 @@ class Permutation(Variation):
     
     This class is a singleton.
     '''
-    
     def __init__(self, permutation_params):
         '''
         Creates a permutation operator
@@ -468,7 +512,6 @@ class NumStoichsMut(Variation):
     
     This class is a singleton.
     '''
-    
     def __init__(self, numstoichsmut_params):
         '''
         Creates a NumStoichsMut operator
@@ -479,6 +522,7 @@ class NumStoichsMut(Variation):
         '''
         # TODO: initialize the instance variables using the values in the dict. Maybe just keeping a
         #    copy of the dict as an instance variable is enough...
+    
     
     def doVariation(self, parent):
         '''
@@ -498,8 +542,7 @@ class Geometry(object):
     Represents the geometry data, including any geometry-specific constraints (max_size, etc.)
     
     This class is a singleton
-    '''
-    
+    ''' 
     def __init__(self, geometry_parameters):
         '''
         Creates a geometry object
@@ -547,129 +590,227 @@ class Geometry(object):
             else:
                 self.shape = self.default_shape
                 self.max_size = self.default_max_size
-                self.padding = None
-                    
-                        
-                        
+                self.padding = None          
+     
                 
-    def pad(self, structure):
+    def pad(self, organism):
         '''
         Makes an organism's structure conform to the required shape. For sheet, wire and cluster geometries, this 
         means adding vacuum padding to the cell. For bulk, the structure is unchanged. Used to pad a structure prior to 
-        an energy calculation.
-        
-        Returns a structure that has been modified to conform to the shape (most likely padded with vacuum).
+        an energy calculation. Changes the structure of an organism.
         
         Args:
-            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+            organism: the Organism to pad
         '''
-        # rotate structure into principal directions
-        # Call other methods based on the value of self.shape
+        # call other methods based on the value of self.shape
         if self.shape == 'sheet':
-            return self.padSheet(structure)
+            return self.padSheet(organism)
         elif self.shape == 'wire':
-            return self.padWire(structure)
+            return self.padWire(organism)
         elif self.shape == 'cluster':
-            return self.padCluster(structure)
+            return self.padCluster(organism)
         else:
-            return structure
+            return organism
+     
         
-    def padSheet(self, structure):
+    def padSheet(self, organism):
         '''
-        Adds vertical vacuum padding to a sheet, and makes the c-lattice vector normal to the plane of the sheet.
-        
-        Returns a sheet structure that has been padded with vacuum.
+        Adds vertical vacuum padding to a sheet, and makes the c-lattice vector normal to the plane of the sheet. 
+        The atoms are shifted up to the center of the padded sheet. Changes an organism's structure
         
         Args:
-            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+            organism: an Organism object
+        ''' 
+        # rotate into principal directions
+        organism.rotateToPrincipalDirections()
+        # get the species and their Cartesian coordinates
+        species = organism.structure.species
+        cartesian_coords = organism.structure.cart_coords
+        # get the layer thickness of the sheet
+        cart_bounds = organism.getBoundingBox(cart_coords = True)
+        minz = cart_bounds[2][0]
+        maxz = cart_bounds[2][1]
+        layer_thickness = maxz - minz
+        # get the non-zero components of the a and b lattice vectors
+        ax = organism.structure.lattice.matrix[0][0]
+        bx = organism.structure.lattice.matrix[1][0]
+        by = organism.structure.lattice.matrix[1][1]
+        # make a new lattice with c vertical and with length layer_thickness + padding
+        padded_lattice = Lattice([[ax, 0.0, 0.0], [bx, by, 0.0], [0.0, 0.0, layer_thickness + self.padding]])
+        # make a new structure with the padded lattice, species, and Cartesian coordinates
+        padded_structure = Structure(padded_lattice, species, cartesian_coords, coords_are_cartesian=True)
+        organism.structure = padded_structure
+        # shift the atoms vertically so they're in the center
+        z_extremes = organism.getBoundingBox(cart_coords = False)[2]
+        center = z_extremes[0] + (z_extremes[1] - z_extremes[0])/2
+        translation_vector = [0, 0, 0.5 - center]
+        for i in range(0, len(organism.structure.sites)):
+            organism.structure.translate_sites(i, translation_vector, frac_coords = True, to_unit_cell = False)
+        # translate all the atoms so they're in the cell (needed in case the new lattice caused some of them to lie outside the cell)
+        organism.translateAtomsIntoCell()
+        
+        
+    def padWire(self, organism):
         '''
-        # TODO: implement me
-        # 1. rotate structure to the principal directions
-        #         TODO: see if pymatgen has a method for this
-        # 2. replace c with it's vertical component (make it normal to plane of the sheet) (make sure atomic positions are preserved)
-        
-        # 3. reduce c such that it's equal to the layer thickness (max vertical distance between atoms in the cell)
-        # 4. add padding to c
-        # 5. return padded structure
-        
-    def padWire(self, structure):
-        '''
-        Adds vacuum padding around a wire.
-        
-        Returns a wire structure that has been padded with vacuum.
+        Adds vacuum padding around a wire. Changes the structure of an organism.
         
         Args:
-            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+            organism: the organism to pad 
         '''
         # TODO: implement me
     
-    def padCluster(self, structure):
+    
+    def padCluster(self, organism):
         '''
-        Adds vacuum padding around a cluster.
-        
-        Returns a cluster structure that has been padded with vacuum.
+        Adds vacuum padding around a cluster. Changes the structure of an organism.
         
         Args:
-            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+            organism: the organism to pad 
         '''
-        # TODO: implement me
+        # get the species and Cartesian coordinates
+        species = organism.structure.species
+        cartesian_coords = organism.structure.cart_coords
+        # get the size of the cluster in each direction
+        cart_bounds = organism.getBoundingBox(cart_coords = True)
+        x_min = cart_bounds[0][0]
+        x_max = cart_bounds[0][1]
+        y_min = cart_bounds[1][0]
+        y_max = cart_bounds[1][1]
+        z_min = cart_bounds[2][0]
+        z_max = cart_bounds[2][1]
+        x_extent = x_max - x_min
+        y_extent = y_max - y_min
+        z_extent = z_max - z_min
+        # make a new orthorhombic lattice
+        padded_lattice = Lattice([[x_extent + self.padding, 0, 0], [0, y_extent + self.padding, 0], [0, 0, z_extent + self.padding]])
+        # make a new structure with the padded lattice, species, and Cartesian coordinates
+        padded_structure = Structure(padded_lattice, species, cartesian_coords, coords_are_cartesian=True)
+        organism.structure = padded_structure
+        # shift all the atoms so they're in the center
+        frac_bounds = organism.getBoundingBox(cart_coords = False)
+        x_center = frac_bounds[0][0] + (frac_bounds[0][1] - frac_bounds[0][0])/2
+        y_center = frac_bounds[1][0] + (frac_bounds[1][1] - frac_bounds[1][0])/2
+        z_center = frac_bounds[2][0] + (frac_bounds[2][1] - frac_bounds[2][0])/2
+        translation_vector = [0.5 - x_center, 0.5 - y_center, 0.5 - z_center]
+        for i in range(0, len(organism.structure.sites)):
+            organism.structure.translate_sites(i, translation_vector, frac_coords = True, to_unit_cell = False)
+        # translate all the atoms so they're in the cell (needed in case the new lattice caused some of them to lie outside the cell)
+        organism.translateAtomsIntoCell()
     
     
-    def unpad(self, structure):
+    def unpad(self, organism, constraints):
         '''
-        Removes vacuum padding to return an organism's structure to a form used by the variations.
-        
-        Returns a structure that has had the vacuum padding removed.
+        Removes vacuum padding to return an organism's structure to a form used by the variations.  Changes the structure of an organism.
         
         Args:
-            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+            organism: the Organism to unpad
+            
+            constraints: a Constraints object
         '''
-        # rotate structure into principal directions
-        # Call other methods based on the value of self.shape
+        # call other methods based on the value of self.shape
         if self.shape == 'sheet':
-            return self.unpadSheet(structure)
+            return self.unpadSheet(organism, constraints)
         elif self.shape == 'wire':
-            return self.unpadWire(structure)
+            return self.unpadWire(organism, constraints)
         elif self.shape == 'cluster':
-            return self.unpadCluster(structure)
+            return self.unpadCluster(organism, constraints)
         else:
-            return structure
+            return organism
         
     
-    def unpadSheet(self, structure):
+    def unpadSheet(self, organism, constraints):
         '''
-        Removes vertical vacuum padding from a sheet.
-        
-        Returns a sheet structure with the vertical vacuum padding removed
-        
-        Precondition: the sheet structure is represented with the c-lattice vector perpendicular to the plane of the sheet
+        Removes vertical vacuum padding from a sheet, leaving only enough to satisfy the per-species MID constraints, and makes the c-lattice vector normal to 
+        the plane of the sheet (if it isn't already). Changes the structure of an organism.
         
         Args:
-            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+            organism: an Organism to unpad 
+            
+            constraints: a Constraints object
         '''
-        # TODO: implement me
+        # rotate into principal directions
+        organism.rotateToPrincipalDirections()
+        # get the species and their Cartesian coordinates
+        species = organism.structure.species
+        cartesian_coords = organism.structure.cart_coords
+        # get the layer thickness of the sheet
+        layer_thickness = organism.getLayerThickness()
+        # get the largest per-species MID (add just a little to prevent corner cases...)
+        max_mid = constraints.get_max_mid() + 0.01
+        # get the non-zero components of the a and b lattice vectors
+        ax = organism.structure.lattice.matrix[0][0]
+        bx = organism.structure.lattice.matrix[1][0]
+        by = organism.structure.lattice.matrix[1][1]
+        # make a new lattice with c vertical and with length layer_thickness + padding
+        unpadded_lattice = Lattice([[ax, 0.0, 0.0], [bx, by, 0.0], [0.0, 0.0, layer_thickness + max_mid]])
+        # make a new structure with the padded lattice, species, and Cartesian coordinates
+        unpadded_structure = Structure(unpadded_lattice, species, cartesian_coords, coords_are_cartesian=True)
+        # set the organism's structure to the unpadded one
+        organism.structure = unpadded_structure
+        # shift the atoms vertically a little so they're in the center
+        z_extremes = organism.getBoundingBox(cart_coords = False)[2]
+        center = z_extremes[0] + (z_extremes[1] - z_extremes[0])/2
+        translation_vector = [0, 0, 0.5 - center]
+        for i in range(0, len(organism.structure.sites)):
+            organism.structure.translate_sites(i, translation_vector, frac_coords = True, to_unit_cell = False)
+        # translate all the atoms so they're in the cell (needed in case the new lattice caused some of them to lie outside the cell)
+        organism.translateAtomsIntoCell()
         
-    def unpadWire(self, structure):
+          
+    def unpadWire(self, organism, constraints):
         '''
-        Removes vacuum padding around a wire.
-        
-        Returns a wire structure with the vertical vacuum padding removed
+        Removes vacuum padding around a wire. Changes the structure of an organism.
         
         Args:
-            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+            organism: an Organism to unpad
+            
+            constraints: a Constraints object
         '''
         # TODO: implement me
+ 
         
-    def unpadCluster(self, structure):
+    def unpadCluster(self, organism, constraints):
         '''
-        Removes vacuum padding around a cluster.
-        
-        Returns a wire structure with the vertical vacuum padding removed
+        Removes vacuum padding around a cluster. Changes the structure of an organism.
         
         Args:
-            structure: the structure of an organism, as a pymatgen.core.structure.Structure object
+            organism: an Organism to unpad
+            
+            constraints: a Constraints object
         '''
-        # TODO: implement me
+        # get the species and their Cartesian coordinates
+        species = organism.structure.species
+        cartesian_coords = organism.structure.cart_coords
+        # get the size of the cluster in each direction
+        cart_bounds = organism.getBoundingBox(cart_coords = True)
+        x_min = cart_bounds[0][0]
+        x_max = cart_bounds[0][1]
+        y_min = cart_bounds[1][0]
+        y_max = cart_bounds[1][1]
+        z_min = cart_bounds[2][0]
+        z_max = cart_bounds[2][1]
+        x_extent = x_max - x_min
+        y_extent = y_max - y_min
+        z_extent = z_max - z_min
+        # get the largest per-species MID (add just a little to prevent corner cases...)
+        max_mid = constraints.get_max_mid() + 0.01
+        # make a new orthorhombic lattice with the vacuum removed
+        unpadded_lattice = Lattice([[x_extent + max_mid, 0.0, 0.0], [0, y_extent + max_mid, 0.0], [0.0, 0.0, z_extent + max_mid]])
+        # make a new structure with the padded lattice, species, and Cartesian coordinates
+        unpadded_structure = Structure(unpadded_lattice, species, cartesian_coords, coords_are_cartesian=True)
+        # set the organism's structure to the unpadded one
+        organism.structure = unpadded_structure
+        # shift the atoms a little so they're in the center
+        frac_bounds = organism.getBoundingBox(cart_coords = False)
+        x_center = frac_bounds[0][0] + (frac_bounds[0][1] - frac_bounds[0][0])/2
+        y_center = frac_bounds[1][0] + (frac_bounds[1][1] - frac_bounds[1][0])/2
+        z_center = frac_bounds[2][0] + (frac_bounds[2][1] - frac_bounds[2][0])/2
+        translation_vector = [0.5 - x_center, 0.5 - y_center, 0.5 - z_center]
+        for i in range(0, len(organism.structure.sites)):
+            organism.structure.translate_sites(i, translation_vector, frac_coords = True, to_unit_cell = False)
+        # translate all the atoms so they're in the cell (needed in case the new lattice caused some of them to lie outside the cell)
+        organism.translateAtomsIntoCell()
+ 
         
        
 class CompositionSpace(object):
@@ -678,7 +819,6 @@ class CompositionSpace(object):
     
     This class is a singleton.
     '''
-    
     def __init__(self, endpoints):
         '''
         Creates a CompositionSpace object, which is list of pymatgen.core.composition.Composition objects
@@ -711,9 +851,7 @@ class CompositionSpace(object):
                     if not point.almost_equals(next_point, 0.0, 0.0):
                         return "pd"
         # should only get here if there are multiple identical compositions in end_points (which would be weird)
-        return "epa"
-                    
-        
+        return "epa" 
             
        
         
@@ -794,7 +932,8 @@ class RandomOrganismCreator(OrganismCreator):
         self.is_successes_based = True
         self.is_finished = False
     
-    def createOrganism(self, composition_space, constraints):
+    
+    def createOrganism(self, composition_space, constraints, id_generator):
         '''
         Creates a random organism for the initial population.
         
@@ -804,6 +943,8 @@ class RandomOrganismCreator(OrganismCreator):
             composition_space: a CompositionSpace object
             
             constraints: a Constraints object 
+            
+            id_generator: an IDGenerator object
         '''
         # make three random lattice vectors that satisfy the length constraints
         a = constraints.min_lattice_length + random.random()*(constraints.max_lattice_length - constraints.min_lattice_length)
@@ -840,13 +981,14 @@ class RandomOrganismCreator(OrganismCreator):
         
         # for each element, generate a set of random fractional coordinates
         # TODO: this doesn't ensure the structure will satisfy the per-species mids, and in fact most won't. It's ok because they'll just fail development, but there might be a better way...
+        # TODO: also, this doesn't ensure the structure will satisfy the max size constraint in Geometry. There could be a way to do this by applying more stringent constraints on how
+        #       the random lattice vectors and angles are chosen when we have a non-bulk geometry....
         random_coordinates = []
         for _ in range(num_atoms):
             random_coordinates.append([random.random(), random.random(), random.random()])
         
-        # make a random organism from the random lattice, random species, and random coordinates
+        # make a random structure from the random lattice, random species, and random coordinates
         random_structure = Structure(random_lattice, elements, random_coordinates)
-        random_org = Organism(random_structure)
         
         # optionally scale the volume
         if self.volume == 'from_elemental_densities':
@@ -854,7 +996,7 @@ class RandomOrganismCreator(OrganismCreator):
             # TODO: this would break if pymatgen doesn't have a density for a particular element
             
             # compute volumes per atom (in Angstrom^3) of each element in the random organism
-            reduced_composition = random_org.structure.composition.reduced_composition
+            reduced_composition = random_structure.composition.reduced_composition
             volumes_per_atom = {}
             for element in reduced_composition:
                 # physical properties and conversion factors
@@ -882,8 +1024,8 @@ class RandomOrganismCreator(OrganismCreator):
             # TODO: sometimes this doesn't work. It can either scale the volume to some huge number, or else volume scaling just fails and lattice vectors are assigned nan
             #       it looks like the second error is caused by a divide-by-zero in the routine pymatgen calls to scale the volume
             #       the if statement below is to catch these cases, by I should probably contact materials project about it...
-            random_org.structure.scale_lattice(mean_vpa*len(random_org.structure.sites))
-            if str(random_org.structure.lattice.a) == 'nan' or random_org.structure.lattice.a > 100:
+            random_structure.scale_lattice(mean_vpa*len(random_structure.sites))
+            if str(random_structure.lattice.a) == 'nan' or random_structure.lattice.a > 100:
                 return None          
         
         elif self.volume == 'random':
@@ -892,10 +1034,12 @@ class RandomOrganismCreator(OrganismCreator):
         
         else:
             # scale to the given volume per atom
-            random_org.structure.scale_lattice(self.volume*len(random_org.structure.sites(self)))  
+            random_structure.scale_lattice(self.volume*len(random_structure.sites(self)))  
         
-        # return the scaled random organism
+        # return a random organism with the scaled random structure
+        random_org = Organism(random_structure, id_generator)
         return random_org
+    
     
     def updateStatus(self):
         '''
@@ -904,8 +1048,7 @@ class RandomOrganismCreator(OrganismCreator):
         self.num_made = self.num_made + 1
         if self.num_made == self.number:
             self.is_finished = True
-        
-        
+                
 
 
 class FileOrganismCreator(OrganismCreator):
@@ -930,11 +1073,14 @@ class FileOrganismCreator(OrganismCreator):
         self.is_successes_based = False
         self.is_finished = False
     
-    def createOrganism(self):
+    def createOrganism(self, id_generator):
         '''
         Creates an organism for the initial population from a poscar or cif file. 
         
         Returns an organism, or None if one could not be created
+        
+        Args:
+            id_generator: an IDGenerator object
         '''
         # update status each time the method is called, since this is an attempts-based creator
         self.updateStatus()
@@ -960,7 +1106,6 @@ class FileOrganismCreator(OrganismCreator):
         
 
 
-
 class RedundancyGuard(object):
     '''
     A redundancy guard.
@@ -971,6 +1116,8 @@ class RedundancyGuard(object):
     def __init__(self, redundancy_parameters):
         '''
         Creates a redundancy guard.
+        
+        TODO: I think the pymatgen structure matcher assumes periodic boundary conditions, but this might not make sense for all geometries...
         
         Args:
             redundancy parameters: a dictionary of parameters
@@ -1051,6 +1198,7 @@ class RedundancyGuard(object):
         # make the StructureMatcher object
         # The first False is to prevent the matcher from scaling the volumes, and the second False is to prevent subset matching
         self.structure_matcher = StructureMatcher(self.lattice_length_tol, self.site_tol, self.lattice_angle_to, self.use_primitive_cell, False, self.attempt_supercell, False, ElementComparator())
+    
         
     def set_all_to_defaults(self):
         '''
@@ -1062,6 +1210,7 @@ class RedundancyGuard(object):
         self.use_primitive_cell = self.default_use_primitive_cell
         self.attempt_supercell = self.default_attempt_supercell
         self.d_value = self.default_d_value
+    
         
     def checkRedundancy(self, new_organism, whole_pop):
         '''
@@ -1069,7 +1218,7 @@ class RedundancyGuard(object):
         
         Returns the organism with which new_organism is redundant, or None if no redundancy
         
-        TODO: make failure messages more informative - include organism number, etc.
+        TODO: make failure messages more informative - include organism id number, etc.
         
         Args:
             new_organism: the organism to check for redundancy
@@ -1095,7 +1244,6 @@ class Constraints(object):
     '''
     Represents the general constraints imposed on structures considered by the algorithm. 
     '''
-    
     def __init__(self, constraints_parameters, composition_space):
         '''
         Sets the general constraints imposed on structures. Assigns default values if needed.
@@ -1192,7 +1340,7 @@ class Constraints(object):
                             elements = key.split()
                             radius1 = Element(elements[0]).atomic_radius
                             radius2 = Element(elements[1]).atomic_radius
-                            self.per_species_mids[key] = 0.8*(radius1 + radius2)
+                            self.per_species_mids[key] = 0.75*(radius1 + radius2)
                     # check to see if any pairs are missing, and if so, add them and set to default values
                     self.set_some_mids_to_defaults(composition_space)
                 # if the per_species_mids block has been left blank or set to default, then set all the pairs to defaults
@@ -1202,7 +1350,6 @@ class Constraints(object):
             else:
                 self.set_all_mids_to_defaults(composition_space)
             
-                
                 
     def set_all_to_defaults(self, composition_space):
         '''
@@ -1234,7 +1381,7 @@ class Constraints(object):
         self.per_species_mids = {}
         for i in range(0, len(elements)):
             for j in range(i, len(elements)):
-                self.per_species_mids[str(elements[i].symbol + " " + elements[j].symbol)] = 0.8*(elements[i].atomic_radius + elements[j].atomic_radius)
+                self.per_species_mids[str(elements[i].symbol + " " + elements[j].symbol)] = 0.75*(elements[i].atomic_radius + elements[j].atomic_radius)
         
     
     def set_some_mids_to_defaults(self, composition_space):
@@ -1260,9 +1407,19 @@ class Constraints(object):
         # calculate the per species mids for all the missing pairs and add them to self.per_species_mids
         for pair in missing_pairs:
             p = pair.split()
-            self.per_species_mids[str(pair)] = 0.8*(Element(p[0]).atomic_radius + Element(p[1]).atomic_radius)
-            
-            
+            self.per_species_mids[str(pair)] = 0.75*(Element(p[0]).atomic_radius + Element(p[1]).atomic_radius)
+    
+    
+    def get_max_mid(self):
+        '''
+        Returns larges per-species minimum interatomic distance constraint
+        '''
+        max_mid = 0
+        for key in self.per_species_mids:
+            if self.per_species_mids[key] > max_mid:
+                max_mid = self.per_species_mids[key]
+        return max_mid
+                 
         
     def get_all_elements(self, composition_space):
         '''
@@ -1278,8 +1435,7 @@ class Constraints(object):
                 elements.append(key)
         # remove duplicates from the list of elements
         elements = list(set(elements)) 
-        return elements
-        
+        return elements        
         
 
 
@@ -1290,7 +1446,6 @@ class Development(object):
     
     This is a singleton class.
     '''
-    
     def __init__(self, niggli, scale_density):
         '''
         Creates a Development object.
@@ -1310,7 +1465,6 @@ class Development(object):
         
         Returns the developed organism, or None if the organism failed development
         
-        TODO: make failure messages more informative - include organism number, etc.
         TODO: it might make more sense to return a flag indicating whether the organism survived development, since this method modifies the organism...
         
         Args:
@@ -1327,18 +1481,18 @@ class Development(object):
         '''
         # check max num atoms constraint
         if len(organism.structure.sites) > constraints.max_num_atoms:
-            print("Organism failed max num atoms constraint - rejecting")
+            print("Organism {} failed max number of atoms constraint.".format(organism.id))
             return None
             
         # check min num atoms constraint
         if len(organism.structure.sites) < constraints.min_num_atoms:
-            print("Organism failed min num atoms constraint - rejecting")
+            print("Organism {} failed min number of atoms constraint.".format(organism.id))
             return None
         
         # check if the organism has the right composition for fixed-composition searches
         if composition_space.objective_function == "epa":
             if not composition_space.endpoints[0].almost_equals(organism.composition):
-                print("Organism has incorrect composition - rejecting")
+                print("Organism {} has incorrect composition.".format(organism.id))
                 return None
         
         # check if the organism is in the composition space for phase-diagram searches
@@ -1355,24 +1509,32 @@ class Development(object):
             composition_checker = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
             # use the CompoundPhaseDiagram to check if the organism is in the composition space by seeing how many entries it returns
             if len(composition_checker.transform_entries(pdentries, composition_space.endpoints)[0]) == len(composition_space.endpoints):
-                print("Organism not in composition space - rejecting")
+                print("Organism {} is outside the composition space.".format(organism.id))
                 return None
             else:
                 # check the endpoints if specified and if we're not making the initial population
                 if constraints.allow_endpoints == False and pool != None:
                     for endpoint in composition_space.endpoints:
                         if endpoint.almost_equals(organism.composition):
-                            print("Organism at an endpoint - rejecting")
+                            print("Organism {} is at a composition endpoint.".format(organism.id))
                             return None
                         
-        # optionally do Niggli cell reduction
+        # optionally do Niggli cell reduction 
+        # sometimes pymatgen's reduction routine fails, so we check for that. 
+        # TODO: what should we do when it fails? Now we're just rejecting it...
         if self.niggli:
             if geometry.shape == "bulk":
                 # do normal Niggli cell reduction
-                organism.structure = organism.structure.get_reduced_structure()
+                try:
+                    organism.structure = organism.structure.get_reduced_structure()
+                except ValueError:
+                    pass
             elif geometry.shape == "sheet":
-                # do the sheet Niggli cell redution
-                organism.reduceSheetCell()     
+                # do the sheet Niggli cell reduction
+                try:
+                    organism.reduceSheetCell()
+                except ValueError:
+                    return None
             # TODO: implement cell reduction for other geometries here if needed (doesn't makes sense for wires or clusters)
             
         # rotate the structure into the principal directions
@@ -1396,20 +1558,20 @@ class Development(object):
         lengths = organism.structure.lattice.abc
         for length in lengths:
             if length > constraints.max_lattice_length:
-                print("Organism failed max lattice length constraint - rejecting")
+                print("Organism {} failed max lattice length constraint.".format(organism.id))
                 return None
             elif length < constraints.min_lattice_length:
-                print("Organism failed min lattice length constraint - rejecting")
+                print("Organism {} failed min lattice length constraint".format(organism.id))
                 return None
             
         # check the max and min lattice angle constraints
         angles = organism.structure.lattice.angles
         for angle in angles:
             if angle > constraints.max_lattice_angle:
-                print("Organism failed max lattice angle constraint - rejecting")
+                print("Organism {} failed max lattice angle constraint.".format(organism.id))
                 return None
             elif angle < constraints.min_lattice_angle:
-                print("Organism failed min lattice angle constraint - rejecting")
+                print("Organism {} failed min lattice angle constraint.".format(organism.id))
                 return None
             
         # check the per-species minimum interatomic distance constraints
@@ -1428,21 +1590,21 @@ class Development(object):
                 # check each neighbor in the sphere to see if it has the forbidden type
                 for neighbor in neighbors:
                     if neighbor[0].specie.symbol == species_symbol:
-                        print("Organism failed per-species minimum interatomic distance constraint - rejecting")
+                        print("Organism {} failed per-species minimum interatomic distance constraint.".format(organism.id))
                         return None
             
         # check the max size constraint for non-bulk geometries
         if geometry.shape == 'sheet':
             if organism.getLayerThickness() > geometry.max_size:
-                print("Organism failed max size constraint - rejecting")
+                print("Organism {} failed max size constraint.".format(organism.id))
                 return None
         elif geometry.shape == 'wire':
             if organism.getWireDiameter() > geometry.max_size:
-                print("Organism failed max size constraint - rejecting")
+                print("Organism {} failed max size constraint.".format(organism.id))
                 return None
         elif geometry.shape == 'cluster':
             if organism.getClusterDiameter() > geometry.max_size:
-                print("Organism failed max size constraint - rejecting")
+                print("Organism {} failed max size constraint.".format(organism.id))
                 return None
         # TODO: any other geometry-specific constraints checks go here
         
@@ -1544,7 +1706,7 @@ class EnergyCalculator(object):
         #    waiting_queue.
         #
         #    All this should be done on it's own thread, so that multiple energy calculations can be running at once.
-        #    It might be best to handle the threads inside the the method (not sure)
+        #    It might be best to handle the threads inside the method (not sure)
         #
         #    The goal is be able to call EnergyCalculator.doEnergyCalcualtion(unrelaxed_organism) and then have the
         #    control flow immediately return (i.e. not having to wait for the method to finish)
@@ -1569,17 +1731,18 @@ class VaspEnergyCalculator(object):
     '''
     Calculates the energy of an organism using VASP.
     '''
-    
-    def __init__(self, vasp_code_params):
+    def __init__(self, vasp_code_params, run_dir_name):
         '''
         Args:
             vasp_code_params: the parameters needed for preparing a vasp calculation (INCAR, KPOINTS, POTCAR files)
+            
+            run_dir_name: the name of the garun directory containing all the output of the search (just the name, not the path)
         '''
         # TODO: implement me. Just keeping the paths to the input files should be enough
     
     
     def doEnergyCalculation(self, org):
-         '''
+        '''
         Calculates the energy of an organism using VASP
         
         Returns an organism that has been parsed from the output files of the energy code, or None if the calculation 
@@ -1592,34 +1755,116 @@ class VaspEnergyCalculator(object):
         # 1. prepare input files for calculation
         # 2. submit calculation (by running external script)
         # 3. when external script returns, parse organism from the energy code output files
-        
+    
 
+
+class GulpEnergyCalculator(object):
+    '''
+    Calculates the energy of an organism using GULP.
+    '''
+    def __init__(self, header_file, potential_file, run_dir_name):
+        '''
+        Args:
+            header_file: the path to the gulp header file
+            
+            potetnial_file: the path to the gulp potential file
+            
+            run_dir_name: the name of the garun directory containing all the output of the search (just the name, not the path)
+            
+            Precondition: both of these files exist
+        '''
+        # pymatgen has a GulpCaller.run() method for running gulp. I don't think we should have pymatgen directly call the gulp program because that removes some control from the user
+        # so let's keep the callgulp script like in java gasp. However, the run method of pymatgen is nice because it raises some exceptions if gulp doesn't run properly. The argument of
+        # the method is the command for running gulp, so maybe we could used this method and just pass it callgulp, so that it would then run our callgulp script. Might not work, but it's
+        # trying to take advantage of the exceptions.
+        #
+        # We can parse the structure and energy from the gulp output with the GulpIO.get_energy and GulpIO.get_relaxed_structure methods - just need to pass in gulp output as a string
+        #
+        # I don't want to embed the details of the gulp calculations into the code here - it should be in the header and potential files where the user can change it if desired
+    
+        # read the gulp header file and store it as a string
+        with open (header_file, "r") as gulp_header_file:
+            self.header = gulp_header_file.read()
+            
+        # read the gulp potential file and store it as a string
+        with open (potential_file, "r") as gulp_potential_file:
+            self.potential = gulp_potential_file.read()
+            
+        # the name of the garun directory
+        self.run_dir_name = run_dir_name
+        
+        # for processing gulp input and output
+        self.gulp_io = GulpIO()
+    
+    
+    def doEnergyCalculation(self, org):
+        '''
+        Calculates the energy of an organism using GULP
+        
+        Returns an organism that has been parsed from the output files of the energy code, or None if the calculation 
+        failed. Does not do development or redundancy checking.
+        
+        Args:
+            org: the organism whose energy we want to calculate
+            
+        Precondition: the garun directory and temp subdirectory exist
+        '''
+        # make the job directory
+        job_dir_path = str(getcwd()) + '/' + str(self.run_dir_name) + '/temp/' + str(org.id)
+        mkdir(job_dir_path)
+        
+        # get the structure in gulp input format
+        structure_lines = self.gulp_io.structure_lines(org.structure)
+        
+        # make the gulp input
+        gulp_input = self.header + structure_lines + self.potential
+        
+        # print gulp input to a file for user's reference 
+        gin_file = open(job_dir_path + '/' + str(org.id) + '.gin', 'w')
+        gin_file.write(gulp_input)
+        
+        # TODO: complete the following steps
+        
+        # run gulp by calling external callgulp script (possibly via GulpCaller.run()) and store the output as a string
+        
+        # check for errors in the output
+        #    - think about what to do if errors
+        
+        # possibly print the output to a file for the user's reference (id.gout)
+        
+        # use gulp_io to parse the relaxed structure and energy from the gulp output
+        #    - think about what to do if errors
+        
+        # make a new organism with the relaxed structure and energy, and same org id as the unrelaxed structure
+        
+        # return the new organism
+        
+        
 
 class InitialPopulation():
     '''
     The initial population of organisms
     '''
-    
-    def __init__(self, whole_pop):
+    def __init__(self):
         '''
-        Args:
-            whole_pop: the list containing the organisms seen by the algorithm for redundancy checking
+        Creates an initial population
         '''
         self.initial_population = []
     
     
-    def addOrganism(self, org, whole_pop):
-         '''
+    def addOrganism(self, org):
+        '''
         Adds a relaxed organism to the initial population and updates whole_pop.
+        
+        TODO: whenever a structure gets added to the initial population, we need to print it to the garun output file in poscar format
         
         Args:
             org: the organism whose energy we want to calculate
             
             whole_pop: the list containing all the organisms that the algorithm has submitted for energy calculations
         '''
-      #  initial_population.append(org)
-      #  org.isActive = True
-      #  whole_pop.append(org)
+        self.initial_population.append(org)
+        org.is_active = True
       
       
     def replaceOrganism(self, old_org, new_org):
@@ -1628,14 +1873,18 @@ class InitialPopulation():
         
         Precondition: the old_org is a current member of the initial population
         
+        TODO: whenever a structure gets added to the initial population (even via replacement), we need to print it to the garun output file in poscar format
+        
         Args:
             old_org: the organism in the initial population to replace
             new_org: the new organism to replace the old one
         '''
-        # TODO: implement me
-        # 1. do the replacement
-        # 2. set old_org.isActive = False and newOrg.isActive = True
-        # 3. whole_pop.append(new_org)
+        self.initial_population.remove(old_org)
+        old_org.is_active = False
+        self.initial_population.append(new_org)
+        new_org.is_active = True
+        
+        
     
 
         
