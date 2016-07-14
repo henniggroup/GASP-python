@@ -4,6 +4,7 @@ import sys
 import os
 import classes
 import copy
+import threading
 from pymatgen.io.vasp.inputs import Poscar
 from pymatgen.core.periodic_table import Element
 from pymatgen.core.structure import Structure
@@ -258,16 +259,101 @@ else:
 # TODO: create other object based on input file options (e.g., pool, variations, selection, etc.) here. 
 # We want to finish reading the input file before making the garun directory or submitting any calculations so that we can quit if there are any errors in the input file
 
-#print(stopping_criteria.num_energy_calcs)
-#print(stopping_criteria.value_achieved)
-#print(stopping_criteria.found_structure)
-
 
 os.chdir('/n/srv/brevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
 # make the run directory
 os.mkdir(str(os.getcwd()) + '/' + run_dir_name)
 # make the temp subdirectory where the energy calculations will be run
 os.mkdir(str(os.getcwd()) + '/' + run_dir_name + '/temp')
+
+# list to hold copies of all the valid organisms made by the algorithm
+whole_pop = []
+
+'''
+# create the initial population
+initial_population = classes.InitialPopulation()
+threads = []  # list of threads to do the energy calculations
+while not stopping_criteria.are_satisfied:
+    for creator in organism_creators:
+        while not creator.is_finished:
+            # start by making N threads
+            if len(threads) < num_calcs_at_once:
+        
+                # keep trying until we get one
+                new_organism = creator.createOrganism(id_generator, composition_space, constraints) 
+                while new_organism == None and not creator.is_finished:
+                    new_organism = creator.createOrganism(id_generator, composition_space, constraints)
+            
+                # unpad the organism (does nothing for bulk search)
+                geometry.unpad(new_organism, constraints)
+                # develop the organism
+                developed_org = development.develop(new_organism)
+                if developed_org != None:
+                    # check for redundancy
+                    redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                    if redundant_org == None: # no redundancy
+                        whole_pop.append(copy.deepcopy(developed_org)) # we want to add copies to whole_pop so the organisms in whole_pop don't change upon relaxation, etc.
+                        stopping_criteria.updateCalcCounter()  # if num calcs is one of the stopping criteria, this updates it
+                        geometry.pad(developed_org) # for bulk search, this does nothing except rotate into principal directions
+                        thread = threading.Thread(target=energy_calculator.doEnergyCalculation, args=(developed_org))
+                        thread.start()
+                        threads.append(thread)
+            else:
+                # check for dead threads
+                for thread in threads:
+                    if not thread.isAlive:
+                        # TODO: need to figure out how to get the return value from a dead thread
+                        relaxed_org = thread.return_value  # i don't think this will work...
+                        if relaxed_org != None:
+                            geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing except rotate into principal directions
+                            developed_org = development.develop(relaxed_org)
+                            if developed_org != None:
+                                redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                                if redundant_org != None:
+                                    if redundant_org.isActive and redundant_org.value > developed_org.value:
+                                        initial_population.replaceOrganism(redundant_org, developed_org)
+                                else:
+                                    whole_pop.append(copy.deepcopy(developed_org))
+                                    stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
+                                    initial_population.add(developed_org)
+                                    if creator.is_successes_based: # update status of success-based creators
+                                        creator.updateStatus()
+                                
+                        # remove the dead thread and make another one
+                        threads.remove(thread)
+                        
+                        # keep trying until we get one
+                        new_organism = creator.createOrganism(id_generator, composition_space, constraints)
+                        while new_organism == None and not creator.is_finished:
+                            new_organism = creator.createOrganism(id_generator, composition_space, constraints)
+            
+                        # develop the organism
+                        developed_org = development.develop(new_organism)
+                        if developed_org != None:
+                            # check for redundancy
+                            redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                            if redundant_org == None: # no redundancy
+                                whole_pop.append(copy.deepcopy(developed_org))
+                                stopping_criteria.updateCalcCounter() 
+                                geometry.pad(developed_org) # for bulk search, this does nothing except rotate into principal directions
+                                thread = threading.Thread(target=energy_calculator.doEnergyCalculation, args=(developed_org))
+                                thread.start()
+                                threads.append(thread)
+'''
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # get an organism from the org creator (only one in this case)
 organism = None
@@ -276,24 +362,38 @@ while organism == None:
     organism = organism_creators[0].createOrganism(id_generator, composition_space, constraints)
     # develop the organism
     if organism != None:
-#        geometry.unpad(organism, constraints)
+        geometry.unpad(organism, constraints)
         developed_organism = development.develop(organism, composition_space, constraints, geometry, None)
         if developed_organism == None:
             organism = None
-            
+
+
+# pad the organism
+geometry.pad(developed_organism)
+print(developed_organism.structure)
+print('')
+# call the doEnergyCalculation method
+relaxed_organism = energy_calculator.doEnergyCalculation(developed_organism) 
+if relaxed_organism != None:
+    print(relaxed_organism.total_energy)
+    print(relaxed_organism.structure)           
 
 # write out developed structure to cif or poscar so I can look at it
-developed_organism.structure.to('poscar', '{}_dev.vasp'.format(developed_organism.id))
+#developed_organism.structure.to('poscar', '{}_dev.vasp'.format(developed_organism.id))
 # pad the structure
-geometry.pad(developed_organism)
+#geometry.pad(developed_organism)
 # write out the padded structure to a file so I can look at it - check atom positions were shifted properly
-developed_organism.structure.to('poscar', '{}_padded.vasp'.format(developed_organism.id))
+#developed_organism.structure.to('poscar', '{}_padded.vasp'.format(developed_organism.id))
 # unpad the structure
-geometry.unpad(developed_organism, constraints)
+#geometry.unpad(developed_organism, constraints)
 # write out unpadded structure to a file so I can look at it - check atom positions were shifted properly
-developed_organism.structure.to('poscar', '{}_unpadded.vasp'.format(developed_organism.id))
+#developed_organism.structure.to('poscar', '{}_unpadded.vasp'.format(developed_organism.id))
 
 
+
+#print(stopping_criteria.num_energy_calcs)
+#print(stopping_criteria.value_achieved)
+#print(stopping_criteria.found_structure)
 
 
 #print(developed_organism.id)
@@ -493,7 +593,6 @@ others?
 # create the initial population
 initial_population = InitialPopulation()
 threads = []  # list of threads to do the energy calculations
-# TODO: should also check stopping criteria up here in case it's met while making the initial population (unlikely, but could happen...)
 while not stopping_criteria.are_satisfied:
     for creator in organism_creators:
         while not creator.is_finished:
@@ -571,6 +670,7 @@ threads = []  # list of threads to do the energy calculations (overwrite the old
 for i in range(0, N):
     unrelaxed_offspring = offspring_generator.makeOffspringOrganism(pool, whole_pop)
     geometry.pad(unrelaxed_offspring) 
+    stopping_criteria.updateCalcCounter()
     thread = Thread(target=energy_calculator.doEnergyCalculation, args=(new_organism))
     thread.start()
     threads.append(thread)

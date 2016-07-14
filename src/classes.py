@@ -10,7 +10,8 @@ from pymatgen.analysis.structure_matcher import ElementComparator
 from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.transformations.standard_transformations import RotationTransformation
-from pymatgen.command_line.gulp_caller import GulpIO
+from pymatgen.command_line.gulp_caller import GulpIO, GulpCaller,\
+    GulpConvergenceError, GulpError
 
 # from abc import abstractmethod, ABCMeta
 from _pyio import __metaclass__
@@ -1860,7 +1861,9 @@ class VaspEnergyCalculator(object):
         failed. Does not do development or redundancy checking.
         
         Args:
-            org: the organism whose energy we want to calculate
+            organism: the organism whose energy we want to calculate
+            
+        TODO: use custodian package for error handling
         '''
         # TODO: implement me
         # 1. prepare input files for calculation
@@ -1884,15 +1887,6 @@ class GulpEnergyCalculator(object):
             
             Precondition: both of these files exist
         '''
-        # pymatgen has a GulpCaller.run() method for running gulp. I don't think we should have pymatgen directly call the gulp program because that removes some control from the user
-        # so let's keep the callgulp script like in java gasp. However, the run method of pymatgen is nice because it raises some exceptions if gulp doesn't run properly. The argument of
-        # the method is the command for running gulp, so maybe we could used this method and just pass it callgulp, so that it would then run our callgulp script. Might not work, but it's
-        # trying to take advantage of the exceptions.
-        #
-        # We can parse the structure and energy from the gulp output with the GulpIO.get_energy and GulpIO.get_relaxed_structure methods - just need to pass in gulp output as a string
-        #
-        # I don't want to embed the details of the gulp calculations into the code here - it should be in the header and potential files where the user can change it if desired
-    
         # read the gulp header file and store it as a string
         with open (header_file, "r") as gulp_header_file:
             self.header = gulp_header_file.read()
@@ -1906,9 +1900,12 @@ class GulpEnergyCalculator(object):
         
         # for processing gulp input and output
         self.gulp_io = GulpIO()
+        
+        # for submitting the gulp calculation with the external callgulp script
+        self.gulp_caller = GulpCaller(cmd = 'callgulp')
     
     
-    def doEnergyCalculation(self, org):
+    def doEnergyCalculation(self, organism):
         '''
         Calculates the energy of an organism using GULP
         
@@ -1916,39 +1913,59 @@ class GulpEnergyCalculator(object):
         failed. Does not do development or redundancy checking.
         
         Args:
-            org: the organism whose energy we want to calculate
+            organism: the organism whose energy we want to calculate
             
         Precondition: the garun directory and temp subdirectory exist
+        
+        TODO: might be better to eventually use the custodian package for error handling instead of catching the exceptions that GulpCaller.run throws. Then we wouldn't need 
+        GulpCaller at all, and can just call the external callvasp script directly, as a subprocess...
         '''
         # make the job directory
-        job_dir_path = str(getcwd()) + '/' + str(self.run_dir_name) + '/temp/' + str(org.id)
+        job_dir_path = str(getcwd()) + '/' + str(self.run_dir_name) + '/temp/' + str(organism.id)
         mkdir(job_dir_path)
         
         # get the structure in gulp input format
-        structure_lines = self.gulp_io.structure_lines(org.structure)
+        structure_lines = self.gulp_io.structure_lines(organism.structure)
         
-        # make the gulp input
+        # make the gulp input from the structrure, header and potential
         gulp_input = self.header + structure_lines + self.potential
         
         # print gulp input to a file for user's reference 
-        gin_file = open(job_dir_path + '/' + str(org.id) + '.gin', 'w')
+        gin_file = open(job_dir_path + '/' + str(organism.id) + '.gin', 'w')
         gin_file.write(gulp_input)
         
-        # TODO: complete the following steps
+        # run gulp by calling external callgulp script via GulpCaller.run() and store the output as a string
+        try:
+            gulp_output = self.gulp_caller.run(gulp_input)
+        except GulpConvergenceError:
+            print('Gulp calculation on organism {} did not converge properly.'.format(organism.id))
+            return None
+        except GulpError:
+            print('Error during Gulp calculation on organism {}.'.format(organism.id))
+            return None
         
-        # run gulp by calling external callgulp script (possibly via GulpCaller.run()) and store the output as a string
+        # print gulp input to a file for user's reference 
+        gin_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')
+        gin_file.write(gulp_output)
+       
+        # parse the relaxed structure and total energy from the gulp output
+        try:
+            relaxed_structure = self.gulp_io.get_relaxed_structure(gulp_output)
+        except IOError:
+            print('Error reading structure of organism {} from Gulp output.'.format(organism.id))
+            return None
+        try:
+            total_energy = self.gulp_io.get_energy(gulp_output)
+        except IOError:
+            print('Error reading energy of organism {} from Gulp output'.format(organism.id))
+            
         
-        # check for errors in the output
-        #    - think about what to do if errors
+        # assign the relaxed structure and energy to the organism
+        organism.structure = relaxed_structure
+        organism.total_energy = total_energy
         
-        # possibly print the output to a file for the user's reference (id.gout)
-        
-        # use gulp_io to parse the relaxed structure and energy from the gulp output
-        #    - think about what to do if errors
-        
-        # make a new organism with the relaxed structure and energy, and same org id as the unrelaxed structure
-        
-        # return the new organism
+        # return the updated organism
+        return organism
         
         
 
