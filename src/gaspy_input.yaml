@@ -33,15 +33,18 @@ EnergyCode: # should only have one specified
 #	lammps: # TODO: the input files needed for lammps
 
 
+ObjectiveFunction: # <epa|pd> This flag is optional. If not set, the algorithm will infer the objective function based on the composition space (epa for fixed composition, pd for variable)
+
+
 
 # the general constraints - entire  block is optional, and defaults will be used if it's omitted
 Constraints: 
      min_num_atoms: 2
-     max_num_atoms: 4
+     max_num_atoms: 10
 #     min_lattice_length: 0.5
 #     max_lattice_length: 20
-#     min_lattice_angle: 40
-#     max_lattice_angle: 140
+#     min_lattice_angle: 70
+#     max_lattice_angle: 110
 #     allow_endpoints: False  # only gets applied when doing phase diagram searches, and only after the initial population. It specifies whether the end point compositions are permitted after the initial population
                              # default is True for phase diagram searches (should it be?)
 #     per_species_mids:   # should default to all possible pairs (from composition space)
@@ -53,8 +56,8 @@ Constraints:
 
 # specifies the geometries of the structures to search for. Optional (assumes bulk geometry if none specified)
 Geometry:
-     shape: cluster # <bulk|sheet|wire|cluster> defaults to bulk
-     max_size: 6  # a constraint on the size (in Angstroms, atom-to-atom), for non-bulk geometries. For sheet, it's the layer thickness, for wire and cluster, it's the diameter. Defaults to inf
+     shape: bulk # <bulk|sheet|wire|cluster> defaults to bulk
+     max_size: 5  # a constraint on the size (in Angstroms, atom-to-atom), for non-bulk geometries. For sheet, it's the layer thickness, for wire and cluster, it's the diameter. Defaults to inf
      padding: 10   # the (actual - i.e. atom-to-atom) amount of vacuum padding to add around non-bulk geometries. Not used for bulk, and defaults to 10 angstroms for other geometries
 
 
@@ -102,7 +105,11 @@ NumCalcsAtOnce:  # the max number of energy calculations to submit at once. Opti
 RunTitle: test # the title of run. Optional
 
 
-
+# when the algorithm should stop the search. Optional, and defaults to 500 energy calcs for epa and 1000 energy calcs for pd
+StoppingCriteria:
+     num_energy_calcs: 700  # integer, the number of energy calculations to do before stopping. 
+     value_achieved: -3.5   # float, stop when a structure has been found with this or lower value
+     found_structure: /n/srv/brevard/Downloads/1T.cif   # path to poscar or cif file, stop when this structure has been found (to within some tolerance)
 
 
 
@@ -148,7 +155,4 @@ RunTitle: test # the title of run. Optional
 #	selection_power: 1 # this should default to 1
 
 
-#StoppingCriteria:
-#	max_energy_calcs: # should also have a default value for this, maybe dependent on composition (fixed vs binary vs ternary, etc.) 
-       # TODO: others...
 
