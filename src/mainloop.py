@@ -4,7 +4,8 @@ import sys
 import os
 import classes
 import copy
-import threading
+import threading 
+import random
 from pymatgen.io.vasp.inputs import Poscar
 from pymatgen.core.periodic_table import Element
 from pymatgen.core.structure import Structure
@@ -254,20 +255,198 @@ if 'StoppingCriteria' in parameters:
 # use defaults if no StoppingCriteria block has been used in the input file
 else:
     stopping_criteria = classes.StoppingCriteria(None, composition_space)
+
+# list to hold the variation objects
+variations = []
+
+# the default fractions for the variations
+default_mating_fraction = 0.7
+default_structure_mut_fraction = 0.1
+default_num_stoichs_mut_fraction = 0.1
+default_permutation_fraction = 0.1
+
+# TODO: get rid of code duplication below
+# create the variation objects
+if 'Variations' not in parameters:
+    # no variations specified, so make default ones
+    mating = classes.Mating({'fraction': default_mating_fraction})
+    structure_mut = classes.StructureMut({'fraction': default_structure_mut_fraction})
+    num_stoichs_mut = classes.NumStoichsMut({'fraction': default_num_stoichs_mut_fraction})
+    permutation = classes.Permutation({'fraction': default_permutation_fraction}, composition_space)
+    
+    # add them to the list
+    variations.append(mating)
+    variations.append(structure_mut)
+    variations.append(num_stoichs_mut)
+    variations.append(permutation)
+    
+elif parameters['Variations'] == None or parameters['Variations'] == 'default':
+    # no variations specified, so make default ones
+    mating = classes.Mating({'fraction': default_mating_fraction})
+    structure_mut = classes.StructureMut({'fraction': default_structure_mut_fraction})
+    num_stoichs_mut = classes.NumStoichsMut({'fraction': default_num_stoichs_mut_fraction})
+    permutation = classes.Permutation({'fraction': default_permutation_fraction},  composition_space)
+    
+    # add them to the list
+    variations.append(mating)
+    variations.append(structure_mut)
+    variations.append(num_stoichs_mut)
+    variations.append(permutation)
+    
+else:
+    # make each variation that's been specified
+    # mating
+    if 'Mating' not in parameters['Variations']:
+        # Mating sub block was not used, so don't make a Mating variation
+        pass
+    elif parameters['Variations']['Mating'] == None:
+        # Mating sub block was left blank
+        print('If the "Mating" flag is used, its "fraction" flag must also be set.')
+        print('Quittig...')
+        quit()
+    else:
+        # Mating sub block was used is not empty. Check that the non-optional 'fraction' flag specifies a valid value
+        if parameters['Variations']['Mating']['fraction'] == None or parameters['Variations']['Mating']['fraction'] == 'default':
+            print('The "fraction" flag is not optional and must contain a valid entry (between 0 and 1) for the Mating variation.')
+            print('Quitting...')
+            quit()
+        else:
+            # make a Mating variation object with the supplied parameters
+            mating = classes.Mating(parameters['Variations']['Mating'])
+            variations.append(mating) 
+               
+    # structure mutation
+    if 'StructureMut' not in parameters['Variations']:
+        # StructureMut sub block was not used, so don't make a StructureMut variation
+        pass
+    elif parameters['Variations']['StructureMut'] == None:
+        # StructureMut sub block was left blank
+        print('If the "StructureMut" flag is used, its "fraction" flag must also be set.')
+        print('Quittig...')
+        quit()
+    else:
+        # StructureMut sub block was used is not empty. Check that the non-optional 'fraction' flag specifies a valid value
+        if parameters['Variations']['StructureMut']['fraction'] == None or parameters['Variations']['StructureMut']['fraction'] == 'default':
+            print('The "fraction" flag is not optional and must contain a valid entry (between 0 and 1) for the StructureMut variation.')
+            print('Quitting...')
+            quit()
+        else:
+            # make a StructureMut variation object with the supplied parameters
+            structure_mut = classes.StructureMut(parameters['Variations']['StructureMut'])
+            variations.append(structure_mut)
+               
+    # mutating the number of stoichiometries worth of atoms in the cell
+    if 'NumStoichsMut' not in parameters['Variations']:
+        # NumStoichsMut sub block was not used, so don't make a NumStoichsMut variation
+        pass
+    elif parameters['Variations']['NumStoichsMut'] == None:
+        # NumStoichsMut block was left blank
+        print('If the "NumStoichsMut" flag is used, its "fraction" flag must also be set.')
+        print('Quittig...')
+        quit()
+    else:
+        # NumStoichsMut sub block was used is not empty. Check that the non-optional 'fraction' flag specifies a valid value
+        if parameters['Variations']['NumStoichsMut']['fraction'] == None or parameters['Variations']['NumStoichsMut']['fraction'] == 'default':
+            print('The "fraction" flag is not optional and must contain a valid entry (between 0 and 1) for the NumStoichsMut variation.')
+            print('Quitting...')
+            quit()
+        else:
+            # make a NumStoichsMut variation object with the supplied parameters
+            num_stoichs_mut = classes.NumStoichsMut(parameters['Variations']['NumStoichsMut']) 
+            variations.append(num_stoichs_mut) 
+             
+    # permutation (swapping atoms)
+    if 'Permutation' not in parameters['Variations']:
+        # Permutation sub block was not used, so don't make a Permutation variation
+        pass
+    elif parameters['Variations']['Permutation'] == None:
+        # Permutation sub block was left blank
+        print('If the "Permutation" flag is used, its "fraction" flag must also be set.')
+        print('Quittig...')
+        quit()
+    else:
+        # Permutation sub block was used is not empty. Check that the non-optional 'fraction' flag specifies a valid value
+        if parameters['Variations']['Permutation']['fraction'] == None or parameters['Variations']['Permutation']['fraction'] == 'default':
+            print('The "fraction" flag is not optional and must contain a valid entry (between 0 and 1) for the Permutation variation.')
+            print('Quitting...')
+        else:
+            # make a Permutation variation object with the supplied parameters
+            permutation = classes.Permutation(parameters['Variations']['Permutation'], composition_space)
+            variations.append(permutation)
+        
+# check that at least one variation has been used. This shouldn't happen...
+if len(variations) == 0:
+    print("At least one variation must be used. Either leave entire 'Variations' block blank to use default variations, or specify at least one variation within the 'Variations' block.")
+    print('Quitting...')
+    quit()
+
+# check that the variations fraction variables sum to 1
+frac_sum = 0
+for variation in variations:
+    frac_sum = frac_sum + variation.fraction
+if frac_sum != 1.0:
+    print("The Variations' fraction values must sum to 1.")
+    print('Quitting...')
+    quit()
     
 
-# TODO: create other object based on input file options (e.g., pool, variations, selection, etc.) here. 
+
+# for testing
+for v in variations:
+    print('')
+    print(v.name)
+    print(v.fraction)
+    
+    # these are just for Mating variation
+    if v.name == 'Mating':
+        print(v.mu_cut_loc)
+        print(v.sigma_cut_loc)
+        print(v.shift_prob)
+        print(v.doubling_prob)
+        print(v.grow_parents)
+        
+    # these are just for StructureMut variation
+    if v.name == 'StructureMut':
+        print(v.frac_atoms_perturbed)
+        print(v.sigma_atomic_coord_perturbation)
+        print(v.max_atomic_coord_perturbation)
+        print(v.sigma_strain_matrix_element)
+        
+    # these are just for NumStoichsMut variation
+    if v.name == 'NumStoichsMut':
+        print(v.mu_num_adds)
+        print(v.sigma_num_adds)
+        
+    # these are just for Permutation variation
+    if v.name == 'Permutation':
+        print(v.mu_num_swaps)
+        print(v.sigma_num_swaps)
+        print(v.pairs_to_swap)
+
+# test the doVariation method. The first arg is just a placeholder for the pool
+offspring = variations[0].doVariation(None, random, geometry, id_generator)
+
+# write out the offspring structure to a file so we can look at it
+offspring.structure.to('poscar', '/n/srv/brevard/structures/mating.vasp')
+print('')
+print(offspring.structure)
+        
+
+
+    
+    
+# TODO: create other object based on input file options (e.g., pool, selection, etc.) here. 
 # We want to finish reading the input file before making the garun directory or submitting any calculations so that we can quit if there are any errors in the input file
 
 
-os.chdir('/n/srv/brevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
+#os.chdir('/n/srv/brevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
 # make the run directory
-os.mkdir(str(os.getcwd()) + '/' + run_dir_name)
+#os.mkdir(str(os.getcwd()) + '/' + run_dir_name)
 # make the temp subdirectory where the energy calculations will be run
-os.mkdir(str(os.getcwd()) + '/' + run_dir_name + '/temp')
+#os.mkdir(str(os.getcwd()) + '/' + run_dir_name + '/temp')
 
 # list to hold copies of all the valid organisms made by the algorithm
-whole_pop = []
+#whole_pop = []
 
 '''
 # create the initial population
@@ -280,9 +459,9 @@ while not stopping_criteria.are_satisfied:
             if len(threads) < num_calcs_at_once:
         
                 # keep trying until we get one
-                new_organism = creator.createOrganism(id_generator, composition_space, constraints) 
+                new_organism = creator.createOrganism(id_generator, composition_space, constraints, random) 
                 while new_organism == None and not creator.is_finished:
-                    new_organism = creator.createOrganism(id_generator, composition_space, constraints)
+                    new_organism = creator.createOrganism(id_generator, composition_space, constraints, random)
             
                 # unpad the organism (does nothing for bulk search)
                 geometry.unpad(new_organism, constraints)
@@ -323,9 +502,9 @@ while not stopping_criteria.are_satisfied:
                         threads.remove(thread)
                         
                         # keep trying until we get one
-                        new_organism = creator.createOrganism(id_generator, composition_space, constraints)
+                        new_organism = creator.createOrganism(id_generator, composition_space, constraints, random)
                         while new_organism == None and not creator.is_finished:
-                            new_organism = creator.createOrganism(id_generator, composition_space, constraints)
+                            new_organism = creator.createOrganism(id_generator, composition_space, constraints, random)
             
                         # develop the organism
                         developed_org = development.develop(new_organism)
@@ -349,34 +528,31 @@ while not stopping_criteria.are_satisfied:
 
 
 
-
-
-
-
-
-
 # get an organism from the org creator (only one in this case)
-organism = None
-while organism == None:
+#organism = None
+#while organism == None:
     # generate an organism
-    organism = organism_creators[0].createOrganism(id_generator, composition_space, constraints)
+#    organism = organism_creators[0].createOrganism(id_generator, composition_space, constraints, random)
     # develop the organism
-    if organism != None:
-        geometry.unpad(organism, constraints)
-        developed_organism = development.develop(organism, composition_space, constraints, geometry, None)
-        if developed_organism == None:
-            organism = None
+#    if organism != None:
+#        geometry.unpad(organism, constraints)
+#        developed_organism = development.develop(organism, composition_space, constraints, geometry, None)
+#        if developed_organism == None:
+#            organism = None
 
 
 # pad the organism
-geometry.pad(developed_organism)
-print(developed_organism.structure)
-print('')
+#geometry.pad(developed_organism)
+#print(developed_organism.structure)
+#print('')
 # call the doEnergyCalculation method
-relaxed_organism = energy_calculator.doEnergyCalculation(developed_organism) 
-if relaxed_organism != None:
-    print(relaxed_organism.total_energy)
-    print(relaxed_organism.structure)           
+#relaxed_organism = energy_calculator.doEnergyCalculation(developed_organism) 
+#if relaxed_organism != None:
+#    print(relaxed_organism.total_energy)
+#    print(relaxed_organism.structure) 
+    
+    
+              
 
 # write out developed structure to cif or poscar so I can look at it
 #developed_organism.structure.to('poscar', '{}_dev.vasp'.format(developed_organism.id))
