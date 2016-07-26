@@ -260,10 +260,10 @@ else:
 variations = []
 
 # the default fractions for the variations
-default_mating_fraction = 0.7
+default_mating_fraction = 0.8
 default_structure_mut_fraction = 0.1
 default_num_stoichs_mut_fraction = 0.1
-default_permutation_fraction = 0.1
+default_permutation_fraction = 0.0
 
 # TODO: get rid of code duplication below
 # create the variation objects
@@ -362,7 +362,7 @@ else:
     elif parameters['Variations']['Permutation'] == None:
         # Permutation sub block was left blank
         print('If the "Permutation" flag is used, its "fraction" flag must also be set.')
-        print('Quittig...')
+        print('Quitting...')
         quit()
     else:
         # Permutation sub block was used is not empty. Check that the non-optional 'fraction' flag specifies a valid value
@@ -416,6 +416,7 @@ for v in variations:
     if v.name == 'NumStoichsMut':
         print(v.mu_num_adds)
         print(v.sigma_num_adds)
+        print(v.scale_volume)
         
     # these are just for Permutation variation
     if v.name == 'Permutation':
@@ -427,9 +428,9 @@ for v in variations:
 offspring = variations[0].doVariation(None, random, geometry, id_generator)
 
 # write out the offspring structure to a file so we can look at it
-offspring.structure.to('poscar', '/n/srv/brevard/structures/mating.vasp')
-print('')
-print(offspring.structure)
+offspring.structure.to('poscar', '/n/srv/brevard/structures/permutation.vasp')
+#print('')
+#print(offspring.structure)
         
 
 

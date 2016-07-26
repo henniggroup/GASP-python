@@ -12,9 +12,9 @@ CompositionSpace:
     
       - Al: 1 
 
-      - Cu: 1 
+      - Fe: 1 
 
-      - Zn: 1
+      - Co: 1
 
 
 
@@ -120,14 +120,14 @@ RunTitle: test # the title of run. Optional
 Variations: 
 
      # entire sub block is optional
-     Mating:
-          fraction: 1.0         # the fraction of the offspring organisms created with this variation. NOT optional
+#     Mating:
+#          fraction: 1.0         # the fraction of the offspring organisms created with this variation. NOT optional
 #          mu_cut_loc: 0.5       # the average location of the cut, in fractional coordinates, along a randomly chosen lattice vector. Optional, and defaults to 0.5
 #          sigma_cut_loc: 0.5    # the standard deviation of the location of the cut, in fractional coordinates, along a randomly chosen lattice vector. Optional, and defaults to TODO
 #          shift_prob: 1.0      # the probability that the atoms in the parent structures will be shifted along the lattice vector of the cut prior to the cut being made. Optional, and defaults to 1.0
                                 # note: the magnitude of the shift (in fractional coordinates) is drawn from a uniform distribution 
-          doubling_prob: 1.0    # probability of doubling one of the parent structures prior to mating. Optional, and defaults to TODO
-          grow_parents: True    # whether or not to grow the smaller parent (by taking supercell) to the approximate size the larger parent prior to doing the mating operation. Optional, and defaults to True 
+#          doubling_prob: 1.0    # probability of doubling one of the parent structures prior to mating. Optional, and defaults to TODO
+#          grow_parents: True    # whether or not to grow the smaller parent (by taking supercell) to the approximate size the larger parent prior to doing the mating operation. Optional, and defaults to True 
 
 
      # entire sub block is optional
@@ -141,18 +141,19 @@ Variations:
 
      # entire sub block is optional
 #     NumStoichsMut:
-#          fraction: 1.0     # the fraction of the offspring organisms to create with this variation. NOT optional
-#          mu_num_adds: 0    # mean number of stoichiometries worth of atoms to add. Optional, and defaults to 0
-#          sigma_num_adds: 1 # standard deviation of the number of stoichiometries worth of atoms to add. Optional, and defaults to TODO
+#          fraction: 1.0      # the fraction of the offspring organisms to create with this variation. NOT optional
+#          mu_num_adds: 0     # mean number of stoichiometries worth of atoms to add. Optional, and defaults to 0
+#          sigma_num_adds: 1  # standard deviation of the number of stoichiometries worth of atoms to add. Optional, and defaults to TODO
+#          scale_volume: True # whether to scale of the volume (per atom) of the offspring to equal that of the parent. Defaults to True
 
 
      # entire sub block is optional
-#     Permutation:
-#          fraction: 0.0      # the fraction of the offspring organisms to create with this variation. NOT optional
+     Permutation:
+          fraction: 1.0      # the fraction of the offspring organisms to create with this variation. NOT optional
 #          mu_num_swaps: 2    # average number of swaps to do per cell. Optional, and defaults to TODO
 #          sigma_num_swaps: 1 # the standard deviation of the number of swaps to do per cell. Optional, and defaults to TODO
 #          pairs_to_swap:     # which pairs of atomic species to allow swapping. Optional, and defaults to all possible pairs within the composition space
-#               - Al Cu        # for example...	
+#               - Al Fe        # for example...	
 #               - Al Zn
 
 

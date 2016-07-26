@@ -481,8 +481,6 @@ class Mating(Variation):
         
         Returns the resulting offspring as an Organism
         
-        TODO: does it make sense to always double along the shortest lattice vector for non-bulk geometries? It might bias the doubling to occur in a non-periodic direction...
-        
         Args:
             pool: the Pool of Organisms
             
@@ -518,14 +516,14 @@ class Mating(Variation):
                    the sites with fractional coordinate greater than the cut location.
         '''
         # for testing
-        structure_1 = Structure.from_file('/n/srv/brevard/structures/POSCAR.Cu_b')
-        structure_2 = Structure.from_file('/n/srv/brevard/structures/POSCAR.Ni_a')
-        parent_orgs = []
-        parent_orgs.append(Organism(structure_1, id_generator))
-        parent_orgs.append(Organism(structure_2, id_generator))
+        #structure_1 = Structure.from_file('/n/srv/brevard/structures/POSCAR.Cu_b')
+        #structure_2 = Structure.from_file('/n/srv/brevard/structures/POSCAR.Ni_a')
+        #parent_orgs = []
+        #parent_orgs.append(Organism(structure_1, id_generator))
+        #parent_orgs.append(Organism(structure_2, id_generator))
         
         # select two parent organisms from the pool
-        #parent_orgs = pool.selectOrganisms(2, random)
+        parent_orgs = pool.selectOrganisms(2, random)
         
         # print out a message
         print("Creating offspring from organisms {} and {} with mating variation.".format(parent_orgs[0].id, parent_orgs[1].id))
@@ -536,8 +534,6 @@ class Mating(Variation):
         
         # optionally double one of the parents
         if random.random() < self.doubling_prob:
-            # for testing
-            print('Doubling one of the parents')
             # pick the smallest parent (based on cell volume)
             vol_1 = parent_1.structure.lattice.volume
             vol_2 = parent_2.structure.lattice.volume
@@ -548,8 +544,6 @@ class Mating(Variation):
             
         # grow the smaller parent if specified
         if self.grow_parents:
-            # for testing
-            print('Growing one of the parents')
             # pick the smallest parent (based on cell volume)
             vol_1 = parent_1.structure.lattice.volume
             vol_2 = parent_2.structure.lattice.volume
@@ -787,36 +781,42 @@ class StructureMut(Variation):
             self.sigma_strain_matrix_element = structure_mut_params['sigma_strain_matrix_element']
         
     
-    def doVariation(self, pool, random, id_generator):
+    def doVariation(self, pool, random, geometry, id_generator):
         '''
-        Performs the mutation operation
+        Performs the structural mutation operation
         
-        Returns the resulting offspring as an organism.Organism
+        Returns the resulting offspring as an Organism
         
          Args:
             pool: the Pool of Organisms
             
             random: Python's built in PRNG
             
+            geometry: the Geometry object
+            
             id_generator: the IDGenerator
             
         Description:
-            This method calls the selectOrganism method of the pool to get a parent organism. It then copies the structure of the parent organism
-            and mutates it to create a structure for the offspring organism, which it then creates and returns. Both the coordinates of the sites 
-            and the lattice vectors are randomly perturbed.
+        
+            Creates an offspring organism by perturbing the atomic positions and lattice vectors of the parent structure
             
-            Each site has self.frac_atoms_perturbed chance of being perturbed. If a site is chosen to be perturbed, a distinct random perturbation 
-            is added to each of the site's three Cartesian coordinates. These random perturbations are drawn from a Gaussian with a mean of 0 and 
-            a standard deviation of self.sigma_atomic_coord_perturbation, and they are constrained to not exceed self.max_atomic_coord_perturbation
-            in magnitude.
-            
-            Perturbed lattice vectors are obtained by taking the product of each lattice vector with a strain matrix. The strain matrix is defined as
-            
-                I + E
+                1. Selects a parent organism from the pool and makes a copy of it
                 
-            where I is the 3x3 identity matrix and E is a 3x3 perturbation matrix whose elements are distinct and drawn from a Gaussian with mean 0 
-            and standard deviation self.sigma_strain_matrix_element and are constrained to be between -1 and 1. 
+                2. Perturbs the atomic coordinates of each site with probability self.frac_atoms_perturbed. The perturbation of each atomic
+                   coordinate is drawn from a Gaussian with mean zero and standard deviation self.sigma_atomic_coord_perturbation. The 
+                   magnitude of each atomic coordinate perturbation is constrained to not exceed self.max_atomic_coord_perturbation
+                   
+                3. The lattice vectors are perturbed by taking the product of each lattice vector with a strain matrix. The strain matrix is 
+                   defined as
+            
+                        I + E
+                
+                   where I is the 3x3 identity matrix and E is a 3x3 perturbation matrix whose elements are distinct and drawn from a Gaussian 
+                   with mean zero and standard deviation self.sigma_strain_matrix_element and are constrained to lie between -1 and 1 
         ''' 
+        # just for testing, read in a structure from a file
+        #structure = Structure.from_file('/n/srv/brevard/structures/POSCAR.NaCl')
+        
         # select a parent organism from the pool
         parent_org = pool.selectOrganisms(1, random)
         
@@ -825,11 +825,6 @@ class StructureMut(Variation):
         
         # make a deep copy of the structure of the parent organism, so that the subsequent mutation doesn't affect the structure of the parent
         structure = copy.deepcopy(parent_org.structure)
-        
-        # just for testing, read in a structure from a file
-        #structure = Structure.from_file('/n/srv/brevard/structures/POSCAR.NaCl')
-        #print('')
-        #print(structure)
         
         # for each site in the structure, determine whether to perturb it or not
         for site in structure.sites:
@@ -867,9 +862,6 @@ class StructureMut(Variation):
         row_3 = [epsilons[6], epsilons[7], 1 + epsilons[8]]
         strain_matrix = np.array([row_1, row_2, row_3])
         
-        print('')
-        print(strain_matrix)
-        
         # compute new lattice vectors by applying the strain matrix to the lattice vectors
         new_a = strain_matrix.dot(structure.lattice.matrix[0])
         new_b = strain_matrix.dot(structure.lattice.matrix[1])
@@ -894,8 +886,6 @@ class NumStoichsMut(Variation):
     '''
     An operator that creates an offspring organism by mutating the number of stoichiometries' worth of atoms 
     in the parent organism.
-    
-    This class is a singleton.
     '''
     def __init__(self, num_stoichs_mut_params):
         '''
@@ -916,6 +906,7 @@ class NumStoichsMut(Variation):
         # TODO: are these good default values?
         self.default_mu_num_adds = 0     # the average number of stoichimetries to add
         self.default_sigma_num_adds = 1  # the standard deviation of the number of stoichiometries to add
+        self.default_scale_volume = True # whether to scale the volume of the offspring to equal that of the parent
         
         # the average number of stoichiometries to add
         if 'mu_num_adds' not in num_stoichs_mut_params:
@@ -927,9 +918,6 @@ class NumStoichsMut(Variation):
         else:
             # otherwise, parse the value from the parameters
             self.mu_num_adds = num_stoichs_mut_params['mu_num_adds']
-            
-        # parse the fraction from the parameters. This argument is not optional, so it doesn't have a default value here
-        self.fraction = num_stoichs_mut_params['fraction']
         
         # the standard deviation of the number of stoichiometries
         if 'sigma_num_adds' not in num_stoichs_mut_params:
@@ -941,43 +929,114 @@ class NumStoichsMut(Variation):
         else:
             # otherwise, parse the value from the parameters
             self.sigma_num_adds = num_stoichs_mut_params['sigma_num_adds']
+            
+        # whether to scale the volume of the offspring
+        if 'scale_volume' not in num_stoichs_mut_params:
+            # use the default value if the flag hasn't been used
+            self.scale_volume = self.default_scale_volume
+        elif num_stoichs_mut_params['scale_volume'] == None or num_stoichs_mut_params['scale_volume'] == 'default':
+            # use the default value if the flag was left blank or set to 'default'
+            self.scale_volume = self.default_scale_volume
+        else:
+            # otherwise, parse the value from the parameters
+            self.scale_volume = num_stoichs_mut_params['scale_volume']
         
     
-    def doVariation(self, pool, random, id_generator):
+    def doVariation(self, pool, random, geometry, id_generator):
         '''
-        Performs the numstoichsmut operation, as described in ref. TODO
+        Performs the number of stoichiometries mutation operation
         
-        Returns the resulting offspring as an organism.Organism
+        Returns the resulting offspring as an Organism
         
         Args:
             pool: the Pool of Organisms 
             
             random: Python's built in PRNG
             
+            geometry: the Geometry object
+            
             id_generator: the IDGenerator
+            
+        Description:
+        
+            Creates an offspring organism by adding or removing a random number of stoichiometries' worth of atoms to or from the parent structure.
+            
+                1. Selects a parent organism from the pool and makes a copy of it
+                
+                2. Computes the number of stoichiometries to add or remove by drawing from a Gaussian with mean self.mu_num_adds and standard deviation
+                   self.sigma_num_adds and rounding the result to the nearest integer
+                   
+                3. Computes the number of atoms of each type to add or remove, and does the additions or removals
+                
+                4. If self.scale_volume is True, scales the new structure to have the same volume per atom as the parent 
         '''
-        # TODO: finish implementing me
+        # just for testing, read in a structure from a file
+        #structure = Structure.from_file('/n/srv/brevard/structures/POSCAR.NaCl')
+        #parent_org = Organism(structure, id_generator)
         
         # select a parent organism from the pool
         parent_org = pool.selectOrganisms(1, random)
         
-        # make a deep copy of the structure of the parent organism, so that the subsequent mutation doesn't affect the structure of the parent
+        # print out a message
+        print("Creating offspring from organism {} via number of stoichiometries mutation.".format(parent_org.id))
+        
+        # make a deep copy of the structure of the parent organism
         structure = copy.deepcopy(parent_org.structure)
+        # get the total number of atoms in the parent
+        parent_num_atoms = len(structure.sites)
+        # get the reduced composition of the parent
+        reduced_composition = structure.composition.reduced_composition
+        # get the volume per atom of the parent
+        vol_per_atom = structure.lattice.volume/len(structure.sites)
         
-        # compute the number of stoichiometries to add
-        num_add = random.gauss(self.mu_num_adds, self.sigma_num_adds)
+        # loop needed here in case no atoms got added or removed, in which case need to try again. 
+        # this happens if the randomly chosen number of atoms to remove exceeds the number of atoms in the cell
+        while len(structure.sites) == parent_num_atoms:
         
-        # round num_add to nearest non-zero integer
+            # compute the number of stoichiometries to add or remove, and make sure it's not zero
+            num_add = int(round(random.gauss(self.mu_num_adds, self.sigma_num_adds)))
+            while num_add == 0:
+                num_add = int(round(random.gauss(self.mu_num_adds, self.sigma_num_adds)))
+            
+            # compute the number of each type of atom to add (or remove), and also the total number of atoms to add or remove
+            amounts_to_add = {}
+            total_add = 0
+            for key in reduced_composition:
+                amounts_to_add[key] = int(num_add*reduced_composition[key])
+                total_add = total_add + int(num_add*reduced_composition[key])
         
-        # compute the number of each type of atom to add (or remove from num_add and the composition of the parent
+            # if num_add is positive, put the new atoms in the cell at random locations
+            if num_add > 0:
+                for key in amounts_to_add:
+                    for _ in range(amounts_to_add[key]):
+                        frac_coords = [random.random(), random.random(), random.random()]
+                        structure.append(Specie(key, 0), frac_coords) 
+                # to remove the oxidation state of 0 we had to specify above in the structure.append() method
+                structure.remove_oxidation_states()
+                # to make sure all the atoms of the same element are listed consecutively, so they get printed consecutively in the poscar file
+                structure.sort()
         
-        # if num_add is positive, put the new atoms in the cell at random locations
+            # if num_adds is negative and the structure contains enough atoms, randomly remove the right number of atoms of each element 
+            elif num_add < 0 and -1*total_add < len(structure.sites):
+                site_indices_to_remove = [] # a list to hold the indices of the sites to remove
+                for key in amounts_to_add:
+                    for _ in range(0, -1*amounts_to_add[key]):
+                        # pick a random site in the structure that has the right element and that hasn't already been picked
+                        random_site = random.choice(structure.sites)
+                        while str(random_site.specie.symbol) != str(key) or structure.sites.index(random_site) in site_indices_to_remove:
+                            random_site = random.choice(structure.sites)
+                        # record the index to of the site that has been designated for removal
+                        site_indices_to_remove.append(structure.sites.index(random_site))
+                # remove the chosen sites
+                structure.remove_sites(site_indices_to_remove)
         
-        # possible increase the volume of the cell after the atoms have been added
-        
-        # if num_adds is negative, randomly remove the right number of atoms of each species from the cell. The Structure class of pymatgen might have useful methods for this
+        # optionally scale the volume after the atoms have been added or removed
+        if self.scale_volume:
+            structure.scale_lattice(vol_per_atom*len(structure.sites))
         
         # create a new organism from the structure and return it
+        offspring = Organism(structure, id_generator)
+        return offspring
         
         
         
@@ -1003,6 +1062,10 @@ class Permutation(Variation):
         
         # parse the fraction from the parameters. This argument is not optional, so it doesn't have a default value here
         self.fraction = permutation_params['fraction']
+        
+        # the max number of times to try getting a parent organism from the pool that can undergo at least one swap
+        # this could be a problem if, e.g., the composition space is a single pure element but the Permutation variation has non-zero fraction
+        self.max_num_selects = 1000
         
         # the default values
         # TODO: are these good default values?
@@ -1044,41 +1107,127 @@ class Permutation(Variation):
             self.pairs_to_swap = permutation_params['pairs_to_swap']
     
     
-    def doVariation(self, pool, random, id_generator):
+    def doVariation(self, pool, random, geometry, id_generator):
         '''
-        Performs the permutation operation, as described in ref. TODO
+        Performs the permutation operation
         
-        Returns the resulting offspring as an organism.Organism
+        Returns the resulting offspring as an Organism, or None if no offspring could be created
         
         Args:
             pool: the Pool of Organisms
         
             random: Python's built in PRNG
             
+            geometry: the Geometry object
+            
             id_generator: the IDGenerator
+            
+        Description:
+            
+            Creates and offspring organism by swapping the elements of some of the sites in the parent structure.
+            
+                1. Selects a parent organism from the pool that is able to have at least one of the allowed swaps done on it
+                
+                2. Computes the number of swaps to try to do by drawing from a Gaussian with mean self.mu_num_swaps and standard
+                   deviation self.sigma_num_swaps and rounding to the nearest integer
+                   
+                3. Tries to do the computed number of allowed swaps by randomly selecting an allowed pair to swap and then randomly 
+                   selecting sites in the structure with elements of the allowed pair. This is repeated until either the computed 
+                   number of swaps have been done or no more swaps are possible with the parent structure
+                    
         '''
-        # TODO: finish implementing me
+        # just for testing, read in a structure from a file
+        #structure = Structure.from_file('/n/srv/brevard/structures/POSCAR.AlFeCo2')
+        #parent_org = Organism(structure, id_generator)
         
         # select a parent organism from the pool
         parent_org = pool.selectOrganisms(1, random)
-        
-        # make a deep copy of the structure of the parent organism, so that the subsequent mutation doesn't affect the structure of the parent
+        # make a deep copy of the structure of the parent organism
         structure = copy.deepcopy(parent_org.structure)
-        
-        # compute the number of swaps to do
-        num_swaps = random.gauss(self.mu_num_swaps, self.sigma_num_swaps)
-        
-        # round num_swaps to the nearest positive integer
-        
-        # for each swap, select a distinct pair of atoms in the parent structure that are in self.pairs_to_swap. Will need to check for both possible pair orderings
-        
-        # note: this could completely or partially fail. The structure could not have any of the allowed pairs to swap, or not enough to do num_swaps swaps
-        # In the first case, should probably just select a new parent from the pool and try again
-        # In the second case, it probably ok if num_swaps swaps can't be done, as long as at least one swap can be done
+        # keep trying until we get a parent that has at least one possible swap
+        possible_swaps = self.getPossibleSwaps(structure)
+        num_selects = 0
+        while len(possible_swaps) == 0 and num_selects < self.max_num_selects:
+            # select a parent organism from the pool
+            parent_org = pool.selectOrganisms(1, random)
+            # make a deep copy of the structure of the parent organism
+            structure = copy.deepcopy(parent_org.structure)
+            possible_swaps = self.getPossibleSwaps(structure)
+            num_selects = num_selects + 1
+            
+        # if the maximum number of selections have been made, then this isn't working and it's time to stop
+        if num_selects >= self.max_num_selects:
+            return None
+            
+        # print out a message
+        print("Creating offspring from organism {} via permutation.".format(parent_org.id))
+            
+        # compute a positive random number of swaps to do
+        num_swaps = int(round(random.gauss(self.mu_num_swaps, self.sigma_num_swaps)))
+        while num_swaps <= 0:
+            num_swaps = int(round(random.gauss(self.mu_num_swaps, self.sigma_num_swaps)))
+            
+        # try to select the computed number of swaps
+        num_swaps_selected = 0 # how many swaps have been selected to do 
+        pair_indices = [] # list hold the indices of the pair of atoms in each swap
+        structure_to_check = copy.deepcopy(structure) # copy that we can remove atoms from to recompute possible swaps
+        # keep getting more swaps until either we've got enough or no more swaps are possible
+        while num_swaps_selected < num_swaps and len(possible_swaps) > 0:
+            # pick a random pair to swap that we know is possible
+            swap = random.choice(possible_swaps)
+            symbols = swap.split()
+            # keep trying until we find a site with the first element in the pair
+            site_1 = random.choice(structure_to_check.sites)
+            while str(site_1.specie.symbol) != symbols[0]:
+                site_1 = random.choice(structure_to_check.sites)
+            # keep trying until we find a site with the second element in the pair
+            site_2 = random.choice(structure_to_check.sites)
+            while str(site_2.specie.symbol) != symbols[1]:
+                site_2 = random.choice(structure_to_check.sites)
+            # record the indices (w.r.t. to the unchanged structure) for this pair of sites
+            pair_index = [structure.sites.index(site_1), structure.sites.index(site_2)]
+            pair_indices.append(pair_index)
+            num_swaps_selected = num_swaps_selected + 1
+            # remove these two sites from the structure to check 
+            structure_to_check.remove_sites([structure_to_check.sites.index(site_1), structure_to_check.sites.index(site_2)])
+            # update the possible swaps
+            possible_swaps = self.getPossibleSwaps(structure_to_check)
         
         # do the swaps with the selected pairs
+        for pair_index in pair_indices:
+            species_1 = structure.sites[pair_index[0]].specie
+            species_2 = structure.sites[pair_index[1]].specie
+            structure.replace(pair_index[0], species_2)
+            structure.replace(pair_index[1], species_1)
         
         # make a new organism from the structure and return it
+        offspring = Organism(structure, id_generator)
+        return offspring
+        
+        
+    def getPossibleSwaps(self, structure):
+        '''
+        Returns a list of swaps that are possible to do, based on what atoms are in the cell and which pairs are list in self.pairs_to_swap.
+        The returned list is a sublist of self.pairs_to_swap. Does not change the structure.
+        
+        Args:
+            structure: the Structure object to check.
+        '''
+        possible_pairs = [] # list to hold the possible pairs that could be swapped in the structure
+        for pair in self.pairs_to_swap:
+            symbols = pair.split()
+            # check if the structure contains the elements in the chosen pair
+            has_element_1 = False
+            has_element_2 = False
+            for site in structure.sites:
+                if str(site.specie.symbol) == symbols[0]:
+                    has_element_1 = True
+                if str(site.specie.symbol) == symbols[1]:
+                    has_element_2 = True
+            # append the pair if both elements were found in the structure
+            if has_element_1 and has_element_2:
+                possible_pairs.append(pair)
+        return possible_pairs
         
         
         
@@ -1551,7 +1700,7 @@ class CompositionSpace(object):
             
     def get_all_pairs(self):
         '''
-        Returns all possible pairs of elements in the composition space, as list of strings, where each string contains the symbols of two separate elements. 
+        Returns all possible pairs of elements in the composition space, as list of strings, where each string contains the symbols of two elements, separated by a space. 
         
         Does not include self-pairs (e.g., "Cu Cu")
         '''
