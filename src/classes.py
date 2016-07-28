@@ -22,6 +22,8 @@ from os.path import isfile, join, exists
 import numpy as np
 import copy
 import math
+import time
+import subprocess
 from numpy import inf, Inf
 from pymatgen.util.convergence import id_generator
 
@@ -57,7 +59,7 @@ class Organism(object):
     '''
     An organism
     '''
-    def __init__(self, structure, id_generator):
+    def __init__(self, structure, id_generator, maker):
         '''
         Creates an organism
         
@@ -65,6 +67,8 @@ class Organism(object):
             structure: The structure of this organism, as a pymatgen.core.structure.Structure
             
             id_generator: the instance of IDGenerator used to assign id numbers to all organisms
+            
+            maker: the name of algorithm that made the organism, as a string. Either a creator or variation
         '''
         # initialize instance variables
         self.structure = structure
@@ -76,6 +80,7 @@ class Organism(object):
         self.select_prob = None # the selection probability of this organism. Ranges from 0 to 1, including both endpoints
         self.is_active = False # whether this organism is currently part of the pool or initial population
         self._id = id_generator.makeID(); # unique id number for this organism. Should not be changed.
+        self.made_by = maker   # the name of the algorithm that made this organism - either one of the creators or one of the variations. Should be set each time a new organism is made
     
     # this keeps the id (sort of) immutable by causing an exception to be raised if the user tries to 
     # the set the id with org.id = some_id.
@@ -405,7 +410,7 @@ class Mating(Variation):
         Precondition: the 'fraction' parameter in mating_params is not optional, and it is assumed that mating_params contains this parameter 
         '''
         # the name of this variation
-        self.name = 'Mating'
+        self.name = 'mating'
         
         # parse the fraction from the parameters. This argument is not optional, so it doesn't have a default value here
         self.fraction = mating_params['fraction']
@@ -612,7 +617,7 @@ class Mating(Variation):
         offspring_structure = Structure(offspring_lattice, offspring_species, offspring_frac_coords) 
         
         # make the offspring organism from the offspring structure, and return it
-        offspring = Organism(offspring_structure, id_generator)
+        offspring = Organism(offspring_structure, id_generator, self.name)
         return offspring
     
     
@@ -722,7 +727,7 @@ class StructureMut(Variation):
         Precondition: the 'fraction' parameter in structure_mut_params is not optional, and it is assumed that structure_mut_params contains this parameter
         '''    
         # the name of this variation
-        self.name = 'StructureMut'
+        self.name = 'structure mutation'
         
         # parse the fraction from the parameters. This argument is not optional, so it doesn't have a default value here
         self.fraction = structure_mut_params['fraction']
@@ -872,7 +877,7 @@ class StructureMut(Variation):
         structure.modify_lattice(new_lattice)
         
         # make a new offspring organism
-        offspring = Organism(structure, id_generator)
+        offspring = Organism(structure, id_generator, self.name)
         
         # make sure all the site are within the cell (some of them could have been pushed outside by the atomic coordinate perturbations)
         offspring.translateAtomsIntoCell()
@@ -897,7 +902,7 @@ class NumStoichsMut(Variation):
         Precondition: the 'fraction' parameter in num_stoichs_mut_params is not optional, and it is assumed that num_stoichs_mut_params contains this parameter
         '''
         # the name of this variation
-        self.name = 'NumStoichsMut'
+        self.name = 'number of stoichiometries mutation'
         
         # parse the fraction from the parameters. This argument is not optional, so it doesn't have a default value here
         self.fraction = num_stoichs_mut_params['fraction']
@@ -1035,7 +1040,7 @@ class NumStoichsMut(Variation):
             structure.scale_lattice(vol_per_atom*len(structure.sites))
         
         # create a new organism from the structure and return it
-        offspring = Organism(structure, id_generator)
+        offspring = Organism(structure, id_generator, self.name)
         return offspring
         
         
@@ -1058,7 +1063,7 @@ class Permutation(Variation):
         Precondition: the 'fraction' parameter in permutation_params is not optional, and it is assumed that permutation_params contains this parameter
         '''
         # the name of this variation
-        self.name = 'Permutation'
+        self.name = 'permutation'
         
         # parse the fraction from the parameters. This argument is not optional, so it doesn't have a default value here
         self.fraction = permutation_params['fraction']
@@ -1201,7 +1206,7 @@ class Permutation(Variation):
             structure.replace(pair_index[1], species_1)
         
         # make a new organism from the structure and return it
-        offspring = Organism(structure, id_generator)
+        offspring = Organism(structure, id_generator, self.name)
         return offspring
         
         
@@ -1754,7 +1759,10 @@ class RandomOrganismCreator(OrganismCreator):
             
             random: Python's PRNG
         '''
+        # the name of this creator
+        self.name = 'random organism creator'
         # the default number of random organisms to make
+        # TODO: are these good values?
         if composition_space.objective_function == 'epa':
             self.default_number = 30
         elif composition_space.objective_function == 'pd':
@@ -1828,8 +1836,9 @@ class RandomOrganismCreator(OrganismCreator):
             reduced_formula = composition_space.endpoints[0].reduced_composition
             num_atoms_in_formula = reduced_formula.num_atoms
             max_num_formulas = int(constraints.max_num_atoms/num_atoms_in_formula)
+            min_num_formulas = int(constraints.min_num_atoms/num_atoms_in_formula)
             # get a random number of formula units, and the resulting random number of atoms
-            random_num_formulas = random.randint(1, max_num_formulas)
+            random_num_formulas = random.randint(min_num_formulas, max_num_formulas)
             num_atoms = int(random_num_formulas*num_atoms_in_formula)
             # add the right number of each element
             elements = []
@@ -1903,7 +1912,8 @@ class RandomOrganismCreator(OrganismCreator):
             random_structure.scale_lattice(self.volume*len(random_structure.sites(self)))  
         
         # return a random organism with the scaled random structure
-        random_org = Organism(random_structure, id_generator)
+        random_org = Organism(random_structure, id_generator, self.name)
+        print('Random organism creator making organism {}'.format(random_org.id))
         return random_org
     
     
@@ -1912,6 +1922,7 @@ class RandomOrganismCreator(OrganismCreator):
         Increments num_made, and if necessary, updates is_finished
         '''
         self.num_made = self.num_made + 1
+        print('Organisms left for {}: {}'.format(self.name, self.number - self.num_made))
         if self.num_made == self.number:
             self.is_finished = True
                 
@@ -1929,9 +1940,12 @@ class FileOrganismCreator(OrganismCreator):
             path_to_folder: the path to the folder containing the files from which to make organisms
                             Precondition: the folder exists and contains files
         '''
+        # the name of this creator
+        self.name = 'file organism creator'
         # all the files in the given folder
         self.path_to_folder = path_to_folder
         self.files = [f for f in listdir(self.path_to_folder) if isfile(join(self.path_to_folder, f))]
+        self.number = len(self.files)
       
         # variables to keep track of how many have been made, when to stop, and if this creator is finished   
         # for a file organism creator, num_made is defined as the number of attempts to make organisms from files (usually the number of files provided)
@@ -1959,18 +1973,23 @@ class FileOrganismCreator(OrganismCreator):
               to allow the createOrganism method to be called on both RandomOrganismCreator and FileOrganismCreator without having to know in advance which one it is.
               Maybe there's a better way to deal with this...
         '''
-        # update status each time the method is called, since this is an attempts-based creator
-        self.updateStatus()
         # TODO: This is kind of annoying. Maybe contact pymatgen and ask if they can add support for files ending in .POSCAR instead of only files starting with POSCAR 
         if self.files[self.num_made - 1].endswith('.cif') or self.files[self.num_made - 1].startswith('POSCAR'):
             try:
                 new_struct = Structure.from_file(str(self.path_to_folder) + "/" + str(self.files[self.num_made - 1]))
+                new_org = Organism(new_struct, id_generator, self.name)
+                print('Making organism {} from file: {}'.format(new_org.id, self.files[self.num_made - 1]))
+                # update status each time the method is called, since this is an attempts-based creator
+                self.updateStatus()
+                return new_org
             # return None if a structure couldn't be read from a file
-            except ValueError:
+            except:
+                print('Error reading structure from file: {}'.format(self.files[self.num_made - 1])) 
+                self.updateStatus()
                 return None
-            return Organism(new_struct)
         else:
-            print('Invalid file extension: file must end in .cif or begin with POSCAR')
+            print('File {} has invalid extension - file must end with .cif or begin with POSCAR'.format(self.files[self.num_made - 1]))
+            self.updateStatus()
             return None
         
         
@@ -1979,6 +1998,7 @@ class FileOrganismCreator(OrganismCreator):
         Increments num_made, and if necessary, updates is_finished
         '''
         self.num_made = self.num_made + 1
+        print('Organisms left for {}: {}'.format(self.name, self.number - self.num_made))
         if self.num_made == len(self.files):
             self.is_finished = True
         
@@ -2011,8 +2031,8 @@ class RedundancyGuard(object):
         self.default_use_primitive_cell = True
         # whether to check if structures are equivalent to supercells of each other
         self.default_attempt_supercell = True
-        # the d-value interval
-        self.default_d_value = None
+        # the epa difference interval
+        self.default_epa_diff = 0.0
         
         # parse the parameters, and set to defaults if necessary
         if redundancy_parameters == None or redundancy_parameters == 'default':
@@ -2065,13 +2085,13 @@ class RedundancyGuard(object):
                 self.attempt_supercell = self.default_attempt_supercell
                 
             # d-value
-            if 'd_value' in redundancy_parameters:
-                if redundancy_parameters['d_value'] == None or redundancy_parameters['d_value'] == 'default':
-                    self.d_value = self.default_d_value
+            if 'epa_diff' in redundancy_parameters:
+                if redundancy_parameters['epa_diff'] == None or redundancy_parameters['epa_diff'] == 'default':
+                    self.epa_diff = self.default_epa_diff
                 else:
-                    self.d_value = redundancy_parameters['d_value']
+                    self.epa_diff = redundancy_parameters['epa_diff']
             else:
-                self.d_value = self.default_d_value
+                self.epa_diff = self.default_epa_diff
         
         # make the StructureMatcher object
         # The first False is to prevent the matcher from scaling the volumes, and the second False is to prevent subset matching
@@ -2087,7 +2107,7 @@ class RedundancyGuard(object):
         self.site_tol = self.default_site_tol
         self.use_primitive_cell = self.default_use_primitive_cell
         self.attempt_supercell = self.default_attempt_supercell
-        self.d_value = self.default_d_value
+        self.epa_diff = self.default_epa_diff
     
         
     def checkRedundancy(self, new_organism, whole_pop):
@@ -2102,14 +2122,14 @@ class RedundancyGuard(object):
             whole_pop: the list containing all organisms to check against
         '''
         for organism in whole_pop:
-            # check if their structures match
-            if self.structure_matcher.fit(new_organism.structure, organism.structure):
-                print("Organism {} failed structural redundancy - looks like organism {}.".format(new_organism.id, organism.id))
+            # check if their structures match, and also make sure they have different id's. This is needed because copies of both relaxed and unrelaxed organisms are added to whole_pop
+            if self.structure_matcher.fit(new_organism.structure, organism.structure) and new_organism.id != organism.id:
+                print("Organism {} failed structural redundancy - looks like organism {}".format(new_organism.id, organism.id))
                 return organism
-            # if specified and both have values, check if their values match within d-value
-            if self.d_value != None and new_organism.value != None and organism.value != None:
-                if abs(new_organism.value - organism.value) < self.d_value:
-                    print("Organism {} failed value redundancy - looks like organism {}.".format(new_organism.id, organism.id))
+            # if specified and both have epa's, check if their epa's match within the epa difference interval
+            if self.epa_diff > 0 and new_organism.epa != None and organism.epa != None:
+                if abs(new_organism.epa - organism.epa) < self.epa_diff:
+                    print("Organism {} failed epa redundancy - looks like organism {}".format(new_organism.id, organism.id))
                     return organism    
         # should only get here if no organisms are redundant with the new organism
         return None    
@@ -2131,7 +2151,7 @@ class Constraints(object):
         '''
         # default values
         # TODO: are these reasonable?
-        self.default_min_num_atoms = 2
+        self.default_min_num_atoms = 1
         self.default_max_num_atoms = 50
         self.default_min_lattice_length = 0.5
         self.default_max_lattice_length = 20
@@ -2341,12 +2361,12 @@ class Development(object):
         '''
         # check max num atoms constraint
         if len(organism.structure.sites) > constraints.max_num_atoms:
-            print("Organism {} failed max number of atoms constraint.".format(organism.id))
+            print("Organism {} failed max number of atoms constraint".format(organism.id))
             return None
             
         # check min num atoms constraint
         if len(organism.structure.sites) < constraints.min_num_atoms:
-            print("Organism {} failed min number of atoms constraint.".format(organism.id))
+            print("Organism {} failed min number of atoms constraint".format(organism.id))
             return None
         
         # check if the organism has the right composition for fixed-composition searches
@@ -2355,7 +2375,7 @@ class Development(object):
             reduced_composition = composition_space.endpoints[0].reduced_composition
             org_reduced_composition = organism.composition.reduced_composition
             if not reduced_composition.almost_equals(org_reduced_composition):
-                print("Organism {} has incorrect composition.".format(organism.id))
+                print("Organism {} has incorrect composition".format(organism.id))
                 return None
         
         # check if the organism is in the composition space for phase-diagram searches
@@ -2372,14 +2392,14 @@ class Development(object):
             composition_checker = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
             # use the CompoundPhaseDiagram to check if the organism is in the composition space by seeing how many entries it returns
             if len(composition_checker.transform_entries(pdentries, composition_space.endpoints)[0]) == len(composition_space.endpoints):
-                print("Organism {} is outside the composition space.".format(organism.id))
+                print("Organism {} is outside the composition space".format(organism.id))
                 return None
             else:
                 # check the endpoints if specified and if we're not making the initial population
                 if constraints.allow_endpoints == False and pool != None:
                     for endpoint in composition_space.endpoints:
                         if endpoint.almost_equals(organism.composition):
-                            print("Organism {} is at a composition endpoint.".format(organism.id))
+                            print("Organism {} is at a composition endpoint".format(organism.id))
                             return None
                         
         # optionally do Niggli cell reduction 
@@ -2404,7 +2424,7 @@ class Development(object):
                      
         # optionally scale the density to the average of the densities of the organisms in the promotion set 
         # TODO: test this once Pool has been implemented
-        if self.scale_density and composition_space.objective_function == "epa" and pool != None and organism.value == None:
+        if self.scale_density and composition_space.objective_function == "epa" and pool != None and organism.epa == None:
             # get average volume per atom of the organisms in the promotion set
             vpa_sum = 0
             for org in pool.promotionSet:
@@ -2420,7 +2440,7 @@ class Development(object):
         lengths = organism.structure.lattice.abc
         for length in lengths:
             if length > constraints.max_lattice_length:
-                print("Organism {} failed max lattice length constraint.".format(organism.id))
+                print("Organism {} failed max lattice length constraint".format(organism.id))
                 return None
             elif length < constraints.min_lattice_length:
                 print("Organism {} failed min lattice length constraint".format(organism.id))
@@ -2430,10 +2450,10 @@ class Development(object):
         angles = organism.structure.lattice.angles
         for angle in angles:
             if angle > constraints.max_lattice_angle:
-                print("Organism {} failed max lattice angle constraint.".format(organism.id))
+                print("Organism {} failed max lattice angle constraint".format(organism.id))
                 return None
             elif angle < constraints.min_lattice_angle:
-                print("Organism {} failed min lattice angle constraint.".format(organism.id))
+                print("Organism {} failed min lattice angle constraint".format(organism.id))
                 return None
             
         # check the per-species minimum interatomic distance constraints
@@ -2452,17 +2472,17 @@ class Development(object):
                 # check each neighbor in the sphere to see if it has the forbidden type
                 for neighbor in neighbors:
                     if neighbor[0].specie.symbol == species_symbol:
-                        print("Organism {} failed per-species minimum interatomic distance constraint.".format(organism.id))
+                        print("Organism {} failed per-species minimum interatomic distance constraint".format(organism.id))
                         return None
             
         # check the max size constraint (can only fail for non-bulk geometries)
         if geometry.getSize(organism) > geometry.max_size:
-            print("Organism {} failed max size constraint.".format(organism.id))
+            print("Organism {} failed max size constraint".format(organism.id))
             return None
         
         # check the min size constraint (can only fail for non-bulk geometries)
         if geometry.getSize(organism) < geometry.min_size:
-            print("Organism {} failed min size constraint.".format(organism.id))
+            print("Organism {} failed min size constraint".format(organism.id))
             return None
         
         # return the organism if it survived
@@ -2648,20 +2668,22 @@ class GulpEnergyCalculator(object):
         self.gulp_caller = GulpCaller(cmd = 'callgulp')
     
     
-    def doEnergyCalculation(self, organism):
+    def doEnergyCalculation(self, organism, dictionary, key):
         '''
-        Calculates the energy of an organism using GULP
-        
-        Returns an organism that has been parsed from the output files of the energy code, or None if the calculation 
-        failed. Does not do development or redundancy checking.
+        Calculates the energy of an organism using GULP, and stores the relaxed organism in the provided dictionary at the provided key. 
+        If the calculation fails, stores None in the dictionary instead.
         
         Args:
             organism: the organism whose energy we want to calculate
             
+            dictionary: a dictionary in which to store the relaxed organism
+            
+            key: the key specifying where to store the relaxed organism in the dictionary
+            
         Precondition: the garun directory and temp subdirectory exist
         
         TODO: might be better to eventually use the custodian package for error handling instead of catching the exceptions that GulpCaller.run throws. Then we wouldn't need 
-        GulpCaller at all, and can just call the external callvasp script directly, as a subprocess...
+        GulpCaller at all, and can just call the external callgulp script directly, as a subprocess...
         '''
         # make the job directory
         job_dir_path = str(getcwd()) + '/' + str(self.run_dir_name) + '/temp/' + str(organism.id)
@@ -2674,45 +2696,183 @@ class GulpEnergyCalculator(object):
         gulp_input = self.header + structure_lines + self.potential
         
         # print gulp input to a file for user's reference 
-        gin_file = open(job_dir_path + '/' + str(organism.id) + '.gin', 'w')
+        gin_path = job_dir_path + '/' + str(organism.id) + '.gin'
+        gin_file = open(gin_path, 'w')
         gin_file.write(gulp_input)
+        gin_file.close()
         
         # run gulp by calling external callgulp script via GulpCaller.run() and store the output as a string
+        print('Starting Gulp calculation on organism {}'.format(organism.id))
+        
+        
+        # TODO: this is annoying for two reasons. First, if an exception is thrown, then GulpCaller.run prints out the entire gulp output, which we don't want cluttering our
+        # gasp output file. The second reason is that if an exception gets thrown, the gulp output isn't printed to a file. We really want to print the output to a file so
+        # the user can look at it to trouble shoot.
+        #
+        # Better solution: run gulp with callgulp and print output to a file. If trouble parsing the structure or energy from the output, then print an error message. 
+        #try:
+        #    gulp_output = self.gulp_caller.run(gulp_input)
+        #except GulpConvergenceError:
+        #    print('Gulp calculation on organism {} did not converge properly'.format(organism.id))
+        #    dictionary[key] = None
+        #    return
+        #except:
+        #    print('Error during Gulp calculation on organism {}'.format(organism.id))
+        #    dictionary[key] = None
+        #    return
+        
         try:
-            gulp_output = self.gulp_caller.run(gulp_input)
-        except GulpConvergenceError:
-            print('Gulp calculation on organism {} did not converge properly.'.format(organism.id))
-            return None
-        except GulpError:
-            print('Error during Gulp calculation on organism {}.'.format(organism.id))
-            return None
+            # TODO: sometimes this fails catastrophically. Fix it - look at how GulpCaller.run is implemented - it did't have this problem
+            gulp_output = subprocess.check_output(['callgulp', gin_path])
+        except:
+            print('Error running Gulp on organism {}'.format(organism.id))
+            dictionary[key] = None
+            return
         
         # print gulp output to a file for user's reference 
         gout_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')
         gout_file.write(gulp_output)
        
-        # parse the relaxed structure and total energy from the gulp output
+        # TODO: could check for convergence here too
+       
+        # parse the relaxed structure from the gulp output
         try:
-            relaxed_structure = self.gulp_io.get_relaxed_structure(gulp_output)
+            # TODO: will have to change this line if pymatgen fixes the gulp parser
+            relaxed_structure = self.get_relaxed_structure(gulp_output)
         except IOError:
-            print('Error reading structure of organism {} from Gulp output.'.format(organism.id))
-            return None
+            print('Error reading structure of organism {} from Gulp output'.format(organism.id))
+            dictionary[key] = None
+            return
+        
+        # parse the total energy from the gulp output
         try:
             total_energy = self.gulp_io.get_energy(gulp_output)
         except IOError:
             print('Error reading energy of organism {} from Gulp output'.format(organism.id))
-            return None
-            
+            dictionary[key] = None
+            return
         
+        # parse the number of atoms used by gulp from the gulp output (sometimes gulp takes a supercell)
+        num_atoms = self.getNumAtoms(gulp_output)
+            
+        # for testing
+        relaxed_structure.to('poscar', job_dir_path + '/' + str(organism.id) + '.vasp')
+            
         # assign the relaxed structure and energy to the organism, and compute the epa
         organism.structure = relaxed_structure
-        organism.total_energy = total_energy
-        organism.epa = organism.total_energy/organism.structure.num_sites
+        organism.epa = total_energy/num_atoms
+        organism.total_energy = organism.epa*organism.structure.num_sites
         
-        # return the updated organism
-        return organism
+        # TODO: this organism could still fail redundancy. Does it make sense to print this message here?
+        print('Setting energy of organism {} to {} eV/atom'.format(organism.id, organism.epa))
         
+        # store the relaxed organism in the specified dictionary with the specified key 
+        dictionary[key] = organism
         
+       
+       
+    def getNumAtoms(self, gout):
+        '''
+        Parses the number of atoms used by Gulp in the calculation
+        
+        Args:
+            gout: the Gulp output, as a string
+        '''
+        output_lines = gout.split("\n")
+        for line in output_lines:
+            if "Total number atoms" in line:
+                # the number is the last element in the list
+                return int(line[-1])
+       
+        
+    # this method is copied from GulpIO.get_relaxed_structure
+    # I modified it slightly to get it to work
+    # TODO: if pymatgen fixes this method, then I can delete this. Alternatively, I could submit a pull request with my fix    
+    def get_relaxed_structure(self, gout):
+        #Find the structure lines
+        structure_lines = []
+        cell_param_lines = []
+        output_lines = gout.split("\n")
+        no_lines = len(output_lines)
+        i = 0
+        # Compute the input lattice parameters
+        while i < no_lines:
+            line = output_lines[i]
+            if "Full cell parameters" in line:
+                i += 2
+                line = output_lines[i]
+                a = float(line.split()[8])
+                alpha = float(line.split()[11])
+                line = output_lines[i + 1]
+                b = float(line.split()[8])
+                beta = float(line.split()[11])
+                line = output_lines[i + 2]
+                c = float(line.split()[8])
+                gamma = float(line.split()[11])
+                i += 3
+                break
+            elif "Cell parameters" in line:
+                i += 2
+                line = output_lines[i]
+                a = float(line.split()[2])
+                alpha = float(line.split()[5])
+                line = output_lines[i + 1]
+                b = float(line.split()[2])
+                beta = float(line.split()[5])
+                line = output_lines[i + 2]
+                c = float(line.split()[2])
+                gamma = float(line.split()[5])
+                i += 3
+                break
+            else:
+                i += 1
+
+        while i < no_lines:
+            line = output_lines[i]
+            if "Final fractional coordinates of atoms" in line or "Final asymmetric unit coordinates" in line:
+                # read the site coordinates in the following lines
+                i += 6
+                line = output_lines[i]
+                while line[0:2] != '--':
+                    structure_lines.append(line)
+                    i += 1
+                    line = output_lines[i]
+                    # read the cell parameters
+                i += 9
+                line = output_lines[i]
+                if "Final cell parameters" in line:
+                    i += 3
+                    for del_i in range(6):
+                        line = output_lines[i + del_i]
+                        cell_param_lines.append(line)
+                break
+            else:
+                i += 1
+
+        #Process the structure lines
+        if structure_lines:
+            sp = []
+            coords = []
+            for line in structure_lines:
+                fields = line.split()
+                if fields[2] == 'c':
+                    sp.append(fields[1])
+                    coords.append(list(float(x) for x in fields[3:6]))
+        else:
+            raise IOError("No structure found")
+
+        if cell_param_lines:
+            a = float(cell_param_lines[0].split()[1])
+            b = float(cell_param_lines[1].split()[1])
+            c = float(cell_param_lines[2].split()[1])
+            alpha = float(cell_param_lines[3].split()[1])
+            beta = float(cell_param_lines[4].split()[1])
+            gamma = float(cell_param_lines[5].split()[1])
+        latt = Lattice.from_parameters(a, b, c, alpha, beta, gamma)
+
+        return Structure(latt, sp, coords)
+
+
 
 class InitialPopulation():
     '''
@@ -2736,6 +2896,7 @@ class InitialPopulation():
             
             whole_pop: the list containing all the organisms that the algorithm has submitted for energy calculations
         '''
+        print('Adding organism {} to the initial population'.format(org.id))
         self.initial_population.append(org)
         org.is_active = True
       
@@ -2747,13 +2908,20 @@ class InitialPopulation():
         Precondition: the old_org is a current member of the initial population
         
         TODO: whenever a structure gets added to the initial population (even via replacement), we need to print it to the garun output file in poscar format
+        TODO: instead of finding the old organism in the initial population by searching for the right id, it might better to eventually implement a __eq__(self, other)
+              method in the Organism class to determine when two organisms are the same...
         
         Args:
             old_org: the organism in the initial population to replace
             new_org: the new organism to replace the old one
         '''
-        self.initial_population.remove(old_org)
-        old_org.is_active = False
+        print('Replacing organism {} with organism {} in the initial population'.format(old_org.id, new_org.id))
+        # find the organism in self.initial_population with the same id as old_org
+        for org in self.initial_population:
+            if org.id == old_org.id:
+                self.initial_population.remove(org)
+                org.is_active = False
+        # add the new organism to the initial population
         self.initial_population.append(new_org)
         new_org.is_active = True
         
@@ -2777,6 +2945,11 @@ class StoppingCriteria(object):
             self.default_num_energy_calcs = 1000
         self.default_value_achieved = None
         self.default_found_structure = None
+        
+        # whether or not the stopping criteria are satisfied
+        self.are_satisfied = False
+        # to keep track of how many energy calculations have been done
+        self.calc_counter = 0
         
         # set defaults if stopping_parameters equals 'default' or None
         if stopping_parameters == None or stopping_parameters == 'default':
@@ -2819,11 +2992,6 @@ class StoppingCriteria(object):
                 self.num_energy_calcs = self.default_num_energy_calcs 
             else:
                 self.num_energy_calcs = None
-            
-            # whether or not the stopping criteria are satisfied
-            self.are_satisfied = False
-            # to keep track of how many energy calculations have been done
-            self.calc_counter = 0
           
             
     def updateCalcCounter(self):

@@ -6,6 +6,7 @@ import classes
 import copy
 import threading 
 import random
+import time
 from pymatgen.io.vasp.inputs import Poscar
 from pymatgen.core.periodic_table import Element
 from pymatgen.core.structure import Structure
@@ -208,7 +209,7 @@ elif 'gulp' in parameters['EnergyCode']:
         energy_calculator = classes.GulpEnergyCalculator(header_file_path, potential_file_path, run_dir_name)
         
 elif 'lammps' in parameters['EnergyCode']:
-    # TODO: read the stuff for setting up lammps calcs
+    # TODO: read in the stuff for setting up lammps calcs
     pass
 elif 'vasp' in parameters['EnergyCode']:
     # TODO: read in the stuff for vap calcs
@@ -390,142 +391,145 @@ if frac_sum != 1.0:
     quit()
     
 
-
-# for testing
-for v in variations:
-    print('')
-    print(v.name)
-    print(v.fraction)
-    
-    # these are just for Mating variation
-    if v.name == 'Mating':
-        print(v.mu_cut_loc)
-        print(v.sigma_cut_loc)
-        print(v.shift_prob)
-        print(v.doubling_prob)
-        print(v.grow_parents)
-        
-    # these are just for StructureMut variation
-    if v.name == 'StructureMut':
-        print(v.frac_atoms_perturbed)
-        print(v.sigma_atomic_coord_perturbation)
-        print(v.max_atomic_coord_perturbation)
-        print(v.sigma_strain_matrix_element)
-        
-    # these are just for NumStoichsMut variation
-    if v.name == 'NumStoichsMut':
-        print(v.mu_num_adds)
-        print(v.sigma_num_adds)
-        print(v.scale_volume)
-        
-    # these are just for Permutation variation
-    if v.name == 'Permutation':
-        print(v.mu_num_swaps)
-        print(v.sigma_num_swaps)
-        print(v.pairs_to_swap)
-
-# test the doVariation method. The first arg is just a placeholder for the pool
-offspring = variations[0].doVariation(None, random, geometry, id_generator)
-
-# write out the offspring structure to a file so we can look at it
-offspring.structure.to('poscar', '/n/srv/brevard/structures/permutation.vasp')
-#print('')
-#print(offspring.structure)
-        
-
-
-    
-    
 # TODO: create other object based on input file options (e.g., pool, selection, etc.) here. 
 # We want to finish reading the input file before making the garun directory or submitting any calculations so that we can quit if there are any errors in the input file
 
 
-#os.chdir('/n/srv/brevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
+
+
+
+os.chdir('/n/srv/brevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
 # make the run directory
-#os.mkdir(str(os.getcwd()) + '/' + run_dir_name)
+os.mkdir(str(os.getcwd()) + '/' + run_dir_name)
 # make the temp subdirectory where the energy calculations will be run
-#os.mkdir(str(os.getcwd()) + '/' + run_dir_name + '/temp')
+os.mkdir(str(os.getcwd()) + '/' + run_dir_name + '/temp')
 
 # list to hold copies of all the valid organisms made by the algorithm
-#whole_pop = []
+whole_pop = []
 
-'''
 # create the initial population
 initial_population = classes.InitialPopulation()
-threads = []  # list of threads to do the energy calculations
-while not stopping_criteria.are_satisfied:
-    for creator in organism_creators:
-        while not creator.is_finished:
-            # start by making N threads
-            if len(threads) < num_calcs_at_once:
-        
-                # keep trying until we get one
-                new_organism = creator.createOrganism(id_generator, composition_space, constraints, random) 
-                while new_organism == None and not creator.is_finished:
-                    new_organism = creator.createOrganism(id_generator, composition_space, constraints, random)
+threads = []  # list of threads to do the energy calculations. TODO: should we use a dictionary for this instead?
+relaxed_organisms = {} # dictionary to temporarily hold the relaxed organisms. The key to each relaxed organism is the index of the Thread in the list threads that did the energy calculation
+for creator in organism_creators:
+    print('Making {} organisms with {}'.format(creator.number, creator.name))
+    while not creator.is_finished:
             
+        # start by doing num_calcs_at_once energy calculations, each on its own thread
+        if len(threads) < num_calcs_at_once:
+        
+            # make a new organism - keep trying until we get one
+            new_organism = creator.createOrganism(id_generator, composition_space, constraints, random) 
+            while new_organism == None and not creator.is_finished:
+                new_organism = creator.createOrganism(id_generator, composition_space, constraints, random)
+            
+            # this check is needed because the loop above could be exited with a None organism for attempts-based creators
+            if new_organism != None:
                 # unpad the organism (does nothing for bulk search)
                 geometry.unpad(new_organism, constraints)
                 # develop the organism
-                developed_org = development.develop(new_organism)
-                if developed_org != None:
+                developed_org = development.develop(new_organism, composition_space, constraints, geometry, None)
+                if developed_org != None: # successful development
                     # check for redundancy
                     redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
                     if redundant_org == None: # no redundancy
                         whole_pop.append(copy.deepcopy(developed_org)) # we want to add copies to whole_pop so the organisms in whole_pop don't change upon relaxation, etc.
-                        stopping_criteria.updateCalcCounter()  # if num calcs is one of the stopping criteria, this updates it
+                        stopping_criteria.updateCalcCounter()  # if num calcs is one of the stopping criteria, this updates it   
                         geometry.pad(developed_org) # for bulk search, this does nothing except rotate into principal directions
-                        thread = threading.Thread(target=energy_calculator.doEnergyCalculation, args=(developed_org))
+                        thread_index = len(threads) # the index this thread will have once it's appended to the list threads
+                        thread = threading.Thread(target=energy_calculator.doEnergyCalculation, args=[developed_org, relaxed_organisms, thread_index])
                         thread.start()
                         threads.append(thread)
-            else:
-                # check for dead threads
-                for thread in threads:
-                    if not thread.isAlive:
-                        # TODO: need to figure out how to get the return value from a dead thread
-                        relaxed_org = thread.return_value  # i don't think this will work...
-                        if relaxed_org != None:
-                            geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing except rotate into principal directions
-                            developed_org = development.develop(relaxed_org)
-                            if developed_org != None:
-                                redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
-                                if redundant_org != None:
-                                    if redundant_org.isActive and redundant_org.value > developed_org.value:
-                                        initial_population.replaceOrganism(redundant_org, developed_org)
-                                else:
-                                    whole_pop.append(copy.deepcopy(developed_org))
-                                    stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
-                                    initial_population.add(developed_org)
-                                    if creator.is_successes_based: # update status of success-based creators
-                                        creator.updateStatus()
-                                
-                        # remove the dead thread and make another one
-                        threads.remove(thread)
                         
-                        # keep trying until we get one
+        else:
+            # check for dead threads
+            for thread in threads:
+                if not thread.is_alive():
+                    # get the relaxed structure from the dictionary
+                    thread_index = threads.index(thread)
+                    relaxed_org = relaxed_organisms[thread_index]
+                    # remove the relaxed organism from the dictionary since we got it out
+                    relaxed_organisms[thread_index] = None
+                    # if the relaxed organism is not None, then do development and redundancy checking
+                    if relaxed_org != None:
+                        geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
+                        developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, None)
+                        if developed_org != None:
+                            redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                            if redundant_org != None:
+                                if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
+                                    initial_population.replaceOrganism(redundant_org, developed_org)
+                            else: 
+                                stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
+                                initial_population.addOrganism(developed_org)
+                                whole_pop.append(developed_org)
+                                # if this organism was made by the current creator and the creator is success-based, then update the status of the creator
+                                if creator.is_successes_based and developed_org.made_by == creator.name: 
+                                    creator.updateStatus()
+                        
+                    started_new_calc = False
+                    while not started_new_calc and not creator.is_finished:
+                        # make another organism for the initial population
                         new_organism = creator.createOrganism(id_generator, composition_space, constraints, random)
                         while new_organism == None and not creator.is_finished:
                             new_organism = creator.createOrganism(id_generator, composition_space, constraints, random)
             
+                        # unpad the organism (does nothing for bulk search)
+                        geometry.unpad(new_organism, constraints)
                         # develop the organism
-                        developed_org = development.develop(new_organism)
+                        developed_org = development.develop(new_organism, composition_space, constraints, geometry, None)
                         if developed_org != None:
                             # check for redundancy
                             redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
                             if redundant_org == None: # no redundancy
                                 whole_pop.append(copy.deepcopy(developed_org))
                                 stopping_criteria.updateCalcCounter() 
-                                geometry.pad(developed_org) # for bulk search, this does nothing except rotate into principal directions
-                                thread = threading.Thread(target=energy_calculator.doEnergyCalculation, args=(developed_org))
+                                geometry.pad(developed_org) # for bulk search, this does nothing 
+                                thread = threading.Thread(target=energy_calculator.doEnergyCalculation, args=(developed_org, relaxed_organisms, thread_index))
+                                #print('Starting energy calculation...')
                                 thread.start()
-                                threads.append(thread)
-'''
+                                # replace the dead thread in threads with the new one
+                                threads[thread_index] = thread
+                                # set the flag so we know we've started a new energy calculation
+                                started_new_calc = True
+                                
 
+# get the output of all the calculations that were still running when the last creator finished
+num_to_get = num_calcs_at_once # how many threads we have left to handle
+handled_indices = [] # the indices of the threads we've already handled
+while num_to_get > 0:
+    for thread in threads:
+        thread_index = threads.index(thread)
+        if not thread.is_alive() and thread_index not in handled_indices:
+            # get the relaxed structure from the dictionary
+            relaxed_org = relaxed_organisms[thread_index]
+            # record that this thread has been handled
+            num_to_get = num_to_get - 1
+            handled_indices.append(thread_index)
+            # remove the relaxed organism from the dictionary since we got it out
+            relaxed_organisms[thread_index] = None
+            # if the relaxed organism is not None, then do development and redundancy checking
+            if relaxed_org != None:
+                geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
+                developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, None)
+                if developed_org != None:
+                    redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                    if redundant_org != None:
+                        if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
+                            initial_population.replaceOrganism(redundant_org, developed_org)
+                    else: 
+                        stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
+                        initial_population.addOrganism(developed_org)
+                        whole_pop.append(developed_org)
+                        
 
-
-
-
-
+                                    
+# for testing
+# print out the energies of all the structures in the initial population, and write out there structures to poscar files so we can look at them
+for organism in initial_population.initial_population:
+    print('Organism {} has energy per atom {}'.format(organism.id, organism.epa))
+    organism.structure.to('poscar', '/n/srv/brevard/testing/gaspy_testing/garun_test/{}.vasp'.format(organism.id))
+    
 
 
 
@@ -550,7 +554,23 @@ while not stopping_criteria.are_satisfied:
 #relaxed_organism = energy_calculator.doEnergyCalculation(developed_organism) 
 #if relaxed_organism != None:
 #    print(relaxed_organism.total_energy)
-#    print(relaxed_organism.structure) 
+#    print(relaxed_organism.structure)
+#    whole_pop.append(relaxed_organism)
+
+
+
+# test the doVariation method. The first arg is just a placeholder for the pool
+#offspring = variations[0].doVariation(None, random, geometry, id_generator)
+
+# write out the offspring structure to a file so we can look at it
+#offspring.structure.to('poscar', '/n/srv/brevard/structures/permutation.vasp')
+#print('')
+#print(offspring.structure)
+
+
+
+
+ 
     
     
               
