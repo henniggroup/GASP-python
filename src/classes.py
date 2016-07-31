@@ -1871,13 +1871,8 @@ class RandomOrganismCreator(OrganismCreator):
         # make a random structure from the random lattice, random species, and random coordinates
         random_structure = Structure(random_lattice, elements, random_coordinates)
         
-        # optionally scale the volume
+        # optionally scale the volume to the weighted average of the volumes per atom of the elemental structures
         if self.volume == 'from_elemental_densities':
-            # scale the volume to the weighted average of the densities of the elemental constituents
-            # TODO: this breaks if pymatgen doesn't have a density for a particular element...
-            # it breaks for oxygen...
-            # think about what to do in this case...
-            
             # compute volumes per atom (in Angstrom^3) of each element in the random organism
             reduced_composition = random_structure.composition.reduced_composition
             volumes_per_atom = {}
@@ -1910,7 +1905,7 @@ class RandomOrganismCreator(OrganismCreator):
             # scale the volume of the random organism to satisfy the computed mean volume per atom
             # TODO: sometimes this doesn't work. It can either scale the volume to some huge number, or else volume scaling just fails and lattice vectors are assigned nan
             #       it looks like the second error is caused by a divide-by-zero in the routine pymatgen calls to scale the volume
-            #       the if statement below is to catch these cases, but I should probably contact materials project about it...
+            #       the if statement below is to catch these cases, but I should probably contact pymatgen about it...
             random_structure.scale_lattice(mean_vpa*len(random_structure.sites))
             if str(random_structure.lattice.a) == 'nan' or random_structure.lattice.a > 100:
                 return None          
@@ -2694,9 +2689,6 @@ class GulpEnergyCalculator(object):
         # whether the anions and cations are polarizable in the gulp potential
         self.anions_shell, self.cations_shell = self.getShells()
         
-        # for testing
-        print(self.anions_shell, self.cations_shell)
-        
         # for submitting the gulp calculation with the external callgulp script
         # TODO: don't think we need this anymore
         self.gulp_caller = gulp_caller.GulpCaller(cmd = 'callgulp')
@@ -2708,7 +2700,7 @@ class GulpEnergyCalculator(object):
         
         Returns two booleans indicating whether the anions and cations have shells, respectively
         '''
-        # list to hold the symbols for the elements that have shels
+        # get the symbols of the elements with shells
         shells = []
         for line in self.potential.split('\n'):
             if 'shel' in line:
