@@ -16,9 +16,10 @@ CompositionSpace:
 
     #  - Co: 1
 
-     - Au: 1
+    # - Au: 1
 
-
+     - Al: 2
+       O: 3
 
 
 # says which energy code to use, and where the needed input files are. NOT optional
@@ -44,12 +45,12 @@ EnergyCode: # should only have one specified
 
 # the general constraints - entire  block is optional, and defaults will be used if it's omitted
 #Constraints: 
-#     min_num_atoms: 1
+#     min_num_atoms: 3
 #     max_num_atoms: 10
 #     min_lattice_length: 0.5
 #     max_lattice_length: 20
-#     min_lattice_angle: 70
-#     max_lattice_angle: 110
+#     min_lattice_angle: 40
+#     max_lattice_angle: 140
 #     allow_endpoints: False  # only gets applied when doing phase diagram searches, and only after the initial population. It specifies whether the end point compositions are permitted after the initial population
                              # default is True for phase diagram searches (should it be?)
 #     per_species_mids:   # should default to all possible pairs (from composition space)
@@ -68,7 +69,7 @@ EnergyCode: # should only have one specified
 
 
 
-#Niggli: True # whether to do Niggli cell reduction. Optional, and defaults to True. If used, handles other geometries (sheet, etc.)
+#Niggli: True # whether to do Niggli cell reduction. Optional, and defaults to True. If used, handles other geometries (sheet, etc.) appropriately
 
 
 
@@ -77,13 +78,13 @@ EnergyCode: # should only have one specified
 
 
 # The parameters to use for determining if two organisms are redundant. Entire block is optional and if not specified, does structural comparisons (with default tolerances), but not value comparisons
-#RedundancyGuard: 
+RedundancyGuard: 
 #     lattice_length_tol:   # fractional length tolerance (ltol argument of structure_matcher). Defaults to 0.1
 #     lattice_angle_tol:    # angle tolerance in degrees (angle_tol argument of structure_matcher). Defaults to 2
 #     site_tol:             # site tolerance - fraction of average free length per atom (stol argument of structure_matcher). Defaults to 0.1 	
 #     use_primitive_cell:   # whether the structure matching algorithm takes the primitive cells of the structures before trying to match (primitive_cell argument of structure_matcher). Defaults to True
 #     attempt_supercell:    # whether to check if structures are equivalent to supercells of each other, if they have different numbers of atoms. Defaults to True
-#     epa_diff:             # for checking redundancy based on epa's. If used, two organisms are considered redundant if their epa's are within epa_diff of each other. Defaults to 0.0 
+#      epa_diff: 0.01             # for checking redundancy based on epa's. If used, two organisms are considered redundant if their epa's are within epa_diff of each other. Defaults to 0.0 
 
 
 
@@ -91,7 +92,7 @@ EnergyCode: # should only have one specified
 InitialPopulation:
      random:
           number: 10  # number of random structures to make
-#          volume: default  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
+#          volume: 9  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
                      # <num|random|from_elemental_densities> num - the number of cubic Angstroms per atom to scale to
                      #                                       random - no volume scaling - the volume is just the result of the random lattice vectors and atoms
                      #                                       from_elemental_densities - scales the volume to the weighted average of the volumes per atom of the elemental solids. This is default behavior

@@ -10,7 +10,7 @@ from pymatgen.analysis.structure_matcher import ElementComparator
 from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.transformations.standard_transformations import RotationTransformation
-from pymatgen.command_line.gulp_caller import GulpIO, GulpCaller, GulpConvergenceError, GulpError
+import pymatgen.command_line.gulp_caller as gulp_caller
 
 # from abc import abstractmethod, ABCMeta
 from _pyio import __metaclass__
@@ -1801,6 +1801,10 @@ class RandomOrganismCreator(OrganismCreator):
         self.num_made = 0
         self.is_successes_based = True
         self.is_finished = False
+        
+        # For elements that are normally gases, pymatgen doesn't have densities. These are the densities (in kg/m^3) for the ones that are 
+        # missing from pymatgein's database. All values are taken from Materials Project, except for At and Rn, which were taken from Wikipedia
+        self.missing_densities = {'H': 150, 'He': 421, 'N': 927, 'O': 1974, 'F': 1972, 'Ne': 1680, 'Cl': 829, 'Ar': 1478, 'Br': 3535, 'Kr': 2030, 'Xe': 2611, 'At': 6350, 'Rn': 4400}
     
     
     def createOrganism(self, id_generator, composition_space, constraints, random):
@@ -1837,6 +1841,8 @@ class RandomOrganismCreator(OrganismCreator):
             num_atoms_in_formula = reduced_formula.num_atoms
             max_num_formulas = int(constraints.max_num_atoms/num_atoms_in_formula)
             min_num_formulas = int(constraints.min_num_atoms/num_atoms_in_formula)
+            if min_num_formulas == 0:
+                min_num_formulas = 1
             # get a random number of formula units, and the resulting random number of atoms
             random_num_formulas = random.randint(min_num_formulas, max_num_formulas)
             num_atoms = int(random_num_formulas*num_atoms_in_formula)
@@ -1868,7 +1874,9 @@ class RandomOrganismCreator(OrganismCreator):
         # optionally scale the volume
         if self.volume == 'from_elemental_densities':
             # scale the volume to the weighted average of the densities of the elemental constituents
-            # TODO: this would break if pymatgen doesn't have a density for a particular element...
+            # TODO: this breaks if pymatgen doesn't have a density for a particular element...
+            # it breaks for oxygen...
+            # think about what to do in this case...
             
             # compute volumes per atom (in Angstrom^3) of each element in the random organism
             reduced_composition = random_structure.composition.reduced_composition
@@ -1877,7 +1885,11 @@ class RandomOrganismCreator(OrganismCreator):
                 # physical properties and conversion factors
                 atomic_mass = float(element.atomic_mass) # in amu
                 mass_conversion_factor = 1.660539040e-27 # converts amu to kg
-                density = float(element.density_of_solid) # in kg/m^3
+                density = element.density_of_solid # in kg/m^3
+                # if the density is not in pymatgen's database, then get it from the missing densities
+                if density == None:
+                    density = self.missing_densities[element.symbol]
+                density = float(density)
                 length_conversion_factor = 1.0e10 # converts meters to Angstroms 
             
                 # compute the volume (in Angstrom^3) per atom of this element
@@ -1898,7 +1910,7 @@ class RandomOrganismCreator(OrganismCreator):
             # scale the volume of the random organism to satisfy the computed mean volume per atom
             # TODO: sometimes this doesn't work. It can either scale the volume to some huge number, or else volume scaling just fails and lattice vectors are assigned nan
             #       it looks like the second error is caused by a divide-by-zero in the routine pymatgen calls to scale the volume
-            #       the if statement below is to catch these cases, by I should probably contact materials project about it...
+            #       the if statement below is to catch these cases, but I should probably contact materials project about it...
             random_structure.scale_lattice(mean_vpa*len(random_structure.sites))
             if str(random_structure.lattice.a) == 'nan' or random_structure.lattice.a > 100:
                 return None          
@@ -1909,7 +1921,7 @@ class RandomOrganismCreator(OrganismCreator):
         
         else:
             # scale to the given volume per atom
-            random_structure.scale_lattice(self.volume*len(random_structure.sites(self)))  
+            random_structure.scale_lattice(self.volume*len(random_structure.sites)) 
         
         # return a random organism with the scaled random structure
         random_org = Organism(random_structure, id_generator, self.name)
@@ -2121,16 +2133,31 @@ class RedundancyGuard(object):
             
             whole_pop: the list containing all organisms to check against
         '''
-        for organism in whole_pop:
-            # check if their structures match, and also make sure they have different id's. This is needed because copies of both relaxed and unrelaxed organisms are added to whole_pop
-            if self.structure_matcher.fit(new_organism.structure, organism.structure) and new_organism.id != organism.id:
-                print("Organism {} failed structural redundancy - looks like organism {}".format(new_organism.id, organism.id))
-                return organism
-            # if specified and both have epa's, check if their epa's match within the epa difference interval
-            if self.epa_diff > 0 and new_organism.epa != None and organism.epa != None:
-                if abs(new_organism.epa - organism.epa) < self.epa_diff:
-                    print("Organism {} failed epa redundancy - looks like organism {}".format(new_organism.id, organism.id))
-                    return organism    
+        # if the new organism hasn't been relaxed, then check its structure against that of every organism in whole pop
+        if new_organism.epa == None:
+            for organism in whole_pop:
+                # need to check id's because copies of both relaxed and unrelaxed organisms are added to whole pop
+                if new_organism.id != organism.id:
+                # check if their structures match
+                    if self.structure_matcher.fit(new_organism.structure, organism.structure):
+                        print("Organism {} failed structural redundancy - looks like organism {}".format(new_organism.id, organism.id))
+                        return organism
+                
+        # if the new organism has been relaxed, then only check its structure against those of organisms in whole pop that have also been relaxed
+        else:
+            for organism in whole_pop:
+                # need to check id's because copies of both relaxed and unrelaxed organisms are added to whole pop
+                if new_organism.id != organism.id and organism.epa != None:
+                    # check if their structures match
+                    if self.structure_matcher.fit(new_organism.structure, organism.structure):
+                        print("Organism {} failed structural redundancy - looks like organism {}".format(new_organism.id, organism.id))
+                        return organism
+            
+                    # if specified, check if their epa's match within the epa difference interval
+                    if self.epa_diff > 0:
+                        if abs(new_organism.epa - organism.epa) < self.epa_diff:
+                            print("Organism {} failed energy per atom redundancy - looks like organism {}".format(new_organism.id, organism.id))
+                            return organism    
         # should only get here if no organisms are redundant with the new organism
         return None    
         
@@ -2151,7 +2178,7 @@ class Constraints(object):
         '''
         # default values
         # TODO: are these reasonable?
-        self.default_min_num_atoms = 1
+        self.default_min_num_atoms = 2
         self.default_max_num_atoms = 50
         self.default_min_lattice_length = 0.5
         self.default_max_lattice_length = 20
@@ -2411,14 +2438,14 @@ class Development(object):
                 try:
                     organism.structure = organism.structure.get_reduced_structure()
                     organism.rotateToPrincipalDirections()
-                except ValueError:
+                except:
                     return None
             elif geometry.shape == "sheet":
                 # do the sheet Niggli cell reduction
                 try:
                     organism.reduceSheetCell()
                     organism.rotateToPrincipalDirections()
-                except ValueError:
+                except:
                     return None
             # TODO: call special cell reduction for other geometries here if needed (doesn't makes sense for wires or clusters)
                      
@@ -2644,11 +2671,11 @@ class GulpEnergyCalculator(object):
         Args:
             header_file: the path to the gulp header file
             
-            potetnial_file: the path to the gulp potential file
+            potential_file: the path to the gulp potential file
             
             run_dir_name: the name of the garun directory containing all the output of the search (just the name, not the path)
             
-            Precondition: both of these files exist
+        Precondition: the header and potential files exist and are valid
         '''
         # read the gulp header file and store it as a string
         with open (header_file, "r") as gulp_header_file:
@@ -2662,10 +2689,47 @@ class GulpEnergyCalculator(object):
         self.run_dir_name = run_dir_name
         
         # for processing gulp input and output
-        self.gulp_io = GulpIO()
+        self.gulp_io = gulp_caller.GulpIO()
+        
+        # whether the anions and cations are polarizable in the gulp potential
+        self.anions_shell, self.cations_shell = self.getShells()
+        
+        # for testing
+        print(self.anions_shell, self.cations_shell)
         
         # for submitting the gulp calculation with the external callgulp script
-        self.gulp_caller = GulpCaller(cmd = 'callgulp')
+        # TODO: don't think we need this anymore
+        self.gulp_caller = gulp_caller.GulpCaller(cmd = 'callgulp')
+        
+    
+    def getShells(self):
+        '''
+        Determines whether the anions and cations have shells by looking at the potential file
+        
+        Returns two booleans indicating whether the anions and cations have shells, respectively
+        '''
+        # list to hold the symbols for the elements that have shels
+        shells = []
+        for line in self.potential.split('\n'):
+            if 'shel' in line:
+                line_parts = line.split()
+                # the element symbol is always right before the 'shel' keyword
+                shells.append(str(line_parts[line_parts.index('shel') - 1]))
+        
+        # remove duplicates
+        shells = list(set(shells))
+        
+        # determine whether the elements with shells are anions and/or cations
+        anions_shell = False
+        cations_shell = False
+        for symbol in shells:
+            element = Element(symbol)
+            if element in gulp_caller._anions:
+                anions_shell = True
+            elif element in gulp_caller._cations:
+                cations_shell = True
+            
+        return anions_shell, cations_shell
     
     
     def doEnergyCalculation(self, organism, dictionary, key):
@@ -2682,15 +2746,15 @@ class GulpEnergyCalculator(object):
             
         Precondition: the garun directory and temp subdirectory exist
         
-        TODO: might be better to eventually use the custodian package for error handling instead of catching the exceptions that GulpCaller.run throws. Then we wouldn't need 
-        GulpCaller at all, and can just call the external callgulp script directly, as a subprocess...
+        TODO: might be better to eventually use the custodian package for error handling...
         '''
         # make the job directory
         job_dir_path = str(getcwd()) + '/' + str(self.run_dir_name) + '/temp/' + str(organism.id)
         mkdir(job_dir_path)
         
         # get the structure in gulp input format
-        structure_lines = self.gulp_io.structure_lines(organism.structure)
+        # TODO: might be better to make my own implementation of this so abritrary elements can have shells (not just all anions and/or all cations)
+        structure_lines = self.gulp_io.structure_lines(organism.structure, anion_shell_flg = self.anions_shell, cation_shell_flg = self.cations_shell)
         
         # make the gulp input from the structrure, header and potential
         gulp_input = self.header + structure_lines + self.potential
@@ -2707,9 +2771,10 @@ class GulpEnergyCalculator(object):
         
         # TODO: this is annoying for two reasons. First, if an exception is thrown, then GulpCaller.run prints out the entire gulp output, which we don't want cluttering our
         # gasp output file. The second reason is that if an exception gets thrown, the gulp output isn't printed to a file. We really want to print the output to a file so
-        # the user can look at it to trouble shoot.
+        # the user can look at it to troubleshoot.
         #
         # Better solution: run gulp with callgulp and print output to a file. If trouble parsing the structure or energy from the output, then print an error message. 
+        #
         #try:
         #    gulp_output = self.gulp_caller.run(gulp_input)
         #except GulpConvergenceError:
@@ -2782,7 +2847,8 @@ class GulpEnergyCalculator(object):
         for line in output_lines:
             if "Total number atoms" in line:
                 # the number is the last element in the list
-                return int(line[-1])
+                line_parts = line.split()
+                return int(line_parts[-1])
        
         
     # this method is copied from GulpIO.get_relaxed_structure

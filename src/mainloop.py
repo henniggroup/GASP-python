@@ -212,7 +212,7 @@ elif 'lammps' in parameters['EnergyCode']:
     # TODO: read in the stuff for setting up lammps calcs
     pass
 elif 'vasp' in parameters['EnergyCode']:
-    # TODO: read in the stuff for vap calcs
+    # TODO: read in the stuff for vasp calcs
     pass
 # TODO: add other energy codes here
 else:
