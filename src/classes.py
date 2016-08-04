@@ -17,15 +17,17 @@ from _pyio import __metaclass__
 # import collections.deque
 from _collections import deque
 import threading
+import os
 from os import listdir, mkdir, getcwd
 from os.path import isfile, join, exists
 import numpy as np
 import copy
 import math
 import time
-import subprocess
+from subprocess import check_output, CalledProcessError, STDOUT
 from numpy import inf, Inf
 from pymatgen.util.convergence import id_generator
+from pip._vendor.distlib._backport.tarfile import TUEXEC
 
 '''
 This module contains all the classes used by the algorithm.
@@ -77,7 +79,8 @@ class Organism(object):
         self.epa = None
         self.value = None # the objective function value of this organism, which is either the energy per atom (for fixed-composition search) or the distance from the current best convex hull (for phase diagram search).
         self.fitness = None # the fitness of this organism. Ranges from 0 to 1, including both endpoints
-        self.select_prob = None # the selection probability of this organism. Ranges from 0 to 1, including both endpoints
+        self.selection_prob = None # the selection probability of this organism. Ranges from 0 to 1, including both endpoints
+        self.selection_loc = None # location on the number line (between 0 and 1) where the interval of length selection_prob starts
         self.is_active = False # whether this organism is currently part of the pool or initial population
         self._id = id_generator.makeID(); # unique id number for this organism. Should not be changed.
         self.made_by = maker   # the name of the algorithm that made this organism - either one of the creators or one of the variations. Should be set each time a new organism is made
@@ -252,103 +255,350 @@ class Pool(object):
     Pool to hold all the organisms that are currently candidates for selection to become parents.
     
     Composed of two parts: a promotion set containing the best few organisms, and a queue containing
-        rest of the organisms in the pool.
-        
-    This class is a singleton.
+        the rest of the organisms in the pool.
     '''
-    def __init__(self, pool_params_dict, initial_population, selection_probability_dict):
+    def __init__(self, pool_params, composition_space, run_dir_name):
         '''
         Creates a pool of organisms
         
         Args:
-            pool_params_dict: a dictionary containing the pool parameters: poolSize, numPromoted
-        
-            initial_population: a list of organism.Organism's that comprise the initial population. They must
-                already have had their energies calculated.
+            pool_params: the parameters of the pool, as a dictionary 
             
-            selection_probability_dict: a dictionary containing the parameters needed to calculating selection 
-                probabilities: numParents and selectionPower
+            composition_space: the CompositionSpace object
+            
+            run_dir_name: the name (not path) of the garun directory
         '''
-        # TODO: implement me
-        # 1. calculate the fitnesses of the organisms in the initial population, based on their
-        #    objective function values
-        # 2. calculate the selection probabilities of the organisms, based on their fitnesses
-        # 3. put the best few of them in the promotion set (exact number determined from input)
-        # 4. put the rest in the queue. The order doesn't matter, since they'll all get thrown away
-        #    at the same time
-        # I think I can just use a list for the promotion set 
-        # Use a deque for the queue
-        self.promotionSet = [] # TODO: should be set to a list of the best few orgs
-        self.queue = deque() # TODO: should be a deque containing the rest of the orgs
-        self.selectionDist = [] # TODO: the parameters for the selection distribution
-        self.numAdds = 0 # the number of organisms added to the pool (excluding the initial population)
+        # the default values
+        if composition_space.objective_function == 'epa':
+            self.default_size = 21
+        elif composition_space.objective_function == 'pd':
+            self.default_size = 30
+        self.default_num_promoted = 3
+        
+        # if entire Pool block was set to default or left blank
+        if pool_params == None or pool_params == 'default':
+            self.size = self.default_size
+            self.num_promoted = self.default_num_promoted
+        else:     
+            # check if size parameter was used
+            if 'size' not in pool_params:
+                self.size = self.default_size
+            elif pool_params['size'] == None or pool_params['size'] == 'default':
+                self.size = self.default_size
+            else:
+                self.size = pool_params['size']
+            
+            # check if num_promoted parameter was used
+            if 'num_promoted' not in pool_params:
+                self.num_promoted = self.default_num_promoted
+            elif pool_params['num_promoted'] == None or pool_params['num_promoted'] == 'default':
+                self.num_promoted = self.default_num_promoted
+            else:
+                self.num_promoted = pool_params['num_promoted']
+        
+        self.promotion_set = [] # list to hold the best few organisms in the pool
+        self.queue = deque() # deque containing the rest of the organisms in the pool
+        self.selection = [] # list to hold the parameters for the selection distribution
+        self.num_adds = 0 # the number of organisms added to the pool (excluding the initial population)
+        self.run_dir_name = run_dir_name # the name (not  path) of the garun directory
     
     
-    def addOrganism(self, org):
+    def addInitialPopulation(self, initial_population, composition_space):
         '''
-        Adds a new organism to the pool, and also to whole_pop.
+        Adds the organisms of the initial population to the pool.
+        
+        Args:
+            initial_population: an InitialPopulation object containing the relaxed organisms of the initial population
+            
+            composition_space: the CompositionSpace object
+            
+        Precondition: the pool is empty (no organisms have been previously added to it)
+        '''
+        print('Populating the pool with the initial population')
+        
+        # get the list of organisms in the initial population
+        organisms_list = initial_population.initial_population
+        
+        # compute the values of the organisms in the initial population
+        self.computeInitialPopValues(organisms_list, composition_space)
+        
+        # sort the list of initial population organisms in order of increasing value
+        organisms_list.sort(key = lambda x: x.value, reverse = False)
+        
+        # populate the promotion set and queue
+        for i in range(len(organisms_list)):
+            if i < self.num_promoted:
+                self.promotion_set.append(organisms_list[i])
+            else:
+                self.queue.appendleft(organisms_list[i])
+        
+        # compute the fitnesses of the organisms in the initial population
+        self.computeFitnesses()
+        
+        # compute the selection probabilities of all the organisms in the initial population
+        self.computeSelectionProbs()
+        
+        # TODO: maybe print out some info on the organisms in the initial population, like their values and fitnesses
+        print('Summary of initial population:')
+        for organism in organisms_list:
+            print('Organism {} has value {} and fitness {}'.format(organism.id, organism.value, organism.fitness))
+        
+    
+    def computeInitialPopValues(self, organisms_list, composition_space):
+        '''
+        Computes and assigns the values of all the organisms in the initial population
+        
+        Args:
+            organisms_list: a list of the relaxed organisms of the initial population
+            
+            composition_space: the CompositionSpace object
+        '''
+        if composition_space.objective_function == 'epa':
+            for organism in organisms_list:
+                organism.value = organism.epa
+        elif composition_space.objective_function == 'pd':
+            pass
+            # TODO: implement me
+            # 1. construct the convex hull from the epa's and compositions of all the organisms in initial_population
+            # 2. assign values as distances from convex hull
+        
+    
+    def addOrganism(self, organism_to_add, composition_space):
+        '''
+        Adds a new organism to the pool
         
         If the new organism better than one of the orgs currently in the promotion set, then it is added 
         to the promotion set, and the worst org in the promotion set is moved to the back of the queue. 
         Otherwise, the new org is just appended to the back of the queue.
         
-        TODO: whenever a structure gets added to the pool, we need to print it to the garun output file in poscar format
-        
         Args:
-            org: the organism.Organism to add.
+            organism: the Organism to add to the pool
+            
+            composition_space: the CompositionSpace object
         '''
-        # TODO: implement me. Look at deque methods...
-        # 1. If doing a pd search, will need to transform value from epa to distance from current best convex hull
-        # 2. Once value is updated (if necessary), decide whether to place in promotion set or queue, based on org values
-        # 3. Add organism to whole_pop (whole_pop.append(org))
-        # 4. Set org.isActive = True
+        print('Adding organism {} to the pool'.format(organism_to_add.id))
         
-        self.numAdds = self.numAdds + 1
+        # increment the number of adds to the pool
+        self.num_adds = self.num_adds + 1
+        
+        # write the organism we're adding to a poscar file
+        organism_to_add.structure.to('poscar', os.getcwd() + '/' + self.run_dir_name + '/POSCAR.' + str(organism_to_add.id))
+        
+        # the organism that we're adding to the pool is now active
+        organism_to_add.is_active = True
+        
+        # compute the value of the new organism (this updates the values of the other organisms in the pool if needed)
+        self.computeValue(organism_to_add, composition_space)
+        
+        if composition_space.objective_function == 'epa':
+            # check if the new organism's value is better than the worst one in the promotion set
+            worst_organism = self.getWorstInPromotionSet()
+            if organism_to_add.value < worst_organism.value:
+                # add the new organism to the promotion set
+                self.promotion_set.append(organism_to_add)
+                # move the worst organism from the promotion set to the back (left end) of the queue
+                self.promotion_set.remove(worst_organism)
+                self.queue.appendleft(worst_organism)
+            else:
+                # append the new organism to the back (left end) of the queue
+                self.queue.appendleft(organism_to_add)
+                  
+        elif composition_space.objective_function == 'pd':
+            pass
+            # TODO: implement me
+            # 1. if the new organism is on the convex hull (it's value is zero)
+            #    - add it to the promotion set
+            #    - move any organisms in the promotion set that aren't on the convex hull (values > zero) to the back of the queue
+            # 2. if new organism is not on the convex hull
+            #    - add it to the back of the queue
+        
+        # compute fitnesses
+        self.computeFitnesses()
+        
+        # compute selection probabilities
+        self.computeSelectionProbs()
         
     
-    def replaceOrganism(self, old_org, new_org):
+    def getWorstInPromotionSet(self):
+        '''
+        Returns the organism in the promotion set with the worst (largest) objective function value
+        '''
+        worst_organism = self.promotion_set[0]
+        for organism in self.promotion_set:
+            if organism.value > worst_organism.value:
+                worst_organism = organism
+        return worst_organism
+        
+    
+    def replaceOrganism(self, old_org, new_org, composition_space):
         '''
         Replaces an organism in the pool with a new organism. The new organism has the same location in the pool
         as the old one.
         
         Precondition: the old_org is a member of the current pool.
         
-        TODO: whenever a structure gets added to the pool (even via replacement), we need to print it to the garun output file in poscar format
-        
         Args:
             old_org: the organism in the pool to replace
+            
             new_org: the new organism to replace the old one
         '''
+        print('Replacing organism {} with organism {} in the pool'.format(old_org.id, new_org.id))
+        
+        # write the new organism to a poscar file
+        new_org.structure.to('poscar', os.getcwd() + '/' + self.run_dir_name + '/POSCAR.' + str(new_org.id))
+        
+        # compute the value of the new organism
+        self.computeValue(new_org, composition_space)
+        
+        if old_org in self.promotion_set:
+            self.promotion_set.remove(old_org)
+            self.promotion_set.append(new_org)
+        elif old_org in self.queue:
+            # cast the queue to a list to do the replacement
+            queue_list = list(self.queue)
+            # insert the new organism next to the old organism in the list
+            queue_list.insert(queue_list.index(old_org), new_org)
+            # remove the old organism from the list
+            queue_list.remove(old_org)
+            # cast it back to a deque
+            self.queue = deque(queue_list)
+            
+        # update is_active flags on both organisms
+        old_org.is_active = False
+        new_org.is_active = True
+        
+        # recompute fitnesses and selection probabilities of all organisms in the pool
+        # TODO: don't actually have to update all their fitnesses every time...
+        self.computeFitnesses()
+        self.computeSelectionProbs()
+    
+    
+    def computeValue(self, organism, composition_space):
+        '''
+        Computes the objective function value of an organism. This doesn't change the locations of any of the organisms in the pool, and it
+        doesn't add or remove an organism from the pool.
+        
+        Args:
+            organism: the Organism whose value we need to compute. Not yet added to the pool
+            
+            composition_space: the CompositionSpace object
+        '''
+        # if epa search, then value is just epa
+        if composition_space.objective_function == 'epa':
+            organism.value = organism.epa
+        # if pd search, then need to get the convex hull to compute value
+        elif composition_space.objective_function == 'pd':
+            self.computePDValue(organism, composition_space)
+        
+    
+    def computePDValue(self, organism, composition_space):
+        '''
+        Computes an organism's value, as the distance from the current best convex hull. If the organism lies on the convex hull, then recomputes of the values
+        of all the organisms in the pool relative to the new best convex hull.
+        
+        Args:
+             organism: the Organism whose value we need to compute
+            
+            composition_space: the CompositionSpace object
+        '''
+        pass
         # TODO: implement me
-        # 1. determine if old_org is in promotion set or queue
-        # 2. do the replacement
-        # 3. set old_org.isActive = False and newOrg.isActive = True
-        # 3. if the new_org is either the best or worst in the pool, will need to update fitnesses and selection probs
+        # 1. compute convex hull of all orgs in the pool plus the new organism
+        # 2. if new organism is not on the convex hull, then set it's value to the distance above the hull
+        # 3. if new organism is on the convex hull, then set the values of all the organisms in the pool to their distances from the new convex hull
+       
     
-    
-    def calculateFitnesses(self):
+    def computeFitnesses(self):
         '''
         Calculates and assigns fitnesses to all organisms in the pool.
         
-        Precondition: the organisms in the pool all have valid values
+        Precondition: the organisms in the pool all have up-to-date values
+        
+        TODO: ways to speed this up:
+                keep track of the best and worst values in the pool so we don't have to search for them each time
+                the fitnesses of all the organisms only change if the best or worst value changed 
         '''
-        # TODO: implement me. 
-        # There might be some tricks to speed this up, like:
-        #    always keeping track of the best and worst values in the pool, 
-        #    so we don't have to search for them each time
-        #
-        #    might only have to update the fitness of the newest addition to the pool, 
-        #    if the best and worst values didn't change when it was added.
+        # get the best and worst values
+        best_value = self.getBestInPool().value
+        worst_value = self.getWorstInPool().value
+        
+        # update all the fitnesses
+        for organism in self.toList():
+            organism.fitness = (organism.value - worst_value)/(best_value - worst_value)
+
+
+    def getBestInPool(self):
+        '''
+        Returns the organism in the pool with the best (smallest) objective function value
+        '''
+        # only need to look in the promotion set because that's where the best ones live
+        best_organism = self.promotion_set[0]
+        for organism in self.promotion_set:
+            if organism.value < best_organism.value:
+                best_organism = organism
+        return best_organism
+    
+    
+    def getWorstInPool(self):
+        '''
+        Returns the organism in the pool with the worst (largest) objective function value
+        '''
+        # only need to look in the queue because that's where the worst ones live
+        worst_organism = self.queue[0]
+        for organism in self.queue:
+            if organism.value > worst_organism.value:
+                worst_organism = organism
+        return worst_organism
         
     
-    def calculateSelectionProbs(self):
+    def computeSelectionProbs(self):
         '''
         Calculates and assigns selection probabilities to all the organisms in the pool.
         
-        Precondition: the organisms in the pool all have valid values.
+        Precondition: the organisms in the pool all have up-to-date fitnesses
+        
+        TODO: there might be ways to speed this up, similar to computing fitnesses...
         '''
-        # TODO: implement me
-        # some of the same tricks as in calculateFitnesses possible here too
+        # get a list of the best organisms in the pool, sorted by increasing fitness
+        best_organisms = self.getNBestOrganisms(self.selection.num_parents)
+        
+        # get the denominator of the expression for fitness
+        denom = 0
+        for organism in best_organisms:
+            denom = denom + math.pow(organism.fitness, self.selection.power)
+            
+        # compute the selection probability and interval location for each organism in best_organisms
+        selection_loc = 0
+        for organism in best_organisms:
+            organism.selection_prob = math.pow(organism.fitness, self.selection.power)/denom
+            organism.selection_loc = selection_loc
+            # increment the selection location by this organism's selection probability
+            selection_loc = selection_loc + organism.selection_prob
+            
+        # for any organisms not in best_organisms, set the selection probability and location to zero
+        for organism in self.toList():
+            if organism not in best_organisms:
+                organism.selection_prob = 0
+                organism.selection_loc = 0
+        
+       
+    def getNBestOrganisms(self, N):
+        '''
+        Returns a list containing the N best organisms in the pool, sorted in order of increasing fitness
+        
+        Precondition: all the organisms in the pool have up-to-date fitnesses
+        
+        Args:
+            N: the number of best organisms to get
+        '''
+        # get a list of all the organisms in the pool
+        pool_list = self.toList()
+        
+        # sort it in order of increasing fitness
+        pool_list.sort(key = lambda x: x.fitness, reverse = False)
+        
+        # get a sublist consisting of the last N elements of pool_list
+        return pool_list[len(pool_list) - N:]
         
         
     def selectOrganisms(self, n, random):
@@ -364,14 +614,132 @@ class Pool(object):
             
         Precondition: all the organisms in the pool have been assigned selection probabilities.
         '''
-        # TODO: implement me
-        
-        
+        # list to hold the selected organisms
+        selected_orgs = []
+        pool_list = self.toList()
+        # keep going until we've selected enough
+        while True:
+            rand = random.random()
+            # find the organism in the pool with the corresponding selection probability
+            for organism in pool_list:
+                if rand >= organism.selection_loc and rand < (organism.selection_loc + organism.selection_prob):
+                    # check that we haven't already selected this one
+                    if organism not in selected_orgs:
+                        selected_orgs.append(organism)
+                        # check if we've selected enough
+                        if len(selected_orgs) == n:
+                            return selected_orgs
+                        
+                    
     def toList(self):
         '''
         Returns a list containing all the organisms in the pool.
         '''
-        # TODO: implement me
+        return self.promotion_set + list(self.queue)
+        
+        
+  
+class OffspringGenerator(object):
+    '''
+    This class handles generating offspring organisms from the pool and the variations. 
+    Basically a place for the makeOffspringOrganism method to live
+    '''
+    def __init__(self):
+        pass
+  
+     
+    def makeOffspringOrganism(self, random, pool, variations, geometry, id_generator, whole_pop, development, redundancy_guard, composition_space, constraints):
+        '''
+        Returns a developed, non-redundant, unrelaxed offspring organism generated with one of the variations
+        
+        Args:
+            TODO: seems like a ridiculous number of arguments...
+            
+        TODO: outline of how this method works
+        '''
+        tried_variations = [] # list to hold the variations that have already been tried
+        max_num_tries = 10000 # the maximum number of times to try making a valid offspring with a given variation before giving up and trying a different variation
+        while(len(variations) > len(tried_variations)):
+            variation = self.selectVariation(random, tried_variations, variations)
+            num_tries = 0
+            while num_tries < max_num_tries:
+                offspring = variation.doVariation(pool, random, geometry, id_generator)
+                offspring = development.develop(offspring, composition_space, constraints, geometry, pool)
+                # don't need to worry about replacement, since we're only dealing with unrelaxed organisms here
+                if (offspring != None) and (redundancy_guard.checkRedundancy(offspring, whole_pop) == None):
+                    return offspring
+                else:
+                    num_tries = num_tries + 1
+            tried_variations.append(variation)
+        # This point should never be reached
+        print("Could not a make valid offspring organism with any Variation") 
+        print('Quitting...')
+        quit()
+        
+    
+    def selectVariation(self, random, tried_variations, variations):
+        '''
+        Selects a variation that hasn't been tried yet based on their selection probabilities
+        
+        Args:
+            random:
+        
+            tried_variations: list of Variations that have already been unsuccessfully tried
+            
+            variations: list of all the Variations used in this search
+            
+        TODO: description
+        '''
+        while True:
+            rand = random.random()
+            lower_bound = 0
+            for i in range(len(variations)):
+                if rand > lower_bound and rand <= (lower_bound + variations[i].fraction) and variations[i] not in tried_variations:
+                    return variations[i]
+                else:
+                    lower_bound = lower_bound + variations[i].fraction
+        
+
+
+class SelectionProbDist(object):
+    '''
+    Defines the probability distribution over the fitnesses of the organisms in the pool that determines their selection probabilities
+    
+    Comprised of two numbers: the number of organisms to select from, and the selection power
+    '''
+    def __init__(self, selection_params, pool_size):
+        '''
+        Creates a selection probability distribution
+        
+        Args:
+            selection_params: the parameters defining the distribution, as a dictionary
+            
+            pool_size: the size of the Pool (how many organisms it contains)
+        '''
+        # default values
+        self.default_num_parents = pool_size
+        self.default_power = 1
+        
+        # if entire Selection block was left blank or set to default
+        if selection_params == None or selection_params == 'default':
+            self.num_parents = self.default_num_parents
+            self.power = self.default_power
+        else:
+            # check the num_parents parameter
+            if 'num_parents' not in selection_params:
+                self.num_parents = self.default_num_parents
+            elif selection_params['num_parents'] == None or selection_params['num_parents'] == 'default':
+                self.num_parents = self.default_num_parents
+            else:
+                self.num_parents = selection_params['num_parents']
+                
+            # check the selection_power parameter
+            if 'power' not in selection_params:
+                self.power = self.default_power
+            elif selection_params['power'] == None or selection_params['power'] == 'default':
+                self.power = self.default_power
+            else:
+                self.power = selection_params['power']
         
         
 
@@ -530,9 +898,6 @@ class Mating(Variation):
         # select two parent organisms from the pool
         parent_orgs = pool.selectOrganisms(2, random)
         
-        # print out a message
-        print("Creating offspring from organisms {} and {} with mating variation.".format(parent_orgs[0].id, parent_orgs[1].id))
-        
         # make deep copies of the parent organisms
         parent_1 = copy.deepcopy(parent_orgs[0])
         parent_2 = copy.deepcopy(parent_orgs[1])
@@ -618,6 +983,10 @@ class Mating(Variation):
         
         # make the offspring organism from the offspring structure, and return it
         offspring = Organism(offspring_structure, id_generator, self.name)
+        
+        # print out a message
+        print("Creating offspring organism {} from parent organisms {} and {} with the mating variation".format(offspring.id, parent_orgs[0].id, parent_orgs[1].id))
+        
         return offspring
     
     
@@ -825,11 +1194,8 @@ class StructureMut(Variation):
         # select a parent organism from the pool
         parent_org = pool.selectOrganisms(1, random)
         
-        # print out a message
-        print("Creating offspring from organism {} via structural mutation.".format(parent_org.id))
-        
         # make a deep copy of the structure of the parent organism, so that the subsequent mutation doesn't affect the structure of the parent
-        structure = copy.deepcopy(parent_org.structure)
+        structure = copy.deepcopy(parent_org[0].structure)
         
         # for each site in the structure, determine whether to perturb it or not
         for site in structure.sites:
@@ -881,6 +1247,9 @@ class StructureMut(Variation):
         
         # make sure all the site are within the cell (some of them could have been pushed outside by the atomic coordinate perturbations)
         offspring.translateAtomsIntoCell()
+        
+        # print out a message
+        print("Creating offspring organism {} from parent organism {} with the structure mutation variation".format(offspring.id, parent_org[0].id))
         
         # return the offspring
         return offspring 
@@ -982,11 +1351,8 @@ class NumStoichsMut(Variation):
         # select a parent organism from the pool
         parent_org = pool.selectOrganisms(1, random)
         
-        # print out a message
-        print("Creating offspring from organism {} via number of stoichiometries mutation.".format(parent_org.id))
-        
         # make a deep copy of the structure of the parent organism
-        structure = copy.deepcopy(parent_org.structure)
+        structure = copy.deepcopy(parent_org[0].structure)
         # get the total number of atoms in the parent
         parent_num_atoms = len(structure.sites)
         # get the reduced composition of the parent
@@ -1041,6 +1407,10 @@ class NumStoichsMut(Variation):
         
         # create a new organism from the structure and return it
         offspring = Organism(structure, id_generator, self.name)
+        
+        # print out a message
+        print("Creating offspring organism {} from parent organism {} with the number of stoichiometries mutation variation".format(offspring.id, parent_org[0].id))
+        
         return offspring
         
         
@@ -1148,7 +1518,7 @@ class Permutation(Variation):
         # select a parent organism from the pool
         parent_org = pool.selectOrganisms(1, random)
         # make a deep copy of the structure of the parent organism
-        structure = copy.deepcopy(parent_org.structure)
+        structure = copy.deepcopy(parent_org[0].structure)
         # keep trying until we get a parent that has at least one possible swap
         possible_swaps = self.getPossibleSwaps(structure)
         num_selects = 0
@@ -1163,9 +1533,6 @@ class Permutation(Variation):
         # if the maximum number of selections have been made, then this isn't working and it's time to stop
         if num_selects >= self.max_num_selects:
             return None
-            
-        # print out a message
-        print("Creating offspring from organism {} via permutation.".format(parent_org.id))
             
         # compute a positive random number of swaps to do
         num_swaps = int(round(random.gauss(self.mu_num_swaps, self.sigma_num_swaps)))
@@ -1207,6 +1574,10 @@ class Permutation(Variation):
         
         # make a new organism from the structure and return it
         offspring = Organism(structure, id_generator, self.name)
+        
+        # print out a message
+        print("Creating offspring organism {} from parent organism {} with the permutation variation".format(offspring.id, parent_org[0].id))
+        
         return offspring
         
         
@@ -1239,8 +1610,6 @@ class Permutation(Variation):
 class Geometry(object):
     '''
     Represents the geometry data, including any geometry-specific constraints (max_size, etc.)
-    
-    This class is a singleton
     ''' 
     def __init__(self, geometry_parameters):
         '''
@@ -1764,7 +2133,7 @@ class RandomOrganismCreator(OrganismCreator):
         # the default number of random organisms to make
         # TODO: are these good values?
         if composition_space.objective_function == 'epa':
-            self.default_number = 30
+            self.default_number = 28
         elif composition_space.objective_function == 'pd':
             self.default_number = 40
         # the default volume scaling behavior
@@ -1803,7 +2172,7 @@ class RandomOrganismCreator(OrganismCreator):
         self.is_finished = False
         
         # For elements that are normally gases, pymatgen doesn't have densities. These are the densities (in kg/m^3) for the ones that are 
-        # missing from pymatgein's database. All values are taken from Materials Project, except for At and Rn, which were taken from Wikipedia
+        # missing from pymatgen's database. All values are taken from Materials Project, except for At and Rn, which were taken from Wikipedia
         self.missing_densities = {'H': 150, 'He': 421, 'N': 927, 'O': 1974, 'F': 1972, 'Ne': 1680, 'Cl': 829, 'Ar': 1478, 'Br': 3535, 'Kr': 2030, 'Xe': 2611, 'At': 6350, 'Rn': 4400}
     
     
@@ -1904,7 +2273,9 @@ class RandomOrganismCreator(OrganismCreator):
         
             # scale the volume of the random organism to satisfy the computed mean volume per atom
             # TODO: sometimes this doesn't work. It can either scale the volume to some huge number, or else volume scaling just fails and lattice vectors are assigned nan
-            #       it looks like the second error is caused by a divide-by-zero in the routine pymatgen calls to scale the volume
+            #       it looks like the second error is caused by a divide-by-zero in the routine pymatgen calls to scale the volume. Maybe deal with errors somehow so they don't 
+            #       get printed to the output file
+            #
             #       the if statement below is to catch these cases, but I should probably contact pymatgen about it...
             random_structure.scale_lattice(mean_vpa*len(random_structure.sites))
             if str(random_structure.lattice.a) == 'nan' or random_structure.lattice.a > 100:
@@ -1917,6 +2288,8 @@ class RandomOrganismCreator(OrganismCreator):
         else:
             # scale to the given volume per atom
             random_structure.scale_lattice(self.volume*len(random_structure.sites)) 
+            if str(random_structure.lattice.a) == 'nan' or random_structure.lattice.a > 100:
+                return None 
         
         # return a random organism with the scaled random structure
         random_org = Organism(random_structure, id_generator, self.name)
@@ -2449,9 +2822,9 @@ class Development(object):
         if self.scale_density and composition_space.objective_function == "epa" and pool != None and organism.epa == None:
             # get average volume per atom of the organisms in the promotion set
             vpa_sum = 0
-            for org in pool.promotionSet:
+            for org in pool.promotion_set:
                 vpa_sum = vpa_sum + org.structure.volume/len(org.structure.sites)
-            vpa_mean = vpa_sum/len(pool.promotionSet)
+            vpa_mean = vpa_sum/len(pool.promotion_set)
             # compute the new volume per atom
             num_atoms = len(organism.structure.sites)
             new_vol = vpa_mean*num_atoms
@@ -2509,72 +2882,6 @@ class Development(object):
         
         # return the organism if it survived
         return organism
-                
-                
-
-class OffspringGenerator(object):
-    '''
-    Used to generate offspring structures
-    '''
-    
-    def __init__(self, variations, development, redundancy_guard, num_tries_limit):
-        '''
-        Args:
-            variations: a list of Variation objects 
-            
-            development: the Development object (for cell reduction and structure constraints)
-            
-            redundancy_guard: the redundancyGuard object 
-            
-            num_tries_limit: the max number of times to attempt creating an offspring organism from a given variation
-                before giving up and trying a different variation.
-        '''
-        self.variation = variations
-        self.development = development
-        self.redundancy_guard = redundancy_guard
-        self.num_tries_limit = num_tries_limit
-        
-        
-    def makeOffspringOrganism(self, pool, whole_pop):
-        '''
-        Generates a valid offspring organism using the variations and adds it to whole_pop.
-        
-        Returns an unrelaxed offspring organism.
-        
-        Args:
-            pool: the current Pool
-            
-            whole_pop: the list containing all the orgs seen so far (both relaxed an unrelaxed)
-        '''
-        tried_variations = []
-        while(len(self.variations) > len(tried_variations)):
-            variation = self.selectVariation(tried_variations)
-            num_tries = 0
-            while (num_tries < self.num_tries_limit):
-                offspring = variation.doVariation()
-                offspring = self.development.develop(offspring)
-                if (offspring != None) and (self.redundancy_guard.checkRedundancy(offspring, whole_pop) == None):
-                    whole_pop.append(copy.deepcopy(offspring))
-                    return offspring
-                else:
-                    num_tries = num_tries + 1
-            tried_variations.append(variation)
-        print("Could not make valid offspring organism with any Variation.") # This point should never be reached
-        
-    
-    def selectVariation(self, tried_variations):
-        '''
-        Selects a variation that hasn't been tried yet based on their selection probabilities
-        
-        Args:
-            tried_variations: list of Variations that have already been unsuccessfully tried
-        '''
-    # TODO: implement me
-    #
-    #    while(true):
-    #        variation = random_selection(variations)    # choose one randomly based on their selection probs.
-    #        if (variation not in tried_variations):
-    #            return variation
     
         
     
@@ -2584,6 +2891,8 @@ class EnergyCalculator(object):
     
     Not meant to be instantiated, but rather subclassed by particular Calculators, like VaspEnergyCalculator
     or GulpEnergyCalculator.
+    
+    TODO: is the superclass even necessary?
     '''
     
     def doEnergyCalculation(self, org):
@@ -2597,30 +2906,6 @@ class EnergyCalculator(object):
             org: the organism whose energy we want to calculate
         '''
         raise NotImplementedError("Please implement this method.")
-        # TODO: think about how to impelement this. There are two main parts: preparing for the calculation (writing
-        #    input files), and actually submitting it, by calling an external script or something. Once the calculation
-        #    is finished, we need to develop the relaxed organism, add it to the whole_pop list, and add it to the
-        #    waiting_queue.
-        #
-        #    All this should be done on it's own thread, so that multiple energy calculations can be running at once.
-        #    It might be best to handle the threads inside the method (not sure)
-        #
-        #    The goal is be able to call EnergyCalculator.doEnergyCalcualtion(unrelaxed_organism) and then have the
-        #    control flow immediately return (i.e. not having to wait for the method to finish)
-        #
-        #    Note: when the energy calculation finishes, this method will need to have access to the current versions
-        #        of the whole_pop list and the waiting_queue. Not sure best way to do that...
-        
-        # set up the energy calc (prepare input files, etc.)
-        # do the energy calc
-        # if it finished correctly: 
-        #    relaxed_org = development.develop(relaxed_org) it and append updated org to the waiting queue
-        #    if (relaxed_org != None):
-        #        waiting_queue.append(relaxed_org)
-        #    else:
-        #        print("failed constraints") # say which one
-        # else:
-        #    print("Energy calculation failed. Discarding org") 
         
         
 
@@ -2689,10 +2974,6 @@ class GulpEnergyCalculator(object):
         # whether the anions and cations are polarizable in the gulp potential
         self.anions_shell, self.cations_shell = self.getShells()
         
-        # for submitting the gulp calculation with the external callgulp script
-        # TODO: don't think we need this anymore
-        self.gulp_caller = gulp_caller.GulpCaller(cmd = 'callgulp')
-        
     
     def getShells(self):
         '''
@@ -2738,6 +3019,7 @@ class GulpEnergyCalculator(object):
             
         Precondition: the garun directory and temp subdirectory exist
         
+        TODO: think about ways to make this more robust - look at Will's code
         TODO: might be better to eventually use the custodian package for error handling...
         '''
         # make the job directory
@@ -2757,31 +3039,17 @@ class GulpEnergyCalculator(object):
         gin_file.write(gulp_input)
         gin_file.close()
         
-        # run gulp by calling external callgulp script via GulpCaller.run() and store the output as a string
         print('Starting Gulp calculation on organism {}'.format(organism.id))
         
-        
-        # TODO: this is annoying for two reasons. First, if an exception is thrown, then GulpCaller.run prints out the entire gulp output, which we don't want cluttering our
-        # gasp output file. The second reason is that if an exception gets thrown, the gulp output isn't printed to a file. We really want to print the output to a file so
-        # the user can look at it to troubleshoot.
-        #
-        # Better solution: run gulp with callgulp and print output to a file. If trouble parsing the structure or energy from the output, then print an error message. 
-        #
-        #try:
-        #    gulp_output = self.gulp_caller.run(gulp_input)
-        #except GulpConvergenceError:
-        #    print('Gulp calculation on organism {} did not converge properly'.format(organism.id))
-        #    dictionary[key] = None
-        #    return
-        #except:
-        #    print('Error during Gulp calculation on organism {}'.format(organism.id))
-        #    dictionary[key] = None
-        #    return
-        
+        # run the gulp calculation by running a 'callgulp' script as a subprocess. If errors are thrown, print them to the gulp output file
         try:
-            # TODO: sometimes this fails catastrophically. Fix it - look at how GulpCaller.run is implemented - it did't have this problem
-            gulp_output = subprocess.check_output(['callgulp', gin_path])
-        except:
+            gulp_output = check_output(['callgulp', gin_path], stderr = STDOUT)
+        except CalledProcessError as e:
+            # print the output of the bad gulp calc to a file for the user's reference
+            gout_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')
+            gout_file.write(e.output)
+            gout_file.close()
+            # error message and set dictionary element to None before returning
             print('Error running Gulp on organism {}'.format(organism.id))
             dictionary[key] = None
             return
@@ -2789,22 +3057,29 @@ class GulpEnergyCalculator(object):
         # print gulp output to a file for user's reference 
         gout_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')
         gout_file.write(gulp_output)
+        gout_file.close()
        
-        # TODO: could check for convergence here too
+        # check if not converged (part of this is copied from pymatgen)
+        conv_err_string = "Conditions for a minimum have not been satisfied"
+        gradient_norm = self.getGradNorm(gulp_output)
+        if conv_err_string in gulp_output and gradient_norm > 0.1:
+            print('The Gulp calculation on organism {} did not converge'.format(organism.id))
+            dictionary[key] = None
+            return
        
         # parse the relaxed structure from the gulp output
         try:
             # TODO: will have to change this line if pymatgen fixes the gulp parser
             relaxed_structure = self.get_relaxed_structure(gulp_output)
-        except IOError:
+        except:
             print('Error reading structure of organism {} from Gulp output'.format(organism.id))
             dictionary[key] = None
             return
         
         # parse the total energy from the gulp output
         try:
-            total_energy = self.gulp_io.get_energy(gulp_output)
-        except IOError:
+            total_energy = self.getEnergy(gulp_output)
+        except:
             print('Error reading energy of organism {} from Gulp output'.format(organism.id))
             dictionary[key] = None
             return
@@ -2812,7 +3087,7 @@ class GulpEnergyCalculator(object):
         # parse the number of atoms used by gulp from the gulp output (sometimes gulp takes a supercell)
         num_atoms = self.getNumAtoms(gulp_output)
             
-        # for testing
+        # for conveniance/testing...
         relaxed_structure.to('poscar', job_dir_path + '/' + str(organism.id) + '.vasp')
             
         # assign the relaxed structure and energy to the organism, and compute the epa
@@ -2820,12 +3095,41 @@ class GulpEnergyCalculator(object):
         organism.epa = total_energy/num_atoms
         organism.total_energy = organism.epa*organism.structure.num_sites
         
-        # TODO: this organism could still fail redundancy. Does it make sense to print this message here?
+        # print out the enerngy per atom of the organism
         print('Setting energy of organism {} to {} eV/atom'.format(organism.id, organism.epa))
         
         # store the relaxed organism in the specified dictionary with the specified key 
         dictionary[key] = organism
         
+       
+    def getGradNorm(self, gout):
+        '''
+        Parses the final gradient norm from the Gulp output
+        
+        Args:
+            gout: the Gulp output, as a string
+        ''' 
+        output_lines = gout.split("\n")
+        for line in output_lines:
+            if "Final Gnorm," in line:
+                # the gradient norm is the fourth element in the line
+                line_parts = line.split()
+                return float(line_parts[3])  
+       
+       
+    def getEnergy(self, gout):
+        '''
+        Parses the final energy from the Gulp output
+        
+        Args:
+            gout: the Gulp output, as a string
+        '''
+        output_lines = gout.split("\n")
+        for line in output_lines:
+            if "Final energy" in line:
+                # the energy is the fourth element in the line
+                line_parts = line.split()
+                return float(line_parts[3])
        
        
     def getNumAtoms(self, gout):
@@ -2936,27 +3240,30 @@ class InitialPopulation():
     '''
     The initial population of organisms
     '''
-    def __init__(self):
+    def __init__(self, run_dir_name):
         '''
         Creates an initial population
+        
+        Args:
+            run_dir_name: the name (not path) of the garun directory where the search will be done
         '''
+        self.run_dir_name = run_dir_name
         self.initial_population = []
     
     
-    def addOrganism(self, org):
+    def addOrganism(self, organism_to_add):
         '''
         Adds a relaxed organism to the initial population and updates whole_pop.
         
-        TODO: whenever a structure gets added to the initial population, we need to print it to the garun output file in poscar format
-        
         Args:
-            org: the organism whose energy we want to calculate
-            
-            whole_pop: the list containing all the organisms that the algorithm has submitted for energy calculations
+            organism_to_add: the organism to add to the pool
         '''
-        print('Adding organism {} to the initial population'.format(org.id))
-        self.initial_population.append(org)
-        org.is_active = True
+        # write the organism we're adding to a poscar file
+        organism_to_add.structure.to('poscar', os.getcwd() + '/' + self.run_dir_name + '/POSCAR.' + str(organism_to_add.id))
+        
+        print('Adding organism {} to the initial population'.format(organism_to_add.id))
+        self.initial_population.append(organism_to_add)
+        organism_to_add.is_active = True
       
       
     def replaceOrganism(self, old_org, new_org):
@@ -2965,7 +3272,6 @@ class InitialPopulation():
         
         Precondition: the old_org is a current member of the initial population
         
-        TODO: whenever a structure gets added to the initial population (even via replacement), we need to print it to the garun output file in poscar format
         TODO: instead of finding the old organism in the initial population by searching for the right id, it might better to eventually implement a __eq__(self, other)
               method in the Organism class to determine when two organisms are the same...
         
@@ -2973,6 +3279,9 @@ class InitialPopulation():
             old_org: the organism in the initial population to replace
             new_org: the new organism to replace the old one
         '''
+        # write the new organism to a poscar file
+        new_org.structure.to('poscar', os.getcwd() + '/' + self.run_dir_name + '/POSCAR.' + str(new_org.id))
+        
         print('Replacing organism {} with organism {} in the initial population'.format(old_org.id, new_org.id))
         # find the organism in self.initial_population with the same id as old_org
         for org in self.initial_population:

@@ -39,9 +39,6 @@ EnergyCode: # should only have one specified
 #	lammps: # TODO: the input files needed for lammps
 
 
-#ObjectiveFunction: # <epa|pd> This flag is optional. If not set, the algorithm will infer the objective function based on the composition space (epa for fixed composition, pd for variable)
-
-
 
 # the general constraints - entire  block is optional, and defaults will be used if it's omitted
 #Constraints: 
@@ -78,7 +75,7 @@ EnergyCode: # should only have one specified
 
 
 # The parameters to use for determining if two organisms are redundant. Entire block is optional and if not specified, does structural comparisons (with default tolerances), but not value comparisons
-RedundancyGuard: 
+#RedundancyGuard: 
 #     lattice_length_tol:   # fractional length tolerance (ltol argument of structure_matcher). Defaults to 0.1
 #     lattice_angle_tol:    # angle tolerance in degrees (angle_tol argument of structure_matcher). Defaults to 2
 #     site_tol:             # site tolerance - fraction of average free length per atom (stol argument of structure_matcher). Defaults to 0.1 	
@@ -88,10 +85,10 @@ RedundancyGuard:
 
 
 
-# The parameters for making the initial population. The entire block is optional and if not specified, makes 30 or 40 random organisms for epa and pd searches, respectively. Will also scale volumes to weighted average of elemental volumes
+# The parameters for making the initial population. The entire block is optional and if not specified, makes 28 or 40 random organisms for epa and pd searches, respectively. Will also scale volumes to weighted average of elemental volumes
 InitialPopulation:
      random:
-          number: 10  # number of random structures to make
+          number: 12  # number of random structures to make
 #          volume: 9  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
                      # <num|random|from_elemental_densities> num - the number of cubic Angstroms per atom to scale to
                      #                                       random - no volume scaling - the volume is just the result of the random lattice vectors and atoms
@@ -104,15 +101,15 @@ InitialPopulation:
 
 
 
-NumCalcsAtOnce: 10  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
+NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
      
 
 RunTitle: test # the title of run. Optional
 
 
 # when the algorithm should stop the search. Optional, and defaults to 500 energy calcs for epa and 1000 energy calcs for pd
-#StoppingCriteria:
-#     num_energy_calcs: 700  # integer, the number of energy calculations to do before stopping. 
+StoppingCriteria:
+     num_energy_calcs: 300  # integer, the number of energy calculations to do before stopping. 
 #     value_achieved: -3.5   # float, stop when a structure has been found with this or lower value
 #     found_structure: /n/srv/brevard/Downloads/1T.cif   # path to poscar or cif file, stop when this structure has been found (to within some tolerance)
 
@@ -159,13 +156,14 @@ RunTitle: test # the title of run. Optional
 #               - Al Zn
 
 
+# entire block is optional
+Pool:
+     size: 10   # total number of organisms in the pool. Optional, and defaults to 21 if epa or 30 if pd 
+     num_promoted: 1  # the number of organisms in the promotion set. Optional, and defaults to 3.
+                      # for phase diagram searching, this always includes the organisms on the convex hull (i.e., the provided value is ignored)
 
+# entire block is optional
 #Selection:
-#	num_parents: 20 # this should default to pool_size
-#	selection_power: 1 # this should default to 1 (linear selection)
-
-
-#Pool:
-#	size: # total number of organisms in the pool
-#	num_promoted: # the number of organisms in the promotion set. For phase diagram searching, this is always the ones on the convex hull (i.e., this is ignored)
+#     num_parents:   # the number of parents from the pool with non-zero selection probabilities. Optional, and defaults to pool.size
+#     power:   # the exponent of the power law. Optional, and defaults to 1
 
