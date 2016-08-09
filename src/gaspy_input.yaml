@@ -88,7 +88,7 @@ EnergyCode: # should only have one specified
 # The parameters for making the initial population. The entire block is optional and if not specified, makes 28 or 40 random organisms for epa and pd searches, respectively. Will also scale volumes to weighted average of elemental volumes
 InitialPopulation:
      random:
-          number: 12  # number of random structures to make
+          number: 20  # number of random structures to make
 #          volume: 9  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
                      # <num|random|from_elemental_densities> num - the number of cubic Angstroms per atom to scale to
                      #                                       random - no volume scaling - the volume is just the result of the random lattice vectors and atoms
@@ -101,7 +101,7 @@ InitialPopulation:
 
 
 
-NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
+NumCalcsAtOnce: 10  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
      
 
 RunTitle: test # the title of run. Optional
@@ -109,7 +109,7 @@ RunTitle: test # the title of run. Optional
 
 # when the algorithm should stop the search. Optional, and defaults to 500 energy calcs for epa and 1000 energy calcs for pd
 StoppingCriteria:
-     num_energy_calcs: 300  # integer, the number of energy calculations to do before stopping. 
+     num_energy_calcs: 500  # integer, the number of energy calculations to do before stopping. 
 #     value_achieved: -3.5   # float, stop when a structure has been found with this or lower value
 #     found_structure: /n/srv/brevard/Downloads/1T.cif   # path to poscar or cif file, stop when this structure has been found (to within some tolerance)
 
@@ -158,8 +158,8 @@ StoppingCriteria:
 
 # entire block is optional
 Pool:
-     size: 10   # total number of organisms in the pool. Optional, and defaults to 21 if epa or 30 if pd 
-     num_promoted: 1  # the number of organisms in the promotion set. Optional, and defaults to 3.
+     size: 15   # total number of organisms in the pool. Optional, and defaults to 21 if epa or 30 if pd 
+     num_promoted: 3  # the number of organisms in the promotion set. Optional, and defaults to 3.
                       # for phase diagram searching, this always includes the organisms on the convex hull (i.e., the provided value is ignored)
 
 # entire block is optional
