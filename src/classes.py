@@ -269,7 +269,7 @@ class InitialPopulation():
             organism_to_add: the organism to add to the pool
         '''
         # write the organism we're adding to a poscar file
-        organism_to_add.structure.to('poscar', os.getcwd() + '/' + self.run_dir_name + '/POSCAR.' + str(organism_to_add.id))
+        organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(organism_to_add.id))
         
         print('Adding organism {} to the initial population'.format(organism_to_add.id))
         self.initial_population.append(organism_to_add)
@@ -290,7 +290,7 @@ class InitialPopulation():
             new_org: the new organism to replace the old one
         '''
         # write the new organism to a poscar file
-        new_org.structure.to('poscar', os.getcwd() + '/' + self.run_dir_name + '/POSCAR.' + str(new_org.id))
+        new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
         
         print('Replacing organism {} with organism {} in the initial population'.format(old_org.id, new_org.id))
         # find the organism in self.initial_population with the same id as old_org
@@ -493,7 +493,7 @@ class Pool(object):
         self.num_adds = self.num_adds + 1
         
         # write the organism we're adding to a poscar file
-        organism_to_add.structure.to('poscar', os.getcwd() + '/' + self.run_dir_name + '/POSCAR.' + str(organism_to_add.id))
+        organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(organism_to_add.id))
         
         # the organism that we're adding to the pool is now active
         organism_to_add.is_active = True
@@ -566,7 +566,7 @@ class Pool(object):
         print('Replacing organism {} with organism {} in the pool'.format(old_org.id, new_org.id))
         
         # write the new organism to a poscar file
-        new_org.structure.to('poscar', os.getcwd() + '/' + self.run_dir_name + '/POSCAR.' + str(new_org.id))
+        new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
         
         # compute the value of the new organism
         self.computeValue(new_org, composition_space)
@@ -2199,7 +2199,7 @@ class CompositionSpace(object):
         '''
         for i in range(len(endpoints)):
             endpoints[i] = Composition(endpoints[i])
-            endpoints[i] = endpoints[i].reduced_composition()
+            endpoints[i] = endpoints[i].reduced_composition
             
         self.endpoints = endpoints
         
@@ -2229,15 +2229,14 @@ class CompositionSpace(object):
     def get_all_elements(self):
         '''
         Returns a list of all the elements (as pymatgen.core.periodic_table.Element objects) that are in the composition space
-        '''
+        ''' 
         # get each element type from the composition_space object
         elements = []
         for point in self.endpoints:
-            for key in point:
-                elements.append(key)
+            elements = elements + point.elements 
         # remove duplicates from the list of elements
         elements = list(set(elements)) 
-        return elements  
+        return elements 
             
             
     def get_all_pairs(self):
@@ -2258,30 +2257,10 @@ class CompositionSpace(object):
             for j in range(i + 1, len(elements)):
                 pairs.append(str(elements[i].symbol + " " + elements[j].symbol))
         return pairs
-                
-        
-        
-class OrganismCreator(object):
-    '''
-    Creates organisms for the initial population
-    
-    Not meant to be instantiated, but rather subclassed by particular Creators, like RandomOrganismCreator
-    or PoscarsOrganismCreator.
-    
-    TODO: is this even necessary? All it specifies is that a creator should have a createOrganism method that returns an organism or None. 
-    '''
-    
-    def createOrganism(self):
-        '''
-        Creates an organism for the initial population.
-        
-        Returns an organism, or None if one could not be created
-        '''
-        raise NotImplementedError("Please implement this method.")
-        
 
 
-class RandomOrganismCreator(OrganismCreator):
+
+class RandomOrganismCreator(object):
     '''
     Creates random organisms for the initial population
     '''
@@ -2392,7 +2371,7 @@ class RandomOrganismCreator(OrganismCreator):
         elif composition_space.objective_function == 'pd':
             # TODO: this doesn't ensure the organism will be in the composition space. If it's not, it will just fail development, but there might be a better way...
             num_atoms = random.randint(constraints.min_num_atoms, constraints.max_num_atoms)
-            allowed_elements = constraints.get_all_elements(composition_space)
+            allowed_elements = composition_space.get_all_elements()
             elements = []
             for _ in range(num_atoms):
                 elements.append(random.choice(allowed_elements))
@@ -2480,7 +2459,7 @@ class RandomOrganismCreator(OrganismCreator):
                 
 
 
-class FileOrganismCreator(OrganismCreator):
+class FileOrganismCreator(object):
     '''
     Creates organisms from files (poscar or cif) for the initial population.
     '''
@@ -2647,7 +2626,7 @@ class RedundancyGuard(object):
         
         # make the StructureMatcher object
         # The first False is to prevent the matcher from scaling the volumes, and the second False is to prevent subset matching
-        self.structure_matcher = StructureMatcher(self.lattice_length_tol, self.site_tol, self.lattice_angle_to, self.use_primitive_cell, False, self.attempt_supercell, False, ElementComparator())
+        self.structure_matcher = StructureMatcher(self.lattice_length_tol, self.site_tol, self.lattice_angle_tol, self.use_primitive_cell, False, self.attempt_supercell, False, ElementComparator())
     
         
     def set_all_to_defaults(self):
@@ -2655,7 +2634,7 @@ class RedundancyGuard(object):
         Sets all the redundancy parameters to default values
         '''
         self.lattice_length_tol = self.default_lattice_length_tol
-        self.lattice_angle_to = self.default_lattice_angle_tol
+        self.lattice_angle_tol = self.default_lattice_angle_tol
         self.site_tol = self.default_site_tol
         self.use_primitive_cell = self.default_use_primitive_cell
         self.attempt_supercell = self.default_attempt_supercell
@@ -3096,7 +3075,8 @@ class VaspEnergyCalculator(object):
             
             run_dir_name: the name of the garun directory containing all the output of the search (just the name, not the path)
         '''
-        # TODO: implement me. Just keeping the paths to the input files should be enough
+        # TODO: implement me
+        self.name = 'vasp'
     
     
     def doEnergyCalculation(self, org):
@@ -3122,7 +3102,7 @@ class GulpEnergyCalculator(object):
     '''
     Calculates the energy of an organism using GULP.
     '''
-    def __init__(self, header_file, potential_file, run_dir_name):
+    def __init__(self, header_file, potential_file):
         '''
         Args:
             header_file: the path to the gulp header file
@@ -3133,6 +3113,9 @@ class GulpEnergyCalculator(object):
             
         Precondition: the header and potential files exist and are valid
         '''
+        # the name of the energy code being used
+        self.name = 'gulp'
+        
         # read the gulp header file and store it as a string
         with open (header_file, "r") as gulp_header_file:
             self.header = gulp_header_file.read()
@@ -3140,9 +3123,6 @@ class GulpEnergyCalculator(object):
         # read the gulp potential file and store it as a string
         with open (potential_file, "r") as gulp_potential_file:
             self.potential = gulp_potential_file.read()
-            
-        # the name of the garun directory
-        self.run_dir_name = run_dir_name
         
         # for processing gulp input and output
         self.gulp_io = gulp_caller.GulpIO()
@@ -3193,13 +3173,13 @@ class GulpEnergyCalculator(object):
             
             key: the key specifying where to store the relaxed organism in the dictionary
             
-        Precondition: the garun directory and temp subdirectory exist
+        Precondition: the garun directory and temp subdirectory exist, and we are currently located inside the garun directory
         
         TODO: think about ways to make this more robust - look at Will's code
         TODO: might be better to eventually use the custodian package for error handling...
         '''
         # make the job directory
-        job_dir_path = str(getcwd()) + '/' + str(self.run_dir_name) + '/temp/' + str(organism.id)
+        job_dir_path = str(getcwd()) + '/temp/' + str(organism.id)
         mkdir(job_dir_path)
         
         # get the structure in gulp input format
@@ -3458,6 +3438,7 @@ class StoppingCriteria(object):
                     self.found_structure = self.default_found_structure
                 else:
                     # read the structure from the file
+                    self.path_to_structure_file = stopping_parameters['found_structure']
                     self.found_structure = Structure.from_file(stopping_parameters['found_structure'])     
             else:
                 self.found_structure = self.default_found_structure

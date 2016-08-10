@@ -4,22 +4,21 @@
 # after parsing this, we need to have some sort of check to make sure the endpoints are valid
 # also, based on this, determine whether we are doing a phase diagram search or not (so we know which objective funtion to use)
 CompositionSpace:
-    # - C: 2
-    #   Si: 1
-
-    # - C: 1
-    #   Si: 2
+    # - C2Si
+    # - CSi2
     
-    #  - Al: 1 
+    # - Al 
 
-    #  - Fe: 1 
+    # - Fe 
 
-    #  - Co: 1
+    # - Co
 
-    # - Au: 1
+    # - Au
 
-     - Al: 2
-       O: 3
+    # - Al2O3
+
+      - Al
+      - O
 
 
 # says which energy code to use, and where the needed input files are. NOT optional
@@ -48,7 +47,7 @@ EnergyCode: # should only have one specified
 #     max_lattice_length: 20
 #     min_lattice_angle: 40
 #     max_lattice_angle: 140
-#     allow_endpoints: False  # only gets applied when doing phase diagram searches, and only after the initial population. It specifies whether the end point compositions are permitted after the initial population
+#     allow_endpoints: True  # only gets applied when doing phase diagram searches, and only after the initial population. It specifies whether the end point compositions are permitted after the initial population
                              # default is True for phase diagram searches (should it be?)
 #     per_species_mids:   # should default to all possible pairs (from composition space)
 #          C C: 1.0 
@@ -67,7 +66,6 @@ EnergyCode: # should only have one specified
 
 
 #Niggli: True # whether to do Niggli cell reduction. Optional, and defaults to True. If used, handles other geometries (sheet, etc.) appropriately
-
 
 
 #ScaleDensity: True # whether to scale the density before doing an energy calculation. If used, the density is set to the average of the densities of the organisms in the promotion set 

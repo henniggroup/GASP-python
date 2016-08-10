@@ -6,7 +6,6 @@ import objects_maker
 import copy
 import threading 
 import random
-from pymatgen.util.convergence import id_generator
 
 # get the path to the input file (in yaml format)
 #input_file = os.path.abspath(sys.argv[1]) 
@@ -22,7 +21,9 @@ with open('/n/srv/brevard/python_GA/gaspy/src/gaspy_input.yaml', 'r') as f:
     parameters = yaml.load(f)
 
 # make the objects needed by the algorithm
-objects_dict = objects_maker.make_objects(parameters)
+objects_dict = objects_maker.makeObjects(parameters)
+
+# get the objects from the dictionary
 run_dir_name = objects_dict['run_dir_name']
 organism_creators = objects_dict['organism_creators']
 num_calcs_at_once = objects_dict['num_calcs_at_once']
@@ -35,16 +36,20 @@ stopping_criteria = objects_dict['stopping_criteria']
 energy_calculator = objects_dict['energy_calculator']
 pool = objects_dict['pool']
 variations = objects_dict['variations']
+id_generator = objects_dict['id_generator']
 
 os.chdir('/n/srv/brevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
 
-# make the run directory
-os.mkdir(str(os.getcwd()) + '/' + run_dir_name)
-# make the temp subdirectory where the energy calculations will be run
-os.mkdir(str(os.getcwd()) + '/' + run_dir_name + '/temp')
+# make the run directory and move into it
+garun_dir = str(os.getcwd()) + '/' + run_dir_name
+os.mkdir(garun_dir)
+os.chdir(garun_dir)
 
-# TODO: here make a file inside the run directory, and write all the parameters being used in the search to the file
-# might be best to make a method somewhere (maybe in objects creator?) to handle all the writing so it doesn't cause clutter here
+# make the temp subdirectory where the energy calculations will be done
+os.mkdir(garun_dir + '/temp')
+
+# print the search parameters to a file in the run directory
+objects_maker.printParameters(objects_dict)
 
 # list to hold copies of all the valid organisms made by the algorithm
 whole_pop = []
@@ -258,15 +263,16 @@ while not stopping_criteria.are_satisfied:
                         # print out how many energy calculations have been done so far
                         print('Number of energy calculations so far: {}'.format(num_calcs_finished))
                                  
-            # make another offspring organism
-            unrelaxed_offspring = offspring_generator.makeOffspringOrganism(random, pool, variations, geometry, id_generator, whole_pop, development, redundancy_guard, composition_space, constraints)
-            whole_pop.append(copy.deepcopy(unrelaxed_offspring))
-            geometry.pad(unrelaxed_offspring) 
-            stopping_criteria.updateCalcCounter()
-            thread = threading.Thread(target=energy_calculator.doEnergyCalculation, args=[unrelaxed_offspring, relaxed_organisms, thread_index])
-            thread.start()
-            # replace the dead thread in threads with the new one
-            threads[thread_index] = thread
+            # make another offspring organism if the stopping criteria aren't satisfied
+            if not stopping_criteria.are_satisfied:
+                unrelaxed_offspring = offspring_generator.makeOffspringOrganism(random, pool, variations, geometry, id_generator, whole_pop, development, redundancy_guard, composition_space, constraints)
+                whole_pop.append(copy.deepcopy(unrelaxed_offspring))
+                geometry.pad(unrelaxed_offspring) 
+                stopping_criteria.updateCalcCounter()
+                thread = threading.Thread(target=energy_calculator.doEnergyCalculation, args=[unrelaxed_offspring, relaxed_organisms, thread_index])
+                thread.start()
+                # replace the dead thread in threads with the new one
+                threads[thread_index] = thread
 
 
 # get the output of all the calculations that were still running when the stopping criteria were met
