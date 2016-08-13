@@ -4,29 +4,21 @@
 # after parsing this, we need to have some sort of check to make sure the endpoints are valid
 # also, based on this, determine whether we are doing a phase diagram search or not (so we know which objective funtion to use)
 CompositionSpace:
-    # - C2Si
-    # - CSi2
+     - Al
+     - Cu
     
-    # - Al 
-
-    # - Fe 
-
-    # - Co
-
-    # - Au
-
     # - Al2O3
 
-      - Al
-      - O
+    #  - Al
+    #  - O
 
 
 # says which energy code to use, and where the needed input files are. NOT optional
 EnergyCode: # should only have one specified
 
-     gulp: # TODO: the input files needed for gulp
+     gulp: 
           header_file: /n/srv/brevard/testing/gulp_testing/header_file  # the path to the header file
-          potential_file: /n/srv/brevard/testing/gulp_testing/potential_file  # the path to the potential file
+          potential_file: /n/srv/brevard/testing/gulp_testing/AlCu_potential_file  # the path to the potential file
 #
 #	vasp:
 #		incar: path to incar file
@@ -37,6 +29,33 @@ EnergyCode: # should only have one specified
 
 #	lammps: # TODO: the input files needed for lammps
 
+
+# The parameters for making the initial population. The entire block is optional and if not specified, makes 28 or 40 random organisms for epa and pd searches, respectively. Will also scale volumes to weighted average of elemental volumes
+InitialPopulation:
+     random:
+          number: 23  # number of random structures to make
+#          volume: 9  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
+                     # <num|random|from_elemental_densities> num - the number of cubic Angstroms per atom to scale to
+                     #                                       random - no volume scaling - the volume is just the result of the random lattice vectors and atoms
+                     #                                       from_elemental_densities - scales the volume to the weighted average of the volumes per atom of the elemental solids. This is default behavior
+
+     from_files:
+          path_to_folder: /n/srv/brevard/testing/gaspy_testing/ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files 
+
+     # TODO: maybe include other options, like getting structures from a database or something
+
+
+
+NumCalcsAtOnce: 20  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
+     
+
+# entire block is optional
+Pool:
+     size: 20   # total number of organisms in the pool. Optional, and defaults to 21 if epa or 30 if pd 
+#     num_promoted: 3  # the number of organisms in the promotion set. Optional, and defaults to 3.
+                      # for phase diagram searching, this always includes the organisms on the convex hull (i.e., the provided value is ignored)
+
+#RunTitle: test # the title of run. Optional
 
 
 # the general constraints - entire  block is optional, and defaults will be used if it's omitted
@@ -83,42 +102,22 @@ EnergyCode: # should only have one specified
 
 
 
-# The parameters for making the initial population. The entire block is optional and if not specified, makes 28 or 40 random organisms for epa and pd searches, respectively. Will also scale volumes to weighted average of elemental volumes
-InitialPopulation:
-     random:
-          number: 20  # number of random structures to make
-#          volume: 9  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
-                     # <num|random|from_elemental_densities> num - the number of cubic Angstroms per atom to scale to
-                     #                                       random - no volume scaling - the volume is just the result of the random lattice vectors and atoms
-                     #                                       from_elemental_densities - scales the volume to the weighted average of the volumes per atom of the elemental solids. This is default behavior
-
-#     from_files:
-#          path_to_folder: /n/srv/brevard/testing/gaspy_testing/initial_structures   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files 
-
-     # TODO: maybe include other options, like getting structures from a database or something
-
-
-
-NumCalcsAtOnce: 10  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
-     
-
-RunTitle: test # the title of run. Optional
 
 
 # when the algorithm should stop the search. Optional, and defaults to 500 energy calcs for epa and 1000 energy calcs for pd
-StoppingCriteria:
-     num_energy_calcs: 500  # integer, the number of energy calculations to do before stopping. 
+#StoppingCriteria:
+#     num_energy_calcs: 500  # integer, the number of energy calculations to do before stopping. 
 #     value_achieved: -3.5   # float, stop when a structure has been found with this or lower value
 #     found_structure: /n/srv/brevard/Downloads/1T.cif   # path to poscar or cif file, stop when this structure has been found (to within some tolerance)
 
 
 
 # specifies the variations to use to create offspring structures. Optional, and defaults to Mating (0.8), StructureMut (0.1), and NumStoichsMut (0.1)  
-#Variations: 
+Variations: 
 
      # entire sub block is optional
-#     Mating:
-#          fraction: 1.0         # the fraction of the offspring organisms created with this variation. NOT optional
+     Mating:
+          fraction: 0.7         # the fraction of the offspring organisms created with this variation. NOT optional
 #          mu_cut_loc: 0.5       # the average location of the cut, in fractional coordinates, along a randomly chosen lattice vector. Optional, and defaults to 0.5
 #          sigma_cut_loc: 0.5    # the standard deviation of the location of the cut, in fractional coordinates, along a randomly chosen lattice vector. Optional, and defaults to TODO
 #          shift_prob: 1.0      # the probability that the atoms in the parent structures will be shifted along the lattice vector of the cut prior to the cut being made. Optional, and defaults to 1.0
@@ -128,8 +127,8 @@ StoppingCriteria:
 
 
      # entire sub block is optional
-#     StructureMut:
-#          fraction: 1.0                        # the fraction of the offspring organisms to create with this variation. NOT optional
+     StructureMut:
+          fraction: 0.1                        # the fraction of the offspring organisms to create with this variation. NOT optional
 #          frac_atoms_perturbed: 1.0            # the fraction of atoms in the cell that are perturbed on average. Optional, and defaults to TODO
 #          sigma_atomic_coord_perturbation: 0.5 # the standard deviation of the atomic perturbations along each coordinate (in Angstroms). Optional, and defaults to TODO
 #          max_atomic_coord_perturbation: 5.0   # the maximum allowed atomic perturbation along each coordinate (in Angstroms), Optional, and defaults to TODO
@@ -137,16 +136,16 @@ StoppingCriteria:
 
 
      # entire sub block is optional
-#     NumStoichsMut:
-#          fraction: 1.0      # the fraction of the offspring organisms to create with this variation. NOT optional
+     NumStoichsMut:
+          fraction: 0.1      # the fraction of the offspring organisms to create with this variation. NOT optional
 #          mu_num_adds: 0     # mean number of stoichiometries worth of atoms to add. Optional, and defaults to 0
 #          sigma_num_adds: 1  # standard deviation of the number of stoichiometries worth of atoms to add. Optional, and defaults to TODO
 #          scale_volume: True # whether to scale of the volume (per atom) of the offspring to equal that of the parent. Defaults to True
 
 
      # entire sub block is optional
-#     Permutation:
-#          fraction: 1.0      # the fraction of the offspring organisms to create with this variation. NOT optional
+     Permutation:
+          fraction: 0.1      # the fraction of the offspring organisms to create with this variation. NOT optional
 #          mu_num_swaps: 2    # average number of swaps to do per cell. Optional, and defaults to TODO
 #          sigma_num_swaps: 1 # the standard deviation of the number of swaps to do per cell. Optional, and defaults to TODO
 #          pairs_to_swap:     # which pairs of atomic species to allow swapping. Optional, and defaults to all possible pairs within the composition space
@@ -154,11 +153,6 @@ StoppingCriteria:
 #               - Al Zn
 
 
-# entire block is optional
-Pool:
-     size: 15   # total number of organisms in the pool. Optional, and defaults to 21 if epa or 30 if pd 
-     num_promoted: 3  # the number of organisms in the promotion set. Optional, and defaults to 3.
-                      # for phase diagram searching, this always includes the organisms on the convex hull (i.e., the provided value is ignored)
 
 # entire block is optional
 #Selection:

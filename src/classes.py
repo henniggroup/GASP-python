@@ -7,7 +7,7 @@ from pymatgen.core.periodic_table import Element, Specie
 from pymatgen.core.sites import Site
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.analysis.structure_matcher import ElementComparator
-from pymatgen.phasediagram.maker import CompoundPhaseDiagram
+from pymatgen.phasediagram.maker import PhaseDiagram, CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.phasediagram.analyzer import PDAnalyzer
 from pymatgen.transformations.standard_transformations import RotationTransformation
@@ -261,7 +261,7 @@ class InitialPopulation():
         self.initial_population = []
     
     
-    def addOrganism(self, organism_to_add):
+    def addOrganism(self, organism_to_add, composition_space):
         '''
         Adds a relaxed organism to the initial population and updates whole_pop.
         
@@ -272,11 +272,14 @@ class InitialPopulation():
         organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(organism_to_add.id))
         
         print('Adding organism {} to the initial population'.format(organism_to_add.id))
+        # print out info needed for making phase diagram plots
+        if composition_space.objective_function == 'pd':
+            print('Organism {} has composition {} and total energy {}'.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
         self.initial_population.append(organism_to_add)
         organism_to_add.is_active = True
       
       
-    def replaceOrganism(self, old_org, new_org):
+    def replaceOrganism(self, old_org, new_org, composition_space):
         '''
         Replaces an organism in the initial population with a new organism.
         
@@ -293,6 +296,10 @@ class InitialPopulation():
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
         
         print('Replacing organism {} with organism {} in the initial population'.format(old_org.id, new_org.id))
+        # print out info needed for making phase diagram plots
+        if composition_space.objective_function == 'pd':
+            print('Organism {} has composition {} and total energy {}'.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
+            
         # find the organism in self.initial_population with the same id as old_org
         for org in self.initial_population:
             if org.id == old_org.id:
@@ -301,28 +308,43 @@ class InitialPopulation():
         # add the new organism to the initial population
         self.initial_population.append(new_org)
         new_org.is_active = True
-        
-    
-    def printBestOrg(self, composition_space):
+       
+       
+    def printProgress(self, composition_space):
         '''
-        Print out the value and number of the best organism in the initial population
+        Prints out either the best organism (for epa search) or the area/volume of the convex hull (for pd search)
         
         Args:
             composition_space: the CompositionSpace object
-            
-        TODO: right now, this only works for epa searches. For pd searches, we will want to print out the area/volume of the convex hull, and also which organisms are on the convex hull.
-              Might be a little tricky because it won't be possible to construct a convex hull unless we have at least one organism from each of the composition endpoints. Will have to
-              check for that somehow
         '''
         if composition_space.objective_function == 'epa':
-            # sort the organisms in order of increasing epa
-            sorted_list = copy.deepcopy(self.initial_population)
-            sorted_list.sort(key = lambda x: x.epa, reverse = False)
-            # print out the best one
-            print('Organism {} is the best and has value {} eV/atom'.format(sorted_list[0].id, sorted_list[0].epa))
+            self.printBestOrg()
         elif composition_space.objective_function == 'pd':
-            pass
-            # TODO: implement me 
+            self.printConvexHullArea(composition_space)
+           
+    
+    def printBestOrg(self):
+        '''
+        Prints out the value and number of the best organism in the initial population
+        '''
+        # sort the organisms in order of increasing epa
+        sorted_list = copy.deepcopy(self.initial_population)
+        sorted_list.sort(key = lambda x: x.epa, reverse = False)
+        # print out the best one
+        print('Organism {} is the best and has value {} eV/atom'.format(sorted_list[0].id, sorted_list[0].epa)) 
+            
+            
+    def printConvexHullArea(self, composition_space):
+        '''
+        Computes and prints the area/volume of the current best convex hull
+        
+        Args:
+            composition_space: the CompositionSpace object
+        
+        # TODO: this could be tricky because it's possible the initial population doesn't yet have an organism at every endpoint of the composition space
+        #       will probably have to scan the organisms the initial population has so far and make there's at least one at each endpoint
+        '''
+        pass
             
             
 
@@ -395,22 +417,29 @@ class Pool(object):
         # get the list of organisms in the initial population
         organisms_list = initial_population.initial_population
         
-        # compute the values of the organisms in the initial population
-        self.computeInitialPopValues(organisms_list, composition_space)
-        
-        # sort the list of initial population organisms in order of increasing value
-        organisms_list.sort(key = lambda x: x.value, reverse = False)
-        
         # populate the promotion set and queue
         if composition_space.objective_function == 'epa':
+            # set the values of the initial population organisms to their epa's
+            for organism in organisms_list:
+                organism.value = organism.epa
+            
+            # sort the list of initial population organisms in order of increasing value
+            organisms_list.sort(key = lambda x: x.value, reverse = False)
+            
+            # assign them to either the promotion set or the queue
             for i in range(len(organisms_list)):
                 if i < self.num_promoted:
                     self.promotion_set.append(organisms_list[i])
                 else:
                     self.queue.appendleft(organisms_list[i])
+                    
         elif composition_space.objective_function == 'pd':
+            # set the values of the initial population organisms to their distances from the convex hull
+            self.computePDValues(organisms_list, composition_space)
+            
+            # assign the ones on the convex hull to the promotion set and the rest to the queue
             for organism in organisms_list:
-                if organism.value < 0.0001: # TODO: this should be zero. Change it after testing
+                if organism.value == 0: 
                     self.promotion_set.append(organism)
                 else:
                     self.queue.appendleft(organism)
@@ -421,53 +450,23 @@ class Pool(object):
         # compute the selection probabilities of all the organisms in the initial population
         self.computeSelectionProbs()
         
+        # sort the organisms in order of decreasing fitness
+        organisms_list.sort(key = lambda x: x.fitness, reverse = True)
+        
         # print out some info on the organisms in the initial population
         print('Summary of the initial population:')
         for organism in organisms_list:
             print('Organism {} has value {} and fitness {}'.format(organism.id, organism.value, organism.fitness))
-            
+         
+        # TODO: below here is equivelent to the InitialPopulation.printProgress() method...    
         # for epa seaches, print out info on the best organism in the initial population
         if composition_space.objective_function == 'epa':
             print('Organism {} is the best and has value {} eV/atom'.format(organisms_list[0].id, organisms_list[0].value))
             
         elif composition_space.objective_function == 'pd':
-            # print out the organisms that are on the convex hull (in the promotion set)
-            for organism in self.promotion_set:
-                print('Organsims {} is on the convex hull and has value {}'.format(organism.value))
-                
-            # TODO: compute and print out the area/volume of the convex hull here
-        
-    
-    def computeInitialPopValues(self, organisms_list, composition_space):
-        '''
-        Computes and assigns the values of all the organisms in the initial population
-        
-        Args:
-            organisms_list: a list of the relaxed organisms of the initial population
-            
-            composition_space: the CompositionSpace object
-        '''
-        if composition_space.objective_function == 'epa':
-            for organism in organisms_list:
-                organism.value = organism.epa
-        elif composition_space.objective_function == 'pd':
-            # create a PDEntry object for each organism in the list of organisms 
-            pdentries = {}
-            for organism in organisms_list:
-                pdentries[organism.id] = PDEntry(organism.total_energy, organism.composition) 
-       
-            # create a compound phase diagram object from the pdentries
-            pdentries_list = []
-            for organism_id in pdentries:
-                pdentries_list.append(pdentries[organism_id])
-            compound_pd = CompoundPhaseDiagram(pdentries_list, composition_space.endpoints)
-        
-            # create a phase diagram analyzer object from the compound phase diagram
-            pd_analyzer = PDAnalyzer(compound_pd)
-        
-            # compute the value of every organism in the list
-            for organism in organisms_list:
-                organism.value = pd_analyzer.get_e_above_hull(PDEntry(organism.total_energy, organism.composition))
+            pass
+            # TODO: compute and print out the area/volume of the current convex hull here
+            #       note: this is pretty much the same method as InitialPopulation.printConvexHullArea()...
         
     
     def addOrganism(self, organism_to_add, composition_space):
@@ -488,6 +487,9 @@ class Pool(object):
             composition_space: the CompositionSpace object
         '''
         print('Adding organism {} to the pool'.format(organism_to_add.id))
+        # print out info needed for making phase diagram plots
+        if composition_space.objective_function == 'pd':
+            print('Organism {} has composition {} and total energy {}'.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
         
         # increment the number of adds to the pool
         self.num_adds = self.num_adds + 1
@@ -498,10 +500,9 @@ class Pool(object):
         # the organism that we're adding to the pool is now active
         organism_to_add.is_active = True
         
-        # compute the value of the new organism (this updates the values of the other organisms in the pool if needed)
-        self.computeValue(organism_to_add, composition_space)
-        
         if composition_space.objective_function == 'epa':
+            # set the value of the new organism to its epa
+            organism_to_add.value = organism_to_add.epa
             # check if the new organism's value is better than the worst one in the promotion set
             worst_organism = self.getWorstInPromotionSet()
             if organism_to_add.value < worst_organism.value:
@@ -515,28 +516,22 @@ class Pool(object):
                 self.queue.appendleft(organism_to_add)
                   
         elif composition_space.objective_function == 'pd':
+            # set the value of the new organism and update the values of all the organisms in the pool
+            organisms_list = self.toList()
+            organisms_list.append(organism_to_add)
+            self.computePDValues(organisms_list, composition_space)
+            
             # check if any of the organisms in the promotion set are no longer on the convex hull
-            threshhold = 0.0001 # just in case the get_e_above_hull method doesn't work quite right. Can probably remove this once we confirm
-            organisms_to_move = []
-            # get a list of organisms in the promotion set that are no longer on the convex hull
-            for organism in self.promotion_set:
-                if organism.value >= threshhold:
-                    organisms_to_move.append(organism)
-            # move all the organism that are no longer on the convex hull from the promotion set to the queue       
-            for organism_to_move in organisms_to_move:    
-                self.promotion_set.remove(organism_to_move)
-                self.queue.appendleft(organism_to_move)
+            self.checkPromotionSetPD()   
                     
             # determine whether to add the new organism to the promotion set or the queue
-            if organism_to_add.value < threshhold:
+            if organism_to_add.value == 0.0:
                 self.promotion_set.append(organism_to_add)
             else:
                 self.queue.appendleft(organism_to_add)
                     
-        # compute fitnesses
+        # compute fitnesses and selection probabilities
         self.computeFitnesses()
-        
-        # compute selection probabilities
         self.computeSelectionProbs()
         
     
@@ -549,7 +544,35 @@ class Pool(object):
             if organism.value > worst_organism.value:
                 worst_organism = organism
         return worst_organism
+    
+    
+    def checkPromotionSetPD(self):
+        '''
+        For pd searches, checks whether promotion set and queue memberships are correct (all organisms with value 0 in promotion set, 
+        all organisms with value > 0 in queue), and moves organisms from promotion set to the back (left end) of the queue if needed. 
         
+        Precondition: a pd search is being done, and all organisms in the pool have up-to-date values (set by calling computePDValues)
+        '''
+        # get a list of organisms in the promotion set that are no longer on the convex hull
+        organisms_to_demote = []
+        for organism in self.promotion_set:
+            if organism.value > 0.0:
+                organisms_to_demote.append(organism)
+        # move all the organism that are no longer on the convex hull from the promotion set to the queue       
+        for organism_to_demote in organisms_to_demote:    
+            self.promotion_set.remove(organism_to_demote)
+            self.queue.appendleft(organism_to_demote)
+            
+        # get a list of organisms in the queue that are now on the convex hull
+        organisms_to_promote = []
+        for organism in self.queue:
+            if organism.value < 0.000000001: # my attempt at getting around using floats in an equality...
+                organisms_to_promote.append(organism)
+        # move all the organisms that are on the convex hull to the promotion set
+        for organism_to_promote in organisms_to_promote:
+            self.queue.remove(organism_to_promote)
+            self.promotion_set.append(organism_to_promote)
+                  
     
     def replaceOrganism(self, old_org, new_org, composition_space):
         '''
@@ -564,12 +587,21 @@ class Pool(object):
             new_org: the new organism to replace the old one
         '''
         print('Replacing organism {} with organism {} in the pool'.format(old_org.id, new_org.id))
+        # print out info needed for making phase diagram plots
+        if composition_space.objective_function == 'pd':
+            print('Organism {} has composition {} and total energy {}'.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
         
         # write the new organism to a poscar file
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
         
-        # compute the value of the new organism
-        self.computeValue(new_org, composition_space)
+        # compute the value of the new organism, and also of all the organisms in the pool in pd search
+        #self.computeValue(new_org, composition_space)
+        if composition_space.objective_function ==  'epa':
+            new_org.value = new_org.epa
+        elif composition_space.objective_function == 'pd':
+            organisms_list = self.toList()
+            organisms_list.append(new_org)
+            self.computePDValues(organisms_list, composition_space)
         
         if old_org in self.promotion_set:
             self.promotion_set.remove(old_org)
@@ -588,60 +620,53 @@ class Pool(object):
         old_org.is_active = False
         new_org.is_active = True
         
+        # for pd searches, make sure promotion set and queue memberships are correct in light of the new organism
+        if composition_space.objective_function == 'pd':
+            self.checkPromotionSetPD()
+        
         # recompute fitnesses and selection probabilities of all organisms in the pool
-        # TODO: don't actually have to update all their fitnesses every time...
         self.computeFitnesses()
         self.computeSelectionProbs()
+        
     
-    
-    def computeValue(self, organism, composition_space):
+    def computePDValues(self, organisms_list, composition_space):
         '''
-        Computes the objective function value of an organism. This doesn't change the locations of any of the organisms in the pool, and it
-        doesn't add or remove an organism from the pool.
+        Constructs a convex hull from the provided organsims, and sets the organisms' values to their distances from the convex hull
         
         Args:
-            organism: the Organism whose value we need to compute. Not yet added to the pool
+            organisms_list: a list of Organisms whose values we need to compute
             
             composition_space: the CompositionSpace object
-        '''
-        # if epa search, then value is just epa
-        if composition_space.objective_function == 'epa':
-            organism.value = organism.epa
-        # if pd search, then need to get the convex hull to compute value
-        elif composition_space.objective_function == 'pd':
-            self.computePDValue(organism, composition_space)
-        
-    
-    def computePDValue(self, organism, composition_space):
-        '''
-        Computes an organism's value, as the distance from the current best convex hull. If the organism lies on the convex hull, then recomputes of the values
-        of all the organisms in the pool relative to the new best convex hull.
-        
-        Args:
-            organism: the Organism whose value we need to compute
-            
-            composition_space: the CompositionSpace object
-        '''
-        # create a PDEntry object for the new organism and for each organism in the pool and place them in a dictionary, where the keys are the organism id's
+        '''     
+        # create a PDEntry object for each organism in the list of organisms 
         pdentries = {}
-        pdentries[organism.id] = PDEntry(organism.total_energy, organism.composition)
-        pool_list = self.toList()
-        for pool_org in pool_list:
-            pdentries[pool_org.id] = PDEntry(pool_org.total_energy, pool_org.composition) 
+        for organism in organisms_list:
+            pdentries[organism.id] = PDEntry(organism.composition, organism.total_energy) 
        
-        # create a compound phase diagram object from the pdentries
+        # put the pdentries in a list
         pdentries_list = []
         for organism_id in pdentries:
             pdentries_list.append(pdentries[organism_id])
+            
+        # create a compound phase diagram object from the list of pdentries
         compound_pd = CompoundPhaseDiagram(pdentries_list, composition_space.endpoints)
-        
+            
         # create a phase diagram analyzer object from the compound phase diagram
         pd_analyzer = PDAnalyzer(compound_pd)
+            
+        # transform the pdentries and put them in a dictionary, with the organism id's as the keys
+        transformed_pdentries = {}
+        for org_id in pdentries:
+            transformed_pdentries[org_id] = compound_pd.transform_entries([pdentries[org_id]], composition_space.endpoints)[0][0]
         
-        # compute the value of the new organism, and also of every organism in the pool
-        organism.value = pd_analyzer.get_e_above_hull(PDEntry(organism.total_energy, organism.composition))
-        for pool_org in pool_list:
-            pool_org.value = pd_analyzer.get_e_above_hull(PDEntry(pool_org.total_energy, pool_org.composition))
+        # put the values in a dictionary, with the organism id's as the keys
+        values = {}
+        for org_id in pdentries:
+            values[org_id] = pd_analyzer.get_e_above_hull(transformed_pdentries[org_id])
+                
+        # assign values to the organisms
+        for organism in organisms_list:
+            organism.value = values[organism.id]
         
     
     def computeFitnesses(self):
@@ -790,10 +815,7 @@ class Pool(object):
             print('Organism {} is the best and has value {} eV/atom'.format(pool_list[0].id, pool_list[0].value))
             
         elif composition_space.objective_function == 'pd':
-            # print out the organisms that are on the convex hull (in the promotion set)
-            for organism in self.promotion_set:
-                print('Organsims {} is on the convex hull and has value {}'.format(organism.value))
-                
+            pass    
             # TODO: compute and print out the area/volume of the convex hull here
                 
                 
@@ -824,8 +846,8 @@ class OffspringGenerator(object):
         TODO: outline of how this method works
         '''
         tried_variations = [] # list to hold the variations that have already been tried
-        max_num_tries = 10000 # the maximum number of times to try making a valid offspring with a given variation before giving up and trying a different variation
-        while(len(variations) > len(tried_variations)):
+        max_num_tries = 1000 # the maximum number of times to try making a valid offspring with a given variation before giving up and trying a different variation
+        while True:
             variation = self.selectVariation(random, tried_variations, variations)
             num_tries = 0
             while num_tries < max_num_tries:
@@ -836,11 +858,12 @@ class OffspringGenerator(object):
                     return offspring
                 else:
                     num_tries = num_tries + 1
+                    
             tried_variations.append(variation)
-        # This point should never be reached
-        print("Could not a make valid offspring organism with any Variation") 
-        print('Quitting...')
-        quit()
+            
+            # if we've tried all the variations without success, then cycle through them again
+            if len(tried_variations) == len(variations):
+                tried_variations = []
         
     
     def selectVariation(self, random, tried_variations, variations):
@@ -909,29 +932,10 @@ class SelectionProbDist(object):
                 self.power = self.default_power
             else:
                 self.power = selection_params['power']
-        
-        
-
-class Variation(object):
-    '''
-    A general variation object for creating offspring organisms from parent organism(s)
-    
-    Not meant to be instantiated, but rather subclassed by particular Variations, like Mating,
-    Mutation, etc.
-    
-    TODO: is this superclass even needed?
-    '''
-    def doVariation(self):
-        '''
-        Creates an offspring organism from parent organism(s).
-        
-        Returns an organism.
-        '''
-        raise NotImplementedError("Please implement this method.")
 
 
 
-class Mating(Variation):
+class Mating(object):
     '''
     A mating operator.
     
@@ -1251,7 +1255,7 @@ class Mating(Variation):
         
         
         
-class StructureMut(Variation):
+class StructureMut(object):
     '''
     A operator to create an offspring organism by mutating the structure of a parent organism.
     '''
@@ -1425,7 +1429,7 @@ class StructureMut(Variation):
    
         
         
-class NumStoichsMut(Variation):
+class NumStoichsMut(object):
     '''
     An operator that creates an offspring organism by mutating the number of stoichiometries' worth of atoms 
     in the parent organism.
@@ -1584,7 +1588,7 @@ class NumStoichsMut(Variation):
         
         
         
-class Permutation(Variation):
+class Permutation(object):
     '''
     A permutation operator.
     
@@ -1680,10 +1684,6 @@ class Permutation(Variation):
                    number of swaps have been done or no more swaps are possible with the parent structure
                     
         '''
-        # just for testing, read in a structure from a file
-        #structure = Structure.from_file('/n/srv/brevard/structures/POSCAR.AlFeCo2')
-        #parent_org = Organism(structure, id_generator)
-        
         # select a parent organism from the pool
         parent_org = pool.selectOrganisms(1, random)
         # make a deep copy of the structure of the parent organism
@@ -1695,7 +1695,7 @@ class Permutation(Variation):
             # select a parent organism from the pool
             parent_org = pool.selectOrganisms(1, random)
             # make a deep copy of the structure of the parent organism
-            structure = copy.deepcopy(parent_org.structure)
+            structure = copy.deepcopy(parent_org[0].structure)
             possible_swaps = self.getPossibleSwaps(structure)
             num_selects = num_selects + 1
             
@@ -3037,30 +3037,6 @@ class Development(object):
         
         # return the organism if it survived
         return organism
-    
-        
-    
-class EnergyCalculator(object):
-    '''
-    Handles calculating the energy of organisms.
-    
-    Not meant to be instantiated, but rather subclassed by particular Calculators, like VaspEnergyCalculator
-    or GulpEnergyCalculator.
-    
-    TODO: is the superclass even necessary?
-    '''
-    
-    def doEnergyCalculation(self, org):
-        '''
-        Calculates the energy of an organism
-        
-        Returns an organism that has been parsed from the output files of the energy code, or None if the calculation 
-        failed. Does not do development or redundancy checking.
-        
-        Args:
-            org: the organism whose energy we want to calculate
-        '''
-        raise NotImplementedError("Please implement this method.")
         
         
 
@@ -3484,209 +3460,4 @@ class StoppingCriteria(object):
             # TODO: check the tolerances for the structure matching algorithm - pymatgen's defualts might be too loose...
             if self.found_structure.matches(organism.structure):
                 self.are_satisfied = True
-        
-                
            
-        
-    
-
-        
-        
-        
-        
-########## area for casual testing ########## 
-
-# make a structure object
-#lattice = [[1,0.5,0], [0.5,1,0], [0,0,-1]]
-#species = ["C", "Si"]
-#coordinates = [[0.25,0.25,0.25],[0.75,0.75,0.75]]
-#structure1 = Structure(lattice, species, coordinates)
-
-# make an organism object
-#org1 = Organism(structure1)
-
-#print(org1.structure.lattice)
-
-#org1.rotateToPrincipalDirections()
-#print("")
-#print(org1.structure.lattice)
-
-#print(org1.structure)
-#print(org1.fitness)
-#print(org1.id)
-
-#org1.id = 6
-#print(org1.id)
-
-########## end of testing area ##########    
-
-
-'''
-One way to store the parameters is in several groups, one for each related group of parameters
-
-Possible groups include
-
-    variations, which has four subgroups: mutation, mating, permutation, numstoichsmut
-    
-    initial population settings
-    
-    redundancy guard settings
-    
-    termination criteria
-    
-    objective function info
-    
-    things needed by the algorithm at all times, like
-        - number of calcs to run concurrently
-        - pool size
-        - the selection probability function
-        - volume scaling
-        - niggli cell reduction
-
-
-I think where possible, the data should be stored inside the objects that need it, like the variation objects.
-
-Idea: read in the input file with minimal processing (just a string or something), then have each object parse 
-the data it needs out of that string when it is initialized. Some of it might just go into lists or something.
-
-Maybe use dictionaries to store the data
-
-Ok, start by making a list of all the input file options, and think about how to logically divide that into 
-dictionaries. Let's worry about parsing from the input file later, including what format it should be in.
-
-Optional flags [Current value]:
-   --help : displays this message with parameters' default values
-   --verbosity n : verbosity of output [4]
-Genetic Algorithm
-   --t runTitle : name the run
-   --outDir : specify the output directory
-   --keepTempFiles <true|false>
-   --saveStateEachIter <true|false>
-   --popSize <n> : use a non-initial population size of n
-   --promotion <n> : promote n best structures (or the whole CH) to next gen
-   --compositionSpace <numElements> <Sym>*  :     System composition for phase diagram search
-                   or <numElements> <Sym>* <amount of element1> <amount of element2> etc.
-   --optimizeDensity <weight of adaptation> <num orgs to avg. over>
-   --useRedundancyGuard <wholePopulation|perGeneration|both> <atomic misfit> <lattice misfit> <angle misfit> <use PBCs?>
-   --useSurrogateModel <gulp header file> <potentials_specification file> <refit frequency>
-   --endgameNumGens <n>
-   --useNiggliReducedCell <true|false>
-   --use2DNiggliReducedCell <true|false>
-   --useSubstrate <true|false> <path to substrate POSCAR file
-   --writeHartkeFile <boolean>
-   --colorOutput <boolean>
-   
-Initial Population
-   --initialPopulation <num> random givenVol <volumeperatom>
-   --initialPopulation <num> random randomVol
-   --initialPopulation <num> poscars <directory>
-   --initialPopulation <num> manual
-   --initialPopulation <num> units <numMols> <numAtoms_1>...<numAtoms_n> (<symbol_i> <x_i> <y_i> <z_i>)+ <numUnits_1>...<numUnits_n> <targetDensity> <densityTol> <unitsOnly?>
-   --initialPopulation <num> supercell a b c maxll minll maxla minla maxh maxna minna <randomsocreator args>
-   
-Objective Functions
-   --objectiveFunction cluster <padding length> <other obj fcn args from below...>
-   --objectiveFunction surface <padding length> <other obj fcn args from below...>
-   --objectiveFunction substrate <padding length> <other obj fcn args from below...>
-   --objectiveFunction <epa/pd> gulp <gulp header file> <gulp potential file> <cautious?> <species needing a shell>
-   --objectiveFunction <epa/pd> vasp <cautious?> <kpoints> <incar> <element potcar>+ 
-   --objectiveFunction <epa/pd> ohmms <header> <footer> <cautious?>
-   --objectiveFunction <epa/pd> lammps <potlFile> <units> <relax box?>
-   --objectiveFunction <epa/pd> castep <cautious?> <kpointSpacing> <pressure> <paramFile> <element potcar>+ 
-   --objectiveFunction <epa/pd> avogadro <avog header file>
-   --objectiveFunction <epa/pd> dlpoly <loc> <potl>
-   --objectiveFunction <epa/pd> mopac <execpath>
-   --objectiveFunction <epa/pd> dftpp <dftpp_inputs> <cautious?> <element ppFile.fhi>*
-   --objectiveFunction <epa/pd> generic
-   --parallelize <numCalcsInParallel> <minPopSize>
-   
-Variation Algorithms
-   --variation <percentage> <percentage> slicer <thicknessMean> <thicknessSigma> <majorShiftFrac> <minorShiftFrac> <maxAmplitude> <maxFreq> <growParents?> <doublingProb>
-   --variation <percentage> <percentage> structureMut <rate> <sigmaAtoms> <sigmaLattice>
-   --variation <percentage> <percentage> permutation <meanSwaps> <sigmaSwaps> <pairsToSwap (e.g. Mn-O)>
-   --variation <percentage> <percentage> numStoichsMut <meanNumAtoms> <sigmaNumAtoms>
-   
-Selection Algorithms
-   --selection probDist <numParents> <selectionPower>
-   
-Convergence Criteria
-   --convergenceCriterion maxFunctionEvals <n>
-   --convergenceCriterion maxNumGens <n>
-   --convergenceCriterion maxNumGensWOImpr <n> <dValue>
-   --convergenceCriterion valueAchieved <maximum acceptable energy>
-   --convergenceCriterion foundStructure <CIF filename> <rGuard misfits>
-   
-Hard Constraints
-   --minInteratomicDistance d : minimum interatomic distance (Angstroms)
-   --perSpeciesMID <symbol1> <symbol2> <distance>
-   --maxLatticeLength d : maximum lattice vector length (Angstroms)
-   --minLatticeLength d : minimum lattice vector length (Angstroms)
-   --maxLatticeAngle d : maximum lattice angle (Degrees)
-   --minLatticeAngle d : minimum lattice angle (Degrees)
-   --maxCellHeight d : maximum height of cell in z-direction
-   --maxNumAtoms n
-   --minNumAtoms n
-   --minNumSpecies n
-   --doNonnegativityConstraint <boolean>
-   --dValue x : discard organisms within a value of x of each other
-   
-   
-   
-   
-   Variations:         # section
-       Mating:         # subsection
-           percentage
-           thicknessMean
-           thicknessSigma
-           majorShiftFrac
-           minorShiftFrac
-           growParents
-           doublingProb
-        Mutation:
-            percentage
-            fracPerturbed
-            sigmaAtoms
-            sigmaLattice
-        Permutation:
-            percentage
-            meanSwaps
-            sigmaSwaps
-            pairsToSwap (probably a list of pairs or something)
-        NumStoichsMut:
-            percentage
-            meanNumAtoms
-            sigmaNumAtoms
-        
-    Selection:
-        numParents
-        selectionPower
-        
-    Constraints:
-        minInteratomicDistances (probably a dict of pairs and distances or something)
-        maxLatticeLength
-        minLatticeLength
-        maxLatticeAngle
-        minLatticeAngle
-        maxClusterDiameter
-        maxWireDiameter
-        maxLayerThickness
-        maxNumAtoms
-        minNumAtoms
-        minNumSpecies
-        doNonnegativityConstraint (maybe don't need this?)
-        dValue
-        
-    Convergence Criteria:
-        maxFunctionEvals
-        maybe others
-   
-   Objective Function:
-       objectiveFunction <epa|pd>
-       geometry <bulk|sheet|wire|cluster>
-           # these should be ignored if geometry is bulk
-           padding # how much vacuum to add (around cluster/wire/sheet)
-           maxSize # how big it can be (diameter for cluster and wire, thickness for sheet. measured from atom-to-atom)
-       energyCode <vasp|gulp|others>
-       energyFiles (depends on energyCode. Not sure best way to handle this...)
-        
-'''

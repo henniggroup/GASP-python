@@ -110,17 +110,17 @@ for creator in organism_creators:
                             redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
                             if redundant_org != None:
                                 if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
-                                    initial_population.replaceOrganism(redundant_org, developed_org)
-                                    # print out info ont he best organism and how many calcs have been done so far
-                                    initial_population.printBestOrg(composition_space)
+                                    initial_population.replaceOrganism(redundant_org, developed_org, composition_space)
+                                    # print out info on the best organism and how many calcs have been done so far
+                                    initial_population.printProgress(composition_space)
                                     print('Number of energy calculations so far: {}'.format(num_calcs_finished))
                                     
                             else: 
                                 stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
-                                initial_population.addOrganism(developed_org)
+                                initial_population.addOrganism(developed_org, composition_space)
                                 whole_pop.append(developed_org)
                                 # print out info ont he best organism and how many calcs have been done so far
-                                initial_population.printBestOrg(composition_space)
+                                initial_population.printProgress(composition_space)
                                 print('Number of energy calculations so far: {}'.format(num_calcs_finished))
                                 # if this organism was made by the current creator and the creator is success-based, then update the status of the creator
                                 if creator.is_successes_based and developed_org.made_by == creator.name: 
@@ -178,16 +178,16 @@ while num_to_get > 0:
                     redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
                     if redundant_org != None:
                         if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
-                            initial_population.replaceOrganism(redundant_org, developed_org)
+                            initial_population.replaceOrganism(redundant_org, developed_org, composition_space)
                             # print out info ont he best organism and how many calcs have been done so far
-                            initial_population.printBestOrg(composition_space)
+                            initial_population.printProgress(composition_space)
                             print('Number of energy calculations so far: {}'.format(num_calcs_finished))
                     else: 
                         stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
-                        initial_population.addOrganism(developed_org)
+                        initial_population.addOrganism(developed_org, composition_space)
                         whole_pop.append(developed_org)
                         # print out info ont he best organism and how many calcs have been done so far
-                        initial_population.printBestOrg(composition_space)
+                        initial_population.printProgress(composition_space)
                         print('Number of energy calculations so far: {}'.format(num_calcs_finished))
                         
 

@@ -405,10 +405,10 @@ def makeObjects(parameters):
         quit()
 
     # check that the variations fraction variables sum to 1
-    frac_sum = 0
+    frac_sum = 0.0
     for variation in variations:
         frac_sum = frac_sum + variation.fraction
-    if frac_sum != 1.0:
+    if frac_sum < 0.999 or frac_sum > 1.001:
         print("The Variations' fraction values must sum to 1.")
         print('Quitting...')
         quit()
