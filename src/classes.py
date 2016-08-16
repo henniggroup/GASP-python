@@ -7,7 +7,7 @@ from pymatgen.core.periodic_table import Element, Specie
 from pymatgen.core.sites import Site
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.analysis.structure_matcher import ElementComparator
-from pymatgen.phasediagram.maker import PhaseDiagram, CompoundPhaseDiagram
+from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.phasediagram.analyzer import PDAnalyzer
 from pymatgen.transformations.standard_transformations import RotationTransformation
@@ -24,6 +24,7 @@ import math
 import warnings
 from subprocess import check_output, CalledProcessError, STDOUT
 from numpy import inf, Inf
+from scipy.spatial.qhull import ConvexHull
 
 '''
 This module contains all the classes used by the algorithm.
@@ -340,14 +341,72 @@ class InitialPopulation():
         
         Args:
             composition_space: the CompositionSpace object
-        
-        # TODO: this could be tricky because it's possible the initial population doesn't yet have an organism at every endpoint of the composition space
-        #       will probably have to scan the organisms the initial population has so far and make there's at least one at each endpoint
         '''
-        pass
+        # check if the initial population contains organisms at all the endpoints of the composition space
+        if self.hasEndpoints(composition_space) and self.hasNonEndpoint(composition_space):
+            # TODO: below here is copied from pool.printConvexHullArea
+            # compute and print the area or volume of the convex hull
+            pdentries = []
+            for organism in self.initial_population:
+                pdentries.append(PDEntry(organism.composition, organism.total_energy))
+            compound_pd = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
+            # get the data for the convex hull
+            qhull_data = compound_pd.qhull_data
+            # for some reason, the last point is positive, so remove it
+            hull_data = np.delete(qhull_data, -1, 0)
+            # make a ConvexHull object from the hull data
+            convex_hull = ConvexHull(hull_data)
+            # compute the volume or area
+            if len(composition_space.endpoints) == 2:
+                print('Area of the convex hull: {}'.format(convex_hull.area))
+            else:
+                # TODO: will this work for four or more endpoints?
+                print('Volume of the convex hull: {}'.format(convex_hull.volume))
+        
+    
+    def hasEndpoints(self, composition_space):
+        '''
+        Checks if there are organisms in the initial population at all of endpoints of the composition space
+        
+        Returns a boolean indicating whether or not there are organisms at all the endpoints
+        
+        Args:
+            composition_space: the CompositionSpace object
+        '''
+        for endpoint in composition_space.endpoints:
+            has_endpoint = False
+            for organism in self.initial_population:
+                if endpoint.almost_equals(organism.composition.reduced_composition):
+                    has_endpoint = True
+            # if one of the endpoints is missing from the initial population, then the answer is False
+            if not has_endpoint:
+                return False
+        # if we made this far, then the initial population has all the endpoints
+        return True
+    
+    
+    def hasNonEndpoint(self, composition_space):
+        '''
+        Checks that the initial population contains at least one organism not at one of the endpoint compositions
+        
+        Returns a boolean indicating whether or not there is an organism not at one of the endpoints
+        
+        Args:
+            composition_space: the CompositionSpace object
+        '''
+        for organism in self.initial_population:
+            not_endpoint = True
+            for endpoint in composition_space.endpoints:
+                if endpoint.almost_equals(organism.composition.reduced_composition):
+                    not_endpoint = False
+            # if this organism is not equal to any of the endpoints, then the answer is True
+            if not_endpoint:
+                return True
+        # if we made it this far, then there is not an organism that is not at one of the endpoints
+        return False
+                
             
             
-
 class Pool(object):
     '''
     Pool to hold all the organisms that are currently candidates for selection to become parents.
@@ -434,12 +493,12 @@ class Pool(object):
                     self.queue.appendleft(organisms_list[i])
                     
         elif composition_space.objective_function == 'pd':
-            # set the values of the initial population organisms to their distances from the convex hull
+            # set the values of the initial population organisms to their distances from the convex hull, and get the resulting compound phase diagram object
             self.computePDValues(organisms_list, composition_space)
             
             # assign the ones on the convex hull to the promotion set and the rest to the queue
             for organism in organisms_list:
-                if organism.value == 0: 
+                if organism.value < 0.000000001: # my attempt at getting around using floats in an equality...
                     self.promotion_set.append(organism)
                 else:
                     self.queue.appendleft(organism)
@@ -457,16 +516,6 @@ class Pool(object):
         print('Summary of the initial population:')
         for organism in organisms_list:
             print('Organism {} has value {} and fitness {}'.format(organism.id, organism.value, organism.fitness))
-         
-        # TODO: below here is equivelent to the InitialPopulation.printProgress() method...    
-        # for epa seaches, print out info on the best organism in the initial population
-        if composition_space.objective_function == 'epa':
-            print('Organism {} is the best and has value {} eV/atom'.format(organisms_list[0].id, organisms_list[0].value))
-            
-        elif composition_space.objective_function == 'pd':
-            pass
-            # TODO: compute and print out the area/volume of the current convex hull here
-            #       note: this is pretty much the same method as InitialPopulation.printConvexHullArea()...
         
     
     def addOrganism(self, organism_to_add, composition_space):
@@ -631,7 +680,9 @@ class Pool(object):
     
     def computePDValues(self, organisms_list, composition_space):
         '''
-        Constructs a convex hull from the provided organsims, and sets the organisms' values to their distances from the convex hull
+        Constructs a convex hull from the provided organisms, and sets the organisms' values to their distances from the convex hull
+        
+        Returns the compound phase diagram object computed from the organisms in organisms_list
         
         Args:
             organisms_list: a list of Organisms whose values we need to compute
@@ -667,6 +718,9 @@ class Pool(object):
         # assign values to the organisms
         for organism in organisms_list:
             organism.value = values[organism.id]
+            
+        # return the compound phase diagram
+        return compound_pd
         
     
     def computeFitnesses(self):
@@ -809,14 +863,56 @@ class Pool(object):
         print('Summary of the pool:')
         for organism in pool_list:
             print('Organism {} has value {} and fitness {}'.format(organism.id, organism.value, organism.fitness))
+                
+    
+    def printProgress(self, composition_space):
+        '''
+        Prints out either the best organism (for epa search) or the area/volume of the convex hull (for pd search)
         
-        # for epa searches, print out info on the best organism in the pool, and also the average value of organisms in the pool
+        Args:
+            composition_space: the CompositionSpace object
+        '''
         if composition_space.objective_function == 'epa':
-            print('Organism {} is the best and has value {} eV/atom'.format(pool_list[0].id, pool_list[0].value))
-            
+            self.printBestOrg()
         elif composition_space.objective_function == 'pd':
-            pass    
-            # TODO: compute and print out the area/volume of the convex hull here
+            self.printConvexHullArea(composition_space)
+            
+    
+    def printBestOrg(self):
+        '''
+        Prints out the id and value of the best organism in the pool
+        '''
+        # get a list of the organisms in the pool
+        pool_list = self.toList()
+        
+        # sort it in order of decreasing fitness
+        pool_list.sort(key = lambda x: x.fitness, reverse = True)
+        
+        # print out the best one
+        print('Organism {} is the best and has value {} eV/atom'.format(pool_list[0].id, pool_list[0].value))
+        
+    
+    def printConvexHullArea(self, composition_space):
+        '''
+        Prints out the area or volume of the convex hull defined by the organisms in the promotion set
+        '''
+        # make a phase diagram of just the organisms in the promotion set (on the lower convex hull)
+        pdentries = []
+        for organism in self.promotion_set:
+            pdentries.append(PDEntry(organism.composition, organism.total_energy))
+        compound_pd = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
+        # get the data for the convex hull
+        qhull_data = compound_pd.qhull_data
+        # for some reason, the last point is positive, so remove it
+        hull_data = np.delete(qhull_data, -1, 0)
+        # make a ConvexHull object from the hull data
+        convex_hull = ConvexHull(hull_data)
+        # compute the volume or area
+        if len(composition_space.endpoints) == 2:
+            print('Area of the convex hull: {}'.format(convex_hull.area))
+        else:
+            # TODO: will this work for four or more endpoints?
+            print('Volume of the convex hull: {}'.format(convex_hull.volume))
                 
                 
     def toList(self):
@@ -2257,7 +2353,16 @@ class CompositionSpace(object):
             for j in range(i + 1, len(elements)):
                 pairs.append(str(elements[i].symbol + " " + elements[j].symbol))
         return pairs
-
+    
+    
+    def printEndpoints(self):
+        '''
+        Prints out the formulas for all the endpoints on a single line
+        '''
+        string_to_print = 'Composition space endpoints:'
+        for endpoint in self.endpoints:
+            string_to_print = string_to_print + ' ' + endpoint.formula.replace(' ', '') 
+        print(string_to_print)
 
 
 class RandomOrganismCreator(object):
@@ -2379,7 +2484,7 @@ class RandomOrganismCreator(object):
         # for each element, generate a set of random fractional coordinates
         # TODO: this doesn't ensure the structure will satisfy the per-species mids, and in fact most won't. It's ok because they'll just fail development, but there might be a better way...
         # TODO: also, this doesn't ensure the structure will satisfy the max size constraint in Geometry. There could be a way to do this by applying more stringent constraints on how
-        #       the random lattice vectors and angles are chosen when we have a non-bulk geometry....
+        #       the random lattice vectors and angles are chosen when we have a non-bulk geometry...
         random_coordinates = []
         for _ in range(num_atoms):
             random_coordinates.append([random.random(), random.random(), random.random()])
@@ -2387,27 +2492,34 @@ class RandomOrganismCreator(object):
         # make a random structure from the random lattice, random species, and random coordinates
         random_structure = Structure(random_lattice, elements, random_coordinates)
         
-        # optionally scale the volume to the weighted average of the volumes per atom of the elemental structures
+        # optionally scale the volume to the weighted average of the volumes per atom of the elemental structures (increase the computed value by 10%)
+        # TODO: now we're trying computing them from per-species mids instead of elemental densities. If it works, will need to change the input options
         if self.volume == 'from_elemental_densities':
             # compute volumes per atom (in Angstrom^3) of each element in the random organism
             reduced_composition = random_structure.composition.reduced_composition
             volumes_per_atom = {}
             for element in reduced_composition:
                 # physical properties and conversion factors
-                atomic_mass = float(element.atomic_mass) # in amu
-                mass_conversion_factor = 1.660539040e-27 # converts amu to kg
-                density = element.density_of_solid # in kg/m^3
+                #atomic_mass = float(element.atomic_mass) # in amu
+                #mass_conversion_factor = 1.660539040e-27 # converts amu to kg
+                #density = element.density_of_solid # in kg/m^3
                 # if the density is not in pymatgen's database, then get it from the missing densities
-                if density == None:
-                    density = self.missing_densities[element.symbol]
-                density = float(density)
-                length_conversion_factor = 1.0e10 # converts meters to Angstroms 
+                #if density == None:
+                #    density = self.missing_densities[element.symbol]
+                #density = float(density)
+                #length_conversion_factor = 1.0e10 # converts meters to Angstroms 
             
                 # compute the volume (in Angstrom^3) per atom of this element
                 # take the log of the product to prevent numerical issues
-                log_volume_per_atom = np.log(mass_conversion_factor) + np.log(atomic_mass) - np.log(density) + 3.0*np.log(length_conversion_factor)
-                volume_per_atom = np.exp(log_volume_per_atom)                
+                #log_volume_per_atom = np.log(mass_conversion_factor) + np.log(atomic_mass) - np.log(density) + 3.0*np.log(length_conversion_factor)
+                #volume_per_atom = np.exp(log_volume_per_atom)                
+                #volumes_per_atom[element] = volume_per_atom
+                
+                
+                # compute the volume of each type of atom from it's atomic radius
+                volume_per_atom = (4.0/3.0)*np.pi*np.power(element.atomic_radius, 3)
                 volumes_per_atom[element] = volume_per_atom
+                
         
             # compute the desired volume per atom by taking the weighted average of the volumes per atom of the constituent elements
             weighted_sum = 0
@@ -2416,7 +2528,12 @@ class RandomOrganismCreator(object):
                 weighted_sum = weighted_sum + reduced_composition[element]*volumes_per_atom[element]
         
             # normalize by the total number of atoms to get the weighted average
-            mean_vpa = weighted_sum/reduced_composition.num_atoms
+            mean_vpa = (weighted_sum/reduced_composition.num_atoms)
+            
+            # multiply by a factor
+            # TODO: determine what a good value for this is, might also need an additive factor
+            scale_factor = 4
+            scaled_vpa = scale_factor*mean_vpa
         
             # scale the volume of the random organism to satisfy the computed mean volume per atom
             # The structure.scale_lattice method sometimes throws divide-by-zero runtime warnings. To keep these from getting printed to the output, we're temporarily
@@ -2425,7 +2542,7 @@ class RandomOrganismCreator(object):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 # check if the volume scaling worked
-                random_structure.scale_lattice(mean_vpa*len(random_structure.sites))
+                random_structure.scale_lattice(scaled_vpa*len(random_structure.sites))
                 if str(random_structure.lattice.a) == 'nan' or random_structure.lattice.a > 100:
                     return None          
         
@@ -2703,7 +2820,7 @@ class Constraints(object):
         self.default_max_lattice_length = 20
         self.default_min_lattice_angle = 40
         self.default_max_lattice_angle = 140
-        self.default_allow_endpoints = True
+        self.default_allow_endpoints = False
         
         # set defaults if constraints_parameters equals 'default' or None
         if constraints_parameters == None or constraints_parameters == 'default':
@@ -2902,8 +3019,7 @@ class Development(object):
             
             geometry: a Geometry object
             
-            pool: the current pool. If this method is called before a pool exists (e.g., while making the initial population)
-                  then pass None as the argument instead.
+            pool: the Pool object
         '''
         # check max num atoms constraint
         if len(organism.structure.sites) > constraints.max_num_atoms:
@@ -2942,7 +3058,7 @@ class Development(object):
                 return None
             else:
                 # check the endpoints if specified and if we're not making the initial population
-                if constraints.allow_endpoints == False and pool != None:
+                if constraints.allow_endpoints == False and len(pool.toList()) > 0:
                     for endpoint in composition_space.endpoints:
                         if endpoint.almost_equals(organism.composition.reduced_composition):
                             print("Organism {} is at a composition endpoint".format(organism.id))
@@ -2968,24 +3084,34 @@ class Development(object):
                     return None
             # TODO: call special cell reduction for other geometries here if needed (doesn't makes sense for wires or clusters)
                      
-        # optionally scale the density to the average of the densities of the organisms in the promotion set 
-        if self.scale_density and composition_space.objective_function == "epa" and pool != None and organism.epa == None:
-            # get average volume per atom of the organisms in the promotion set
-            vpa_sum = 0
-            for org in pool.promotion_set:
-                vpa_sum = vpa_sum + org.structure.volume/len(org.structure.sites)
-            vpa_mean = vpa_sum/len(pool.promotion_set)
-            # compute the new volume per atom
-            num_atoms = len(organism.structure.sites)
-            new_vol = vpa_mean*num_atoms
-            # scale to the new volume
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                organism.structure.scale_lattice(new_vol)
-                # check if the volume scaling worked 
-                if str(organism.structure.lattice.a) == 'nan' or organism.structure.lattice.a > 100:
-                    return None 
-            
+        # optionally scale the volume per atom
+        if self.scale_density and len(pool.promotion_set) > 0 and organism.epa == None:
+            # scale to the average of the volumes per atom of the organisms in the promotion set, and increase by 10%
+            if composition_space.objective_function == 'epa':
+                # get average volume per atom of the organisms in the promotion set
+                vpa_sum = 0
+                for org in pool.promotion_set:
+                    vpa_sum = vpa_sum + org.structure.volume/len(org.structure.sites)
+                vpa_mean = 1.1*(vpa_sum/len(pool.promotion_set))
+                # compute the new volume per atom
+                num_atoms = len(organism.structure.sites)
+                new_vol = vpa_mean*num_atoms
+                # scale to the new volume
+                with warnings.catch_warnings(): # this is to suppress the warnings produced if the scale_lattice method fails
+                    warnings.simplefilter('ignore')
+                    organism.structure.scale_lattice(new_vol)
+                    # check if the volume scaling worked 
+                    if str(organism.structure.lattice.a) == 'nan' or organism.structure.lattice.a > 100:
+                        return None 
+                        
+            elif composition_space.objective_function == 'pd':
+                pass
+                # 1. get the structures that are adjacent on the convex hull (pick out the ones from the promotion set of the pool)
+                # 2. somehow get the distance of the organism from each one
+                # 3. compute the weighted average volume per atom (closer to the organism, more weight)
+                # 4. increase the computed weighted average by 10%
+                # 5. scale the lattice
+                        
         # check the max and min lattice length constraints
         lengths = organism.structure.lattice.abc
         for length in lengths:
