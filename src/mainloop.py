@@ -127,7 +127,7 @@ for creator in organism_creators:
                                 stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
                                 initial_population.addOrganism(developed_org, composition_space)
                                 whole_pop.append(developed_org)
-                                # print out info ont he best organism and how many calcs have been done so far
+                                # print out info on the best organism and how many calcs have been done so far
                                 initial_population.printProgress(composition_space)
                                 print('Number of energy calculations so far: {}'.format(num_finished_calcs))
                                 # if this organism was made by the current creator and the creator is success-based, then update the status of the creator

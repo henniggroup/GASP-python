@@ -355,7 +355,12 @@ class InitialPopulation():
             # for some reason, the last point is positive, so remove it
             hull_data = np.delete(qhull_data, -1, 0)
             # make a ConvexHull object from the hull data
-            convex_hull = ConvexHull(hull_data)
+            # Sometime this fails, saying that only two points were given to construct the convex hull, even though the if statement above checks 
+            # that there are enough points
+            try:
+                convex_hull = ConvexHull(hull_data)
+            except:
+                return
             # compute the volume or area
             if len(composition_space.endpoints) == 2:
                 print('Area of the convex hull: {}'.format(convex_hull.area))
@@ -2494,11 +2499,15 @@ class RandomOrganismCreator(object):
         
         # optionally scale the volume to the weighted average of the volumes per atom of the elemental structures (increase the computed value by 10%)
         # TODO: now we're trying computing them from per-species mids instead of elemental densities. If it works, will need to change the input options
+        #
+        # The actual volume per atom of most elements is about two times the volume per atom computed from the atomic radii. We use that relationship to compute to what volume the 
+        # the cell should be scaled to. Also, since the per-species mids are just fractions of the atomic radii, this should remove the bias introduced by the per-species mids
         if self.volume == 'from_elemental_densities':
             # compute volumes per atom (in Angstrom^3) of each element in the random organism
-            reduced_composition = random_structure.composition.reduced_composition
-            volumes_per_atom = {}
-            for element in reduced_composition:
+            # reduced_composition = random_structure.composition.reduced_composition
+            #volumes_per_atom = {}
+            total_atomic_volume = 0 # the sum of the volumes of all the atoms in the structure, where the volume of each atom is computed from its atomic radius
+            for element in random_structure.composition:
                 # physical properties and conversion factors
                 #atomic_mass = float(element.atomic_mass) # in amu
                 #mass_conversion_factor = 1.660539040e-27 # converts amu to kg
@@ -2518,22 +2527,30 @@ class RandomOrganismCreator(object):
                 
                 # compute the volume of each type of atom from it's atomic radius
                 volume_per_atom = (4.0/3.0)*np.pi*np.power(element.atomic_radius, 3)
-                volumes_per_atom[element] = volume_per_atom
+                # get how many atoms of this type (element) there are in the structure
+                num_atoms = random_structure.composition[element]
+                # increment the total atomic volume of the structure
+                total_atomic_volume += volume_per_atom*num_atoms
+                
+                #volumes_per_atom[element] = volume_per_atom
                 
         
-            # compute the desired volume per atom by taking the weighted average of the volumes per atom of the constituent elements
-            weighted_sum = 0
-            for element in reduced_composition:
+            # sum the volumes per atom (as computed from from their atomic radii) of all the atoms in the cell
+            #volume_sum = 0
+            #for element in reduced_composition:
                 # the number of this type of element times it's calculated volume per atom
-                weighted_sum = weighted_sum + reduced_composition[element]*volumes_per_atom[element]
+                #volume_sum = volume_sum + reduced_composition[element]*volumes_per_atom[element]
         
             # normalize by the total number of atoms to get the weighted average
-            mean_vpa = (weighted_sum/reduced_composition.num_atoms)
+            #mean_vpa = (weighted_sum/reduced_composition.num_atoms)
             
             # multiply by a factor
             # TODO: determine what a good value for this is, might also need an additive factor
-            scale_factor = 4
-            scaled_vpa = scale_factor*mean_vpa
+            #scale_factor = 4
+            #scaled_vpa = scale_factor*mean_vpa
+            
+            # the empirical ratio of the actual volume per atom and that computed from atomic radii
+            scale_factor = 2
         
             # scale the volume of the random organism to satisfy the computed mean volume per atom
             # The structure.scale_lattice method sometimes throws divide-by-zero runtime warnings. To keep these from getting printed to the output, we're temporarily
@@ -2542,7 +2559,7 @@ class RandomOrganismCreator(object):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 # check if the volume scaling worked
-                random_structure.scale_lattice(scaled_vpa*len(random_structure.sites))
+                random_structure.scale_lattice(scale_factor*total_atomic_volume)
                 if str(random_structure.lattice.a) == 'nan' or random_structure.lattice.a > 100:
                     return None          
         
