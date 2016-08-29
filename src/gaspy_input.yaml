@@ -9,6 +9,9 @@ CompositionSpace:
     
     # - Al2O3
 
+    # - Al
+    # - O
+
 
 # says which energy code to use, and where the needed input files are. NOT optional
 EnergyCode: # should only have one specified
@@ -32,13 +35,14 @@ EnergyCode: # should only have one specified
 InitialPopulation:
      random:
           number: 38  # number of random structures to make
-#          volume: 9  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
-                     # <num|random|from_elemental_densities> num - the number of cubic Angstroms per atom to scale to
-                     #                                       random - no volume scaling - the volume is just the result of the random lattice vectors and atoms
-                     #                                       from_elemental_densities - scales the volume to the weighted average of the volumes per atom of the elemental solids. This is default behavior
+          volume: from_atomic_radii  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
+                     # <num|random|from_atomic_radii> num - the number of cubic Angstroms per atom to scale to
+                     #                                random - no volume scaling - the volume is just the result of the random lattice vectors 
+                     #                                from_atomic_radii - scales the volume to 2 times the sum of the volumes of the atoms, as computed from their atomic radii. This is default behavior
 
      from_files:
           path_to_folder: /n/srv/brevard/testing/gaspy_testing/ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files 
+     
 
      # TODO: maybe include other options, like getting structures from a database or something
 
@@ -111,10 +115,10 @@ NumCalcsAtOnce: 20  # the max number of energy calculations to submit at once. O
 
 
 # specifies the variations to use to create offspring structures. Optional, and defaults to Mating (0.8), StructureMut (0.1), and NumStoichsMut (0.1)  
-Variations: 
+#Variations: 
      # entire sub block is optional
-     Mating:
-          fraction: 0.7         # the fraction of the offspring organisms created with this variation. NOT optional
+#     Mating:
+#          fraction: 0.7         # the fraction of the offspring organisms created with this variation. NOT optional
 #          mu_cut_loc: 0.5       # the average location of the cut, in fractional coordinates, along a randomly chosen lattice vector. Optional, and defaults to 0.5
 #          sigma_cut_loc: 0.5    # the standard deviation of the location of the cut, in fractional coordinates, along a randomly chosen lattice vector. Optional, and defaults to TODO
 #          shift_prob: 1.0      # the probability that the atoms in the parent structures will be shifted along the lattice vector of the cut prior to the cut being made. Optional, and defaults to 1.0
@@ -123,23 +127,23 @@ Variations:
 #          grow_parents: True    # whether or not to grow the smaller parent (by taking supercell) to the approximate size the larger parent prior to doing the mating operation. Optional, and defaults to True 
 
      # entire sub block is optional
-     StructureMut:
-          fraction: 0.1                        # the fraction of the offspring organisms to create with this variation. NOT optional
+#     StructureMut:
+#          fraction: 0.1                        # the fraction of the offspring organisms to create with this variation. NOT optional
 #          frac_atoms_perturbed: 1.0            # the fraction of atoms in the cell that are perturbed on average. Optional, and defaults to TODO
 #          sigma_atomic_coord_perturbation: 0.5 # the standard deviation of the atomic perturbations along each coordinate (in Angstroms). Optional, and defaults to TODO
 #          max_atomic_coord_perturbation: 5.0   # the maximum allowed atomic perturbation along each coordinate (in Angstroms), Optional, and defaults to TODO
 #          sigma_strain_matrix_element: 0.5     # the standard deviation of the non-identity components of the strain matrix elements. Optional, and defaults to TODO
 
      # entire sub block is optional
-     NumStoichsMut:
-          fraction: 0.1      # the fraction of the offspring organisms to create with this variation. NOT optional
+#     NumStoichsMut:
+#          fraction: 0.1      # the fraction of the offspring organisms to create with this variation. NOT optional
 #          mu_num_adds: 0     # mean number of stoichiometries worth of atoms to add. Optional, and defaults to 0
 #          sigma_num_adds: 1  # standard deviation of the number of stoichiometries worth of atoms to add. Optional, and defaults to TODO
 #          scale_volume: True # whether to scale of the volume (per atom) of the offspring to equal that of the parent. Defaults to True
 
      # entire sub block is optional
-     Permutation:
-          fraction: 0.1      # the fraction of the offspring organisms to create with this variation. NOT optional
+#     Permutation:
+#          fraction: 0.1      # the fraction of the offspring organisms to create with this variation. NOT optional
 #          mu_num_swaps: 2    # average number of swaps to do per cell. Optional, and defaults to TODO
 #          sigma_num_swaps: 1 # the standard deviation of the number of swaps to do per cell. Optional, and defaults to TODO
 #          pairs_to_swap:     # which pairs of atomic species to allow swapping. Optional, and defaults to all possible pairs within the composition space

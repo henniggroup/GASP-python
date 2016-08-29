@@ -95,48 +95,87 @@ def makeObjects(parameters):
     
     # make the organism creators
     organism_creators = []
-    if 'InitialPopulation' in parameters:
-        # the random organism creator
-        if 'random' in parameters['InitialPopulation']:
-            random_organism_creator = classes.RandomOrganismCreator(parameters['InitialPopulation']['random'], composition_space)
+    # if no method is specified for making the initial population, throw an error if we're doing a phase diagram search
+    if 'InitialPopulation' not in parameters: 
+        if composition_space.objective_function == 'pd':
+            print('For phase diagram searches, reference structures at each endpoint of the composition space must be provided in the initial population.')
+            print('Please use the "from_files" flag in the InitialPopulation block to provide the reference structures.')
+            print('Quitting...')
+            quit()
+        # otherwise, make a random one by default
+        else:
+            random_organism_creator = classes.RandomOrganismCreator('default', composition_space)
             organism_creators.append(random_organism_creator)
-        # the from files organism creator
-        if 'from_files' in parameters['InitialPopulation']:
-            # if nothing is given after the from_files flag
-            if parameters['InitialPopulation']['from_files'] == None:
-                print('The path to the folder containing the files must be provided. Please use the "path_to_folder" flag.')
-                print('Quitting...')
-                quit()
-            elif 'path_to_folder' in parameters['InitialPopulation']['from_files']:
-                given_path = parameters['InitialPopulation']['from_files']['path_to_folder']
-                # check if no path was given after path_to_folder flag
-                if parameters['InitialPopulation']['from_files']['path_to_folder'] == None:
-                    print('The path to the folder containing the files for the initial population must be provided. Please give the path after the "path_to_folder" flag.')
-                    print('Quitting...')
-                    quit()
-                elif not os.path.exists(given_path):
-                    print('The given folder containing structures for the initial population does not exist.')
-                    print('Quitting...')
-                    quit()
-                # if the folder exists, check that it contains files
-                elif len([f for f in os.listdir(given_path) if os.path.isfile(os.path.join(given_path, f))]) == 0:
-                    print('The given folder containing structures for the initial population does not contain any files.')
-                    print('Quitting...')
-                    quit()
-                # otherwise, the directory exists and contains files. Instantiate the files organism creator
-                else:
-                    files_organism_creator = classes.FileOrganismCreator(given_path)
-                    organism_creators.append(files_organism_creator)
-            # in case an incorrect flag is given after the from_files flag 
-            else:
-                print('Incorrect flag given after "from_files" in the InitialPopulation block. Please use the "path_to_folder" flag.')
-                print('Quitting...')
-                quit()
-            # TODO: if other organism creators are used, they should be instantiated here
-    # if no method specified for making the initial population, then make a random one by default
-    else:
-        random_organism_creator = classes.RandomOrganismCreator('default', composition_space)
+            
+    # if the InitialPopulation block is given but left blank or default, throw an error if we're doing a phase diagram search
+    elif parameters['InitialPopulation'] == None or parameters['InitialPopulation'] == 'default':
+        if composition_space.objective_function == 'pd':
+            print('For phase diagram searches, reference structures at each endpoint of the composition space must be provided in the initial population.')
+            print('Please use the "from_files" flag in the InitialPopulation block to provide the reference structures.')
+            print('Quitting...')
+            quit()
+        # otherwise, make a random one by default
+        else:
+            random_organism_creator = classes.RandomOrganismCreator('default', composition_space)
+            organism_creators.append(random_organism_creator)
+    
+    # the random organism creator
+    elif 'random' in parameters['InitialPopulation']:
+        random_organism_creator = classes.RandomOrganismCreator(parameters['InitialPopulation']['random'], composition_space)
         organism_creators.append(random_organism_creator)
+        
+    # the from files organism creator
+    if 'from_files' not in parameters['InitialPopulation']:
+        if composition_space.objective_function == 'pd':
+            print('For phase diagram searches, reference structures at each endpoint of the composition space must be provided.')
+            print('Please use the "from_files" flag in the InitialPopulation block to provide the reference structures.')
+            print('Quitting...')
+            quit()  
+    # if nothing is given after the from_files flag
+    elif parameters['InitialPopulation']['from_files'] == None:
+        print('The path to the folder containing the files must be provided. Please use the "path_to_folder" flag.')
+        print('Quitting...')
+        quit()
+    elif 'path_to_folder' not in parameters['InitialPopulation']['from_files']:
+        print('Incorrect flag given after "from_files" in the InitialPopulation block. Please use the "path_to_folder" flag.')
+        print('Quitting...')
+        quit()
+    else:
+        given_path = parameters['InitialPopulation']['from_files']['path_to_folder']
+        # check if no path was given after path_to_folder flag
+        if given_path == None:
+            print('The path to the folder containing the files for the initial population must be provided. Please give the path after the "path_to_folder" flag.')
+            print('Quitting...')
+            quit()
+        elif not os.path.exists(given_path):
+            print('The given folder containing structures for the initial population does not exist.')
+            print('Quitting...')
+            quit()
+        # if the folder exists, check that it contains files
+        elif len([f for f in os.listdir(given_path) if os.path.isfile(os.path.join(given_path, f))]) == 0:
+            print('The given folder containing structures for the initial population does not contain any files.')
+            print('Quitting...')
+            quit()
+        else:   
+            files_organism_creator = classes.FileOrganismCreator(given_path)
+            # check that the provided files cover all the composition space endpoints
+            if composition_space.objective_function == 'pd':
+                # all the structures created from the provided files
+                structures = files_organism_creator.getStructures()
+                # list to hold the composition space endpoints for which structures have been provided
+                provided_endpoints = []
+                for endpoint in composition_space.endpoints:
+                    for structure in structures:
+                        if structure.composition.reduced_composition.almost_equals(endpoint.reduced_composition) and endpoint not in provided_endpoints:
+                            provided_endpoints.append(endpoint)
+                # check if we got them all
+                for endpoint in composition_space.endpoints:
+                    if endpoint not in provided_endpoints:
+                        print('Error: valid structure files not provided to the initial population for all endpoints of the composition space.')
+                        print('Quitting...')
+                        quit()
+            organism_creators.append(files_organism_creator)
+        # TODO: if other organism creators are used, they should be instantiated here
 
     # If more than one organism creator, sort them so that the attempts-based ones are at the front and the successes-based ones are at the back
     if len(organism_creators) > 1:

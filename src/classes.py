@@ -19,6 +19,7 @@ import os
 from os import listdir, mkdir, getcwd
 from os.path import isfile, join
 import numpy as np
+from fractions import Fraction
 import copy
 import math
 import warnings
@@ -499,8 +500,14 @@ class Pool(object):
                     
         elif composition_space.objective_function == 'pd':
             # set the values of the initial population organisms to their distances from the convex hull, and get the resulting compound phase diagram object
-            self.computePDValues(organisms_list, composition_space)
-            
+            try:
+                self.computePDValues(organisms_list, composition_space)
+            except:
+                print('Error: could not construct the phase diagram because there is not a structure at one or more of the composition space endpoints.')
+                print('One of provided reference structures probably failed development, or else there was an error when calculating its energy. See previous output.')
+                print('Quitting...')
+                quit()
+
             # assign the ones on the convex hull to the promotion set and the rest to the queue
             for organism in organisms_list:
                 if organism.value < 0.000000001: # my attempt at getting around using floats in an equality...
@@ -906,6 +913,7 @@ class Pool(object):
         for organism in self.promotion_set:
             pdentries.append(PDEntry(organism.composition, organism.total_energy))
         compound_pd = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
+    
         # get the data for the convex hull
         qhull_data = compound_pd.qhull_data
         # for some reason, the last point is positive, so remove it
@@ -1270,7 +1278,7 @@ class Mating(object):
         approximates the base 2 logarithm.
         
         Args:
-            volume_ratio: the ratio of the volumes of the two parent organisms. Assumed to be less than 48.
+            volume_ratio: the ratio of the volumes of the two parent organisms. Assumed to be less than 96.
         '''
         if volume_ratio < 1.5:
             return 0
@@ -1284,6 +1292,8 @@ class Mating(object):
             return 4
         elif volume_ratio >= 24 and volume_ratio < 48:
             return 5 
+        elif volume_ratio >= 48 and volume_ratio < 96:
+            return 6
     
     
     def doubleParent(self, organism, geometry, random):
@@ -2394,7 +2404,7 @@ class RandomOrganismCreator(object):
         elif composition_space.objective_function == 'pd':
             self.default_number = 40
         # the default volume scaling behavior
-        self.default_volume = 'from_elemental_densities'
+        self.default_volume = 'from_atomic_radii'
         
         # if entire random_org_parameters is None or 'default', then set to defaults
         if random_org_parameters == None or random_org_parameters == 'default':
@@ -2427,10 +2437,6 @@ class RandomOrganismCreator(object):
         self.num_made = 0
         self.is_successes_based = True
         self.is_finished = False
-        
-        # For elements that are normally gases, pymatgen doesn't have densities. These are the densities (in kg/m^3) for the ones that are 
-        # missing from pymatgen's database. All values are taken from Materials Project, except for At and Rn, which were taken from Wikipedia
-        self.missing_densities = {'H': 150, 'He': 421, 'N': 927, 'O': 1974, 'F': 1972, 'Ne': 1680, 'Cl': 829, 'Ar': 1478, 'Br': 3535, 'Kr': 2030, 'Xe': 2611, 'At': 6350, 'Rn': 4400}
     
     
     def createOrganism(self, id_generator, composition_space, constraints, random):
@@ -2438,6 +2444,9 @@ class RandomOrganismCreator(object):
         Creates a random organism for the initial population.
         
         Returns a random organism, or None if an error was encountered during volume scaling
+        
+        Note: for phase diagram searches, this is unlikely to create structures with compositions equivalent to the endpoints of
+              the composition space. Reference structures at those compositions should be provided with the FileOrganismCreator.
         
         Args:
             id_generator: an IDGenerator object
@@ -2478,18 +2487,68 @@ class RandomOrganismCreator(object):
                 # for some reason, reduced_formula[element] is a float for elemental structures, so have to cast it to an int below
                 for _ in range(random_num_formulas*int(reduced_formula[element])):
                     elements.append(element) 
+                    
         elif composition_space.objective_function == 'pd':
-            # TODO: this doesn't ensure the organism will be in the composition space. If it's not, it will just fail development, but there might be a better way...
-            num_atoms = random.randint(constraints.min_num_atoms, constraints.max_num_atoms)
-            allowed_elements = composition_space.get_all_elements()
+            # randomize the order of the endpoints in the list so we don't bias toward the first one
+            random.shuffle(composition_space.endpoints)
+            # get random fractions for each endpoint (i.e., a random location in the composition space)
+            frac_sum = 0
+            endpoint_fracs = {}
+            for i in range(len(composition_space.endpoints) - 1):
+                next_frac = random.uniform(0, 1.0 - frac_sum)
+                endpoint_fracs[composition_space.endpoints[i]] = next_frac
+                frac_sum += next_frac
+            # assign the last one whatever is left
+            endpoint_fracs[composition_space.endpoints[-1]] = 1.0 - frac_sum
+            # make a dictionary with all the elements as keys and initialize the values to zero
+            all_elements = composition_space.get_all_elements()
+            element_amounts = {}
+            for element in all_elements:
+                element_amounts[element] = 0 
+            # compute the amounts of each element from the amounts of each endpoint  
+            for formula in endpoint_fracs:
+                for element in formula:
+                    element_amounts[element] += endpoint_fracs[formula]*formula[element]
+            # normalize the amounts of the elements
+            amounts_sum = 0
+            for element in element_amounts:
+                amounts_sum += element_amounts[element]
+            for element in element_amounts:
+                element_amounts[element] = element_amounts[element]/amounts_sum   
+            # set the maximum denominator to the max number of atoms  divided by the number of endpoints
+            max_denom = int(constraints.max_num_atoms/len(composition_space.endpoints))     
+            # approximate the decimal amount of each element as a fraction (rational number)
+            rational_amounts = {}
+            for element in element_amounts:
+                rational_amounts[element] = Fraction(element_amounts[element]).limit_denominator(random.randint(int(0.9*max_denom), max_denom))
+            # multiply all the denominators together
+            denom_product = 1.0
+            for element in rational_amounts:
+                denom_product *= rational_amounts[element].denominator 
+            # multiply each fraction by this big denominator to get the amounts
+            for element in rational_amounts:
+                element_amounts[element] = float(denom_product)*rational_amounts[element] # this whole thing should be a float...
+            # now round all the element amounts to the nearest integer (although they should already be integers...)
+            for element in element_amounts:
+                element_amounts[element] = round(element_amounts[element])   
+            # make a Composition object from the amounts of each element, and get the reduced composition
+            random_composition = Composition(element_amounts)
+            reduced_composition = random_composition.reduced_composition
+            # set the number of atoms
+            num_atoms = int(reduced_composition.num_atoms)
+            # check the min and max number of atoms constraints
+            if num_atoms > constraints.max_num_atoms or num_atoms < constraints.min_num_atoms:
+                return None
+            # put the element objects in a list, with one entry for each atom
             elements = []
-            for _ in range(num_atoms):
-                elements.append(random.choice(allowed_elements))
+            for element in reduced_composition:
+                for _ in range(int(reduced_composition[element])):
+                    elements.append(element)
         
         # for each element, generate a set of random fractional coordinates
         # TODO: this doesn't ensure the structure will satisfy the per-species mids, and in fact most won't. It's ok because they'll just fail development, but there might be a better way...
         # TODO: also, this doesn't ensure the structure will satisfy the max size constraint in Geometry. There could be a way to do this by applying more stringent constraints on how
-        #       the random lattice vectors and angles are chosen when we have a non-bulk geometry...
+        #       the random lattice vector lengths and angles are chosen when we have a non-bulk geometry...
         random_coordinates = []
         for _ in range(num_atoms):
             random_coordinates.append([random.random(), random.random(), random.random()])
@@ -2497,59 +2556,21 @@ class RandomOrganismCreator(object):
         # make a random structure from the random lattice, random species, and random coordinates
         random_structure = Structure(random_lattice, elements, random_coordinates)
         
-        # optionally scale the volume to the weighted average of the volumes per atom of the elemental structures (increase the computed value by 10%)
-        # TODO: now we're trying computing them from per-species mids instead of elemental densities. If it works, will need to change the input options
-        #
+        # optionally scale the volume of the random structure
         # The actual volume per atom of most elements is about two times the volume per atom computed from the atomic radii. We use that relationship to compute to what volume the 
-        # the cell should be scaled to. Also, since the per-species mids are just fractions of the atomic radii, this should remove the bias introduced by the per-species mids
-        if self.volume == 'from_elemental_densities':
+        # the cell should be scaled. Since the per-species mids are just fractions of the atomic radii, this helps remove bias introduced by the per-species mids
+        if self.volume == 'from_atomic_radii':
             # compute volumes per atom (in Angstrom^3) of each element in the random organism
-            # reduced_composition = random_structure.composition.reduced_composition
-            #volumes_per_atom = {}
             total_atomic_volume = 0 # the sum of the volumes of all the atoms in the structure, where the volume of each atom is computed from its atomic radius
             for element in random_structure.composition:
-                # physical properties and conversion factors
-                #atomic_mass = float(element.atomic_mass) # in amu
-                #mass_conversion_factor = 1.660539040e-27 # converts amu to kg
-                #density = element.density_of_solid # in kg/m^3
-                # if the density is not in pymatgen's database, then get it from the missing densities
-                #if density == None:
-                #    density = self.missing_densities[element.symbol]
-                #density = float(density)
-                #length_conversion_factor = 1.0e10 # converts meters to Angstroms 
-            
-                # compute the volume (in Angstrom^3) per atom of this element
-                # take the log of the product to prevent numerical issues
-                #log_volume_per_atom = np.log(mass_conversion_factor) + np.log(atomic_mass) - np.log(density) + 3.0*np.log(length_conversion_factor)
-                #volume_per_atom = np.exp(log_volume_per_atom)                
-                #volumes_per_atom[element] = volume_per_atom
-                
-                
                 # compute the volume of each type of atom from it's atomic radius
                 volume_per_atom = (4.0/3.0)*np.pi*np.power(element.atomic_radius, 3)
                 # get how many atoms of this type (element) there are in the structure
                 num_atoms = random_structure.composition[element]
                 # increment the total atomic volume of the structure
                 total_atomic_volume += volume_per_atom*num_atoms
-                
-                #volumes_per_atom[element] = volume_per_atom
-                
-        
-            # sum the volumes per atom (as computed from from their atomic radii) of all the atoms in the cell
-            #volume_sum = 0
-            #for element in reduced_composition:
-                # the number of this type of element times it's calculated volume per atom
-                #volume_sum = volume_sum + reduced_composition[element]*volumes_per_atom[element]
-        
-            # normalize by the total number of atoms to get the weighted average
-            #mean_vpa = (weighted_sum/reduced_composition.num_atoms)
             
-            # multiply by a factor
-            # TODO: determine what a good value for this is, might also need an additive factor
-            #scale_factor = 4
-            #scaled_vpa = scale_factor*mean_vpa
-            
-            # the empirical ratio of the actual volume per atom and that computed from atomic radii
+            # the empirical ratio of the actual volume per atom and that obtained by summing atomic volumes (computed from atomic radii)
             scale_factor = 2
         
             # scale the volume of the random organism to satisfy the computed mean volume per atom
@@ -2579,6 +2600,10 @@ class RandomOrganismCreator(object):
         # return a random organism with the scaled random structure
         random_org = Organism(random_structure, id_generator, self.name)
         print('Random organism creator making organism {}'.format(random_org.id))
+        
+        # for testing
+        #print('Random organism composition: {}'.format(random_org.composition.formula.replace(' ', '')))
+        
         return random_org
     
     
@@ -2656,6 +2681,23 @@ class FileOrganismCreator(object):
             print('File {} has invalid extension - file must end with .cif or begin with POSCAR'.format(self.files[self.num_made - 1]))
             self.updateStatus()
             return None
+        
+        
+    def getStructures(self):
+        '''
+        Creates a structures from the files and puts them in a list. Returns the list of Structure objects.
+        
+        Used for checking if all the composition space endpoint are included for phase diagram searches
+        '''
+        file_structures = []
+        for structure_file in self.files:
+            if structure_file.endswith('.cif') or structure_file.startswith('POSCAR'):
+                try:
+                    new_struct = Structure.from_file(str(self.path_to_folder) + "/" + str(structure_file))
+                    file_structures.append(new_struct)
+                except:
+                    pass
+        return file_structures
         
         
     def updateStatus(self):
