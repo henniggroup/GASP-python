@@ -4,13 +4,13 @@
 # after parsing this, we need to have some sort of check to make sure the endpoints are valid
 # also, based on this, determine whether we are doing a phase diagram search or not (so we know which objective funtion to use)
 CompositionSpace:
-     - Al
-     - Cu
+    # - Al
+    # - Cu
     
     # - Al2O3
 
-    # - Al
-    # - O
+     - Al
+     - O
 
 
 # says which energy code to use, and where the needed input files are. NOT optional
@@ -18,7 +18,7 @@ EnergyCode: # should only have one specified
 
      gulp: 
           header_file: /n/srv/brevard/testing/gulp_testing/header_file  # the path to the header file
-          potential_file: /n/srv/brevard/testing/gulp_testing/AlCu_potential_file  # the path to the potential file
+          potential_file: /n/srv/brevard/testing/gulp_testing/alumina_potential_file  # the path to the potential file
 #
 #	vasp:
 #		incar: path to incar file
@@ -30,8 +30,9 @@ EnergyCode: # should only have one specified
 #	lammps: # TODO: the input files needed for lammps
 
 
-# The parameters for making the initial population. The entire block is optional and if not specified, makes 28 or 40 random organisms for epa and pd searches, respectively. Will also scale volumes to weighted average of elemental volumes. 
-# TODO: for pd searches, we want the user to provide the reference states. Should we check that here somehow and print out a message if no files are given?
+# The parameters for making the initial population. For epa searches, the entire block is optional and if not specified, makes 28 random organisms. 
+# For pd searches, it is not optional, and structures at each endpoint of the composition space must be provided with the "from_files" flag. Generally, some random structures should also be made.
+# Will also scale volume to two times the sum of the atomic volumes, as computed from the atomic radii.
 InitialPopulation:
      random:
           number: 38  # number of random structures to make
@@ -41,7 +42,7 @@ InitialPopulation:
                      #                                from_atomic_radii - scales the volume to 2 times the sum of the volumes of the atoms, as computed from their atomic radii. This is default behavior
 
      from_files:
-          path_to_folder: /n/srv/brevard/testing/gaspy_testing/ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files 
+          path_to_folder: /n/srv/brevard/testing/gaspy_testing/Al-O_ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files 
      
 
      # TODO: maybe include other options, like getting structures from a database or something
@@ -90,7 +91,8 @@ NumCalcsAtOnce: 20  # the max number of energy calculations to submit at once. O
 
 
 #ScaleDensity: True # whether to scale the density before doing an energy calculation. If used, the density is set to the average of the densities of the organisms in the promotion set 
-                   # Optional, and defaults to True. Density is only scaled for epa searches, regardless of whether this option is used or not in the input file
+                    # Optional, and defaults to True. Density is only scaled for epa searches, regardless of whether this option is used or not in the input file
+                    # TODO: implement density scaling for pd searches too - scale the weighted average of the densities of the structures on nearest facet of the convex hul
 
 
 # The parameters to use for determining if two organisms are redundant. Entire block is optional and if not specified, does structural comparisons (with default tolerances), but not value comparisons

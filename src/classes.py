@@ -353,8 +353,10 @@ class InitialPopulation():
             compound_pd = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
             # get the data for the convex hull
             qhull_data = compound_pd.qhull_data
+            
             # for some reason, the last point is positive, so remove it
             hull_data = np.delete(qhull_data, -1, 0)
+            
             # make a ConvexHull object from the hull data
             # Sometime this fails, saying that only two points were given to construct the convex hull, even though the if statement above checks 
             # that there are enough points
@@ -2398,11 +2400,8 @@ class RandomOrganismCreator(object):
         # the name of this creator
         self.name = 'random organism creator'
         # the default number of random organisms to make
-        # TODO: are these good values?
-        if composition_space.objective_function == 'epa':
-            self.default_number = 28
-        elif composition_space.objective_function == 'pd':
-            self.default_number = 40
+        # TODO: right now, this is only used for epa searches. 
+        self.default_number = 28
         # the default volume scaling behavior
         self.default_volume = 'from_atomic_radii'
         
@@ -2445,7 +2444,7 @@ class RandomOrganismCreator(object):
         
         Returns a random organism, or None if an error was encountered during volume scaling
         
-        Note: for phase diagram searches, this is unlikely to create structures with compositions equivalent to the endpoints of
+        Note: for phase diagram searches, this is will not create structures with compositions equivalent to the endpoints of
               the composition space. Reference structures at those compositions should be provided with the FileOrganismCreator.
         
         Args:
@@ -2539,6 +2538,10 @@ class RandomOrganismCreator(object):
             # check the min and max number of atoms constraints
             if num_atoms > constraints.max_num_atoms or num_atoms < constraints.min_num_atoms:
                 return None
+            # check that the composition isn't at one of the composition space endpoints
+            for endpoint in composition_space.endpoints:
+                if endpoint.almost_equals(reduced_composition):
+                    return None
             # put the element objects in a list, with one entry for each atom
             elements = []
             for element in reduced_composition:
