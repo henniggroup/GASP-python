@@ -17,7 +17,7 @@ import random
 #        parameters = yaml.load(f)
 
 # just for testing. Normally we'll read the input file as an argument
-with open('/n/srv/brevard/python_GA/gaspy/src/gaspy_input.yaml', 'r') as f:
+with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
     parameters = yaml.load(f)
 
 # make the objects needed by the algorithm
@@ -38,7 +38,7 @@ pool = objects_dict['pool']
 variations = objects_dict['variations']
 id_generator = objects_dict['id_generator']
 
-os.chdir('/n/srv/brevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
+os.chdir('/Users/benjaminrevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
 
 # make the run directory and move into it
 garun_dir = str(os.getcwd()) + '/' + run_dir_name

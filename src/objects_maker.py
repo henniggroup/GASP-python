@@ -10,7 +10,7 @@ def makeObjects(parameters):
     Returns a dictionary containing the objects
     
     Args:
-        parameters: the dictionary produced by calling yaml.load on the input file
+        parameters: the dictionary produced by calling yaml.load() on the input file
     '''
     # initial the dictionary to hold everything
     objects_dict = {}

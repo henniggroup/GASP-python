@@ -23,7 +23,7 @@ from fractions import Fraction
 import copy
 import math
 import warnings
-from subprocess import check_output, CalledProcessError, STDOUT
+from subprocess import check_output, Popen, CalledProcessError, STDOUT, PIPE
 from numpy import inf, Inf
 from scipy.spatial.qhull import ConvexHull
 
@@ -274,9 +274,8 @@ class InitialPopulation():
         organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(organism_to_add.id))
         
         print('Adding organism {} to the initial population'.format(organism_to_add.id))
-        # print out info needed for making phase diagram plots
-        if composition_space.objective_function == 'pd':
-            print('Organism {} has composition {} and total energy {}'.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
+        # print out the composition and total energy (needed for making phase diagram plots and tracking number of atoms in cell)
+        print('Organism {} has composition {} and total energy {}'.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
         self.initial_population.append(organism_to_add)
         organism_to_add.is_active = True
       
@@ -298,9 +297,8 @@ class InitialPopulation():
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
         
         print('Replacing organism {} with organism {} in the initial population'.format(old_org.id, new_org.id))
-        # print out info needed for making phase diagram plots
-        if composition_space.objective_function == 'pd':
-            print('Organism {} has composition {} and total energy {}'.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
+        # print out the composition and total energy (needed for making phase diagram plots and tracking number of atoms in cell)
+        print('Organism {} has composition {} and total energy {}'.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
             
         # find the organism in self.initial_population with the same id as old_org
         for org in self.initial_population:
@@ -506,7 +504,7 @@ class Pool(object):
                 self.computePDValues(organisms_list, composition_space)
             except:
                 print('Error: could not construct the phase diagram because there is not a structure at one or more of the composition space endpoints.')
-                print('One of provided reference structures probably failed development, or else there was an error when calculating its energy. See previous output.')
+                print('One of the provided reference structures probably failed development, or else there was an error when calculating its energy. See previous output.')
                 print('Quitting...')
                 quit()
 
@@ -550,9 +548,8 @@ class Pool(object):
             composition_space: the CompositionSpace object
         '''
         print('Adding organism {} to the pool'.format(organism_to_add.id))
-        # print out info needed for making phase diagram plots
-        if composition_space.objective_function == 'pd':
-            print('Organism {} has composition {} and total energy {}'.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
+        # print out the composition and total energy (needed for making phase diagram plots and tracking number of atoms in cell)
+        print('Organism {} has composition {} and total energy {}'.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
         
         # increment the number of adds to the pool
         self.num_adds = self.num_adds + 1
@@ -650,9 +647,8 @@ class Pool(object):
             new_org: the new organism to replace the old one
         '''
         print('Replacing organism {} with organism {} in the pool'.format(old_org.id, new_org.id))
-        # print out info needed for making phase diagram plots
-        if composition_space.objective_function == 'pd':
-            print('Organism {} has composition {} and total energy {}'.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
+        # print out the composition and total energy (needed for making phase diagram plots and tracking number of atoms in cell)
+        print('Organism {} has composition {} and total energy {}'.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
         
         # write the new organism to a poscar file
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
@@ -2882,7 +2878,6 @@ class Constraints(object):
         self.default_max_lattice_length = 20
         self.default_min_lattice_angle = 40
         self.default_max_lattice_angle = 140
-        self.default_allow_endpoints = False
         
         # set defaults if constraints_parameters equals 'default' or None
         if constraints_parameters == None or constraints_parameters == 'default':
@@ -2942,15 +2937,6 @@ class Constraints(object):
                     self.max_lattice_angle = constraints_parameters['max_lattice_angle']
             else:
                 self.max_lattice_angle = self.default_max_lattice_angle    
-             
-            # allowing endpoints   
-            if 'allow_endpoints' in constraints_parameters:
-                if constraints_parameters['allow_endpoints'] == None or constraints_parameters['allow_endpoints'] == 'default':
-                    self.allow_endpoints = self.default_allow_endpoints
-                else:
-                    self.allow_endpoints = constraints_parameters['allow_endpoints']
-            else:
-                self.allow_endpoints = self.default_allow_endpoints
                   
             # the per-species min interatomic distances
             if 'per_species_mids' in constraints_parameters:
@@ -2986,7 +2972,6 @@ class Constraints(object):
         self.max_lattice_length = self.default_max_lattice_length
         self.min_lattice_angle = self.default_min_lattice_angle
         self.max_lattice_angle = self.default_max_lattice_angle
-        self.allow_endpoints = self.default_allow_endpoints
         self.set_all_mids_to_defaults(composition_space) 
         
         
@@ -3118,13 +3103,12 @@ class Development(object):
             if len(composition_checker.transform_entries(pdentries, composition_space.endpoints)[0]) == len(composition_space.endpoints):
                 print("Organism {} is outside the composition space".format(organism.id))
                 return None
-            else:
-                # check the endpoints if specified and if we're not making the initial population
-                if constraints.allow_endpoints == False and len(pool.toList()) > 0:
-                    for endpoint in composition_space.endpoints:
-                        if endpoint.almost_equals(organism.composition.reduced_composition):
-                            print("Organism {} is at a composition endpoint".format(organism.id))
-                            return None
+            # check the endpoints if we're not making the initial population
+            elif len(pool.toList()) > 0:
+                for endpoint in composition_space.endpoints:
+                    if endpoint.almost_equals(organism.composition.reduced_composition):
+                        print("Organism {} is at a composition endpoint".format(organism.id))
+                        return None
                         
         # optionally do Niggli cell reduction 
         # sometimes pymatgen's reduction routine fails, so we check for that. 
@@ -3363,7 +3347,7 @@ class GulpEnergyCalculator(object):
         
         # run the gulp calculation by running a 'callgulp' script as a subprocess. If errors are thrown, print them to the gulp output file
         try:
-            gulp_output = check_output(['callgulp', gin_path], stderr = STDOUT)
+            gulp_output = check_output(['callgulp', gin_path], stderr = STDOUT)  
         except CalledProcessError as e:
             # print the output of the bad gulp calc to a file for the user's reference
             gout_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')
