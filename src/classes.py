@@ -3,11 +3,11 @@ from __future__ import division, unicode_literals, print_function
 from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.composition import Composition
-from pymatgen.core.periodic_table import Element, Specie
+from pymatgen.core.periodic_table import Element, Specie, DummySpecie
 from pymatgen.core.sites import Site
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.analysis.structure_matcher import ElementComparator
-from pymatgen.phasediagram.maker import CompoundPhaseDiagram
+from pymatgen.phasediagram.maker import CompoundPhaseDiagram, PhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.phasediagram.analyzer import PDAnalyzer
 from pymatgen.transformations.standard_transformations import RotationTransformation
@@ -3137,9 +3137,10 @@ class Development(object):
                 # get average volume per atom of the organisms in the promotion set
                 vpa_sum = 0
                 for org in pool.promotion_set:
-                    vpa_sum = vpa_sum + org.structure.volume/len(org.structure.sites)
+                    vpa_sum += org.structure.volume/len(org.structure.sites)
+                # take the mean, and increase by 10%
                 vpa_mean = 1.1*(vpa_sum/len(pool.promotion_set))
-                # compute the new volume per atom
+                # compute the new volume
                 num_atoms = len(organism.structure.sites)
                 new_vol = vpa_mean*num_atoms
                 # scale to the new volume
@@ -3149,14 +3150,74 @@ class Development(object):
                     # check if the volume scaling worked 
                     if str(organism.structure.lattice.a) == 'nan' or organism.structure.lattice.a > 100:
                         return None 
-                        
+                    
+            # scale to the weighted average of the volumes per atom of the structures on the convex hull that this one would decompose to      
             elif composition_space.objective_function == 'pd':
-                pass
-                # 1. get the structures that are adjacent on the convex hull (pick out the ones from the promotion set of the pool)
-                # 2. somehow get the distance of the organism from each one
-                # 3. compute the weighted average volume per atom (closer to the organism, more weight)
-                # 4. increase the computed weighted average by 10%
-                # 5. scale the lattice
+                # make a compound phase diagram from the organisms in the pool
+                pdentries = []
+                for org in pool.promotion_set:
+                    pdentries.append(PDEntry(org.composition, org.total_energy))
+                compound_pd = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
+                
+                # make a pdanalyzer object 
+                pdanalyzer = PDAnalyzer(compound_pd)
+                # transform the organism's composition (just use a dummy value for the energy)
+                transformed_entry = compound_pd.transform_entries([PDEntry(organism.composition, 10)], composition_space.endpoints)
+                # get a list containing the transformed species and amounts
+                transformed_list = str(transformed_entry[0][0]).split()
+                # remove unneeded items from the list
+                del transformed_list[0]
+                popped = ''
+                while popped != 'with':
+                    popped = transformed_list.pop()    
+                # separate the dummy species symbols from the amounts
+                symbols = []
+                amounts = []
+                for entry in transformed_list:
+                    split_entry = entry.split('0+')
+                    symbols.append(split_entry[0])
+                    amounts.append(float(split_entry[1]))
+                # make a dictionary mapping dummy species to amounts
+                dummy_species_amounts = {}
+                for i in range(len(symbols)):
+                    dummy_species_amounts[DummySpecie(symbol=symbols[i])] = amounts[i]   
+                # create a composition object with dummy species
+                dummy_comp = Composition(dummy_species_amounts)
+                # use the pdanalyzer to decompose of the organism's (dummy) composition
+                decomp = pdanalyzer.get_decomposition(dummy_comp)
+                # parse the original compositions and amounts from the decomposition
+                fractions = []
+                comps = []
+                for item in decomp:
+                    fractions.append(decomp[item])
+                    first_split = str(item).split(',')
+                    second_split = first_split[0].split()
+                    while second_split[0] != 'composition':
+                        del second_split[0]
+                    del second_split[0]
+                    # build the composition string
+                    comp_string = ''
+                    for symbol in second_split:
+                        comp_string += str(symbol)
+                    comps.append(Composition(comp_string))
+                # get weighted average volume per atom of the organisms in the decomposition
+                vpa_mean = 0
+                for i in range(len(comps)):
+                    for org in pool.promotion_set:
+                        if (comps[i].reduced_composition).almost_equals(org.composition.reduced_composition):
+                            vpa_mean += (org.structure.volume/len(org.structure.sites))*fractions[i]
+                # increase the weighted average volume per atom by 10% 
+                vpa_mean = 1.1*vpa_mean
+                # compute the new volume
+                num_atoms = len(organism.structure.sites)
+                new_vol = vpa_mean*num_atoms
+                # scale to the new volume
+                with warnings.catch_warnings(): # this is to suppress the warnings produced if the scale_lattice method fails
+                    warnings.simplefilter('ignore')
+                    organism.structure.scale_lattice(new_vol)
+                    # check if the volume scaling worked 
+                    if str(organism.structure.lattice.a) == 'nan' or organism.structure.lattice.a > 100:
+                        return None 
                         
         # check the max and min lattice length constraints
         lengths = organism.structure.lattice.abc

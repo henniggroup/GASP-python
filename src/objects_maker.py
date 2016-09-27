@@ -606,7 +606,6 @@ def printParameters(objects_dict):
     parameters_file.write('    max_lattice_length: ' + str(constraints.max_lattice_length) + '\n')
     parameters_file.write('    min_lattice_angle: ' + str(constraints.min_lattice_angle) + '\n')
     parameters_file.write('    max_lattice_angle: ' + str(constraints.max_lattice_angle) + '\n')
-    parameters_file.write('    allow_endpoints: ' + str(constraints.allow_endpoints) + '\n')
     parameters_file.write('    per_species_mids: \n')
     for pair in constraints.per_species_mids:
         parameters_file.write('        ' + pair + ': ' + str(float(constraints.per_species_mids[pair])) + '\n')

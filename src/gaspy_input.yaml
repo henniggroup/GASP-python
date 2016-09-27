@@ -48,7 +48,7 @@ InitialPopulation:
 
 
 
-NumCalcsAtOnce: 10  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
+NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
      
 
 # entire block is optional
@@ -87,9 +87,11 @@ NumCalcsAtOnce: 10  # the max number of energy calculations to submit at once. O
 #Niggli: True # whether to do Niggli cell reduction. Optional, and defaults to True. If used, handles other geometries (sheet, etc.) appropriately
 
 
-#ScaleDensity: True # whether to scale the density before doing an energy calculation. If used, the density is set to the average of the densities of the organisms in the promotion set 
-                    # Optional, and defaults to True. Density is only scaled for epa searches, regardless of whether this option is used or not in the input file
-                    # TODO: implement density scaling for pd searches too - scale the weighted average of the densities of the structures on nearest facet of the convex hul
+#ScaleDensity: True # whether to scale the density (volume per atom) of an organism created with one of the variations before doing an energy calculation. 
+                    # Optional, and defaults to True.  
+                    # For epa searches, the density is set to the average of the densities of the organisms in the promotion set (plus 10%)
+                    # For pd searches, the density is set to the weighted average of the of densities of structures on the convex hull to which this organism's composition decomposes (plus 10%)
+                    
 
 
 # The parameters to use for determining if two organisms are redundant. Entire block is optional and if not specified, does structural comparisons (with default tolerances), but not value comparisons
