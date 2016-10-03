@@ -564,6 +564,7 @@ def printParameters(objects_dict):
                 parameters_file.write('        shift_prob: ' + str(variation.shift_prob) + '\n')
                 parameters_file.write('        doubling_prob: ' + str(variation.doubling_prob) + '\n')
                 parameters_file.write('        grow_parents: ' + str(variation.grow_parents) + '\n')
+                parameters_file.write('        merge_sites: ' + str(variation.merge_sites) + '\n')
             
             elif variation.name == 'structure mutation':
                 parameters_file.write('    StructureMut: \n')

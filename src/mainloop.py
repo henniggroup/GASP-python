@@ -121,7 +121,7 @@ for creator in organism_creators:
                                     initial_population.replaceOrganism(redundant_org, developed_org, composition_space)
                                     # print out info on the best organism and how many calcs have been done so far
                                     initial_population.printProgress(composition_space)
-                                    print('Number of energy calculations so far: {}'.format(num_finished_calcs))
+                                    print('Number of energy calculations so far: {} '.format(num_finished_calcs))
                                     
                             else: 
                                 stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
@@ -129,7 +129,7 @@ for creator in organism_creators:
                                 whole_pop.append(developed_org)
                                 # print out info on the best organism and how many calcs have been done so far
                                 initial_population.printProgress(composition_space)
-                                print('Number of energy calculations so far: {}'.format(num_finished_calcs))
+                                print('Number of energy calculations so far: {} '.format(num_finished_calcs))
                                 # if this organism was made by the current creator and the creator is success-based, then update the status of the creator
                                 if creator.is_successes_based and developed_org.made_by == creator.name: 
                                     creator.updateStatus()
@@ -189,22 +189,18 @@ while num_to_get > 0:
                             initial_population.replaceOrganism(redundant_org, developed_org, composition_space)
                             # print out info on the best organism and how many calcs have been done so far
                             initial_population.printProgress(composition_space)
-                            print('Number of energy calculations so far: {}'.format(num_finished_calcs))
+                            print('Number of energy calculations so far: {} '.format(num_finished_calcs))
                     else: 
                         stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
                         initial_population.addOrganism(developed_org, composition_space)
                         whole_pop.append(developed_org)
                         # print out info ont he best organism and how many calcs have been done so far
                         initial_population.printProgress(composition_space)
-                        print('Number of energy calculations so far: {}'.format(num_finished_calcs))
+                        print('Number of energy calculations so far: {} '.format(num_finished_calcs))
                         
 
 # add the initial population to the pool (this prints out a summary of the initial population)
 pool.addInitialPopulation(initial_population, composition_space)
-pool.printProgress(composition_space)
-
-# print out how many energy calculations have been done so far
-print('Number of energy calculations so far: {}'.format(num_finished_calcs))
 
 threads = []
 relaxed_organisms = {} # dictionary to temporarily hold the relaxed organisms. The key to each relaxed organism is the index of the Thread in the list threads that did the energy calculation
@@ -246,7 +242,7 @@ while not stopping_criteria.are_satisfied:
                             # print out the progress of the search - either the best value (for epa) or the volume of the convex hull (for pd)
                             pool.printProgress(composition_space)
                             # print out how many energy calculations have been done so far
-                            print('Number of energy calculations so far: {}'.format(num_finished_calcs))
+                            print('Number of energy calculations so far: {} '.format(num_finished_calcs))
                     else: 
                         stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
                         pool.addOrganism(developed_org, composition_space)
@@ -255,24 +251,24 @@ while not stopping_criteria.are_satisfied:
                         # check if we've added enough new offspring organisms to the pool that we can remove the initial
                         # population organisms from the front (right end) of the queue. 
                         if pool.num_adds == pool.size:
-                            print('Removing the initial population from the pool')
+                            print('Removing the initial population from the pool ')
                             for _ in range(len(initial_population.initial_population)):
                                 removed_org = pool.queue.pop()
                                 removed_org.is_active = False
-                                print('Removing organism {} from the pool'.format(removed_org.id))
+                                print('Removing organism {} from the pool '.format(removed_org.id))
                         
                         # if the initial population organisms have already been removed from the pool's queue, then just need 
                         # to pop one organism from the front (right end) of the queue.
                         elif pool.num_adds > pool.size:
                             removed_org = pool.queue.pop()
                             removed_org.is_active = False
-                            print('Removing organism {} from the pool'.format(removed_org.id))
+                            print('Removing organism {} from the pool '.format(removed_org.id))
                             
                         # print out a summary of the pool
                         pool.printSummary(composition_space)
                         pool.printProgress(composition_space)
                         # print out how many energy calculations have been done so far
-                        print('Number of energy calculations so far: {}'.format(num_finished_calcs))
+                        print('Number of energy calculations so far: {} '.format(num_finished_calcs))
                                  
             # make another offspring organism if the stopping criteria aren't satisfied
             if not stopping_criteria.are_satisfied:
@@ -312,19 +308,19 @@ while num_to_get > 0:
                             pool.replaceOrganism(redundant_org, developed_org, composition_space)
                             pool.printSummary(composition_space)
                             pool.printProgress(composition_space)
-                            print('Number of energy calculations so far: {}'.format(num_finished_calcs))
+                            print('Number of energy calculations so far: {} '.format(num_finished_calcs))
                             
                     else: 
                         pool.addOrganism(developed_org, composition_space)
                         whole_pop.append(developed_org)
                         removed_org = pool.queue.pop()
                         removed_org.is_active = False
-                        print('Removing organism {} from the pool'.format(removed_org.id))
+                        print('Removing organism {} from the pool '.format(removed_org.id))
                         # print out a summary of the pool
                         pool.printSummary(composition_space)
                         pool.printProgress(composition_space)
                         # print out how many energy calculations have been done so far
-                        print('Number of energy calculations so far: {}'.format(num_finished_calcs))
+                        print('Number of energy calculations so far: {} '.format(num_finished_calcs))
     
     
     

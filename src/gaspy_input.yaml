@@ -33,6 +33,9 @@ EnergyCode: # should only have one specified
 # The parameters for making the initial population. For epa searches, the entire block is optional and if not specified, makes 28 random organisms. 
 # For pd searches, it is not optional, and structures at each endpoint of the composition space must be provided with the "from_files" flag. Generally, some random structures should also be made.
 InitialPopulation:
+     from_files:
+          path_to_folder: /Users/benjaminrevard/testing/gaspy_testing/Al_Cu_ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files
+
      random:
           number: 38  # number of random structures to make
           volume: from_atomic_radii  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
@@ -40,12 +43,7 @@ InitialPopulation:
                      #                                random - no volume scaling - the volume is just the result of the random lattice vectors 
                      #                                from_atomic_radii - scales the volume to 2 times the sum of the volumes of the atoms, as computed from their atomic radii. This is default behavior
 
-     from_files:
-          path_to_folder: /Users/benjaminrevard/testing/gaspy_testing/Al_Cu_ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files 
-     
-
      # TODO: maybe include other options, like getting structures from a database or something
-
 
 
 NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Optional, and defaults to 1 (serial)
@@ -123,6 +121,7 @@ NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Op
                                  # note: the magnitude of the shift (in fractional coordinates) is drawn from a uniform distribution 
 #          doubling_prob: 1.0    # probability of doubling one of the parent structures prior to mating. Optional, and defaults to TODO
 #          grow_parents: True    # whether or not to grow the smaller parent (by taking supercell) to the approximate size the larger parent prior to doing the mating operation. Optional, and defaults to True 
+#          merge_sites: 1.0      # the cutoff distance (as fraction of atomic radius) below which to merge sites (of the same element) in the offspring structure. Set to 0.0 for no merging
 
      # entire sub block is optional
 #     StructureMut:

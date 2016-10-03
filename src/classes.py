@@ -7,7 +7,7 @@ from pymatgen.core.periodic_table import Element, Specie, DummySpecie
 from pymatgen.core.sites import Site
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.analysis.structure_matcher import ElementComparator
-from pymatgen.phasediagram.maker import CompoundPhaseDiagram, PhaseDiagram
+from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.phasediagram.analyzer import PDAnalyzer
 from pymatgen.transformations.standard_transformations import RotationTransformation
@@ -23,7 +23,7 @@ from fractions import Fraction
 import copy
 import math
 import warnings
-from subprocess import check_output, Popen, CalledProcessError, STDOUT, PIPE
+from subprocess import check_output, CalledProcessError, STDOUT
 from numpy import inf, Inf
 from scipy.spatial.qhull import ConvexHull
 
@@ -364,10 +364,10 @@ class InitialPopulation():
                 return
             # compute the volume or area
             if len(composition_space.endpoints) == 2:
-                print('Area of the convex hull: {}'.format(convex_hull.area))
+                print('Area of the convex hull: {} '.format(convex_hull.area))
             else:
                 # TODO: will this work for four or more endpoints?
-                print('Volume of the convex hull: {}'.format(convex_hull.volume))
+                print('Volume of the convex hull: {} '.format(convex_hull.volume))
         
     
     def hasEndpoints(self, composition_space):
@@ -525,9 +525,9 @@ class Pool(object):
         organisms_list.sort(key = lambda x: x.fitness, reverse = True)
         
         # print out some info on the organisms in the initial population
-        print('Summary of the initial population:')
+        print('Summary of the initial population: ')
         for organism in organisms_list:
-            print('Organism {} has value {} and fitness {}'.format(organism.id, organism.value, organism.fitness))
+            print('Organism {} has value {} and fitness {} '.format(organism.id, organism.value, organism.fitness))
         
     
     def addOrganism(self, organism_to_add, composition_space):
@@ -547,9 +547,9 @@ class Pool(object):
             
             composition_space: the CompositionSpace object
         '''
-        print('Adding organism {} to the pool'.format(organism_to_add.id))
+        print('Adding organism {} to the pool '.format(organism_to_add.id))
         # print out the composition and total energy (needed for making phase diagram plots and tracking number of atoms in cell)
-        print('Organism {} has composition {} and total energy {}'.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
+        print('Organism {} has composition {} and total energy {} '.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
         
         # increment the number of adds to the pool
         self.num_adds = self.num_adds + 1
@@ -646,9 +646,9 @@ class Pool(object):
             
             new_org: the new organism to replace the old one
         '''
-        print('Replacing organism {} with organism {} in the pool'.format(old_org.id, new_org.id))
+        print('Replacing organism {} with organism {} in the pool '.format(old_org.id, new_org.id))
         # print out the composition and total energy (needed for making phase diagram plots and tracking number of atoms in cell)
-        print('Organism {} has composition {} and total energy {}'.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
+        print('Organism {} has composition {} and total energy {} '.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
         
         # write the new organism to a poscar file
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
@@ -872,7 +872,7 @@ class Pool(object):
         # print out the value and fitness of each organism
         print('Summary of the pool:')
         for organism in pool_list:
-            print('Organism {} has value {} and fitness {}'.format(organism.id, organism.value, organism.fitness))
+            print('Organism {} has value {} and fitness {} '.format(organism.id, organism.value, organism.fitness))
                 
     
     def printProgress(self, composition_space):
@@ -899,7 +899,7 @@ class Pool(object):
         pool_list.sort(key = lambda x: x.fitness, reverse = True)
         
         # print out the best one
-        print('Organism {} is the best and has value {} eV/atom'.format(pool_list[0].id, pool_list[0].value))
+        print('Organism {} is the best and has value {} eV/atom '.format(pool_list[0].id, pool_list[0].value))
         
     
     def printConvexHullArea(self, composition_space):
@@ -920,10 +920,10 @@ class Pool(object):
         convex_hull = ConvexHull(hull_data)
         # compute the volume or area
         if len(composition_space.endpoints) == 2:
-            print('Area of the convex hull: {}'.format(convex_hull.area))
+            print('Area of the convex hull: {} '.format(convex_hull.area))
         else:
             # TODO: will this work for four or more endpoints?
-            print('Volume of the convex hull: {}'.format(convex_hull.volume))
+            print('Volume of the convex hull: {} '.format(convex_hull.volume))
                 
                 
     def toList(self):
@@ -1070,6 +1070,7 @@ class Mating(object):
         self.default_shift_prob = 1.0 # the probability of randomly shifting the atoms along the lattice vector of the cut
         self.default_doubling_prob = 0.1 # the probability that one of the parents will be doubled before doing the variation
         self.default_grow_parents = True # whether or not to grow the smaller parent (by taking a supercell) to the approximate size the larger parent before doing the variation
+        self.default_merge_sites = 1.0 # the cutoff distance (as fraction of atomic radius) below which to merge sites with the same element in the offspring structure
         
         # TODO: maybe parse these parameters with a loop instead...
         # the mean of the cut location 
@@ -1127,6 +1128,17 @@ class Mating(object):
             # otherwise, parse the value from the parameters
             self.grow_parents = mating_params['grow_parents']
             
+        # the cutoff distance (as fraction of atomic radius) below which to merge sites in the offspring structure
+        if 'merge_sites' not in mating_params:
+            # use the default value if the flag hasn't been used
+            self.merge_sites = self.default_merge_sites
+        elif mating_params['merge_sites'] == None or mating_params['merge_sites'] == 'default':
+            # use the default value if the flag was left blank or set to 'default'
+            self.merge_sites = self.default_merge_sites
+        else:
+            # otherwise, parse the value from the parameters
+            self.merge_sites = mating_params['merge_sites']   
+            
     
     def doVariation(self, pool, random, geometry, id_generator):
         '''
@@ -1167,6 +1179,9 @@ class Mating(object):
                 7. Copy the sites from the first parent organism with fractional coordinate less than the randomly chosen cut location along
                    the randomly chosen lattice vector to the offspring organism, and do the same for the second parent organism, except copy
                    the sites with fractional coordinate greater than the cut location.
+                   
+                8. Merge sites in offspring structure that have the same element and are closer than self.merge_sites times the atomic radius 
+                   of the element.
         '''
         # for testing
         #structure_1 = Structure.from_file('/n/srv/brevard/structures/POSCAR.Cu_b')
@@ -1261,11 +1276,14 @@ class Mating(object):
         # make the offspring structure from the offspring lattice, species and fractional coordinates
         offspring_structure = Structure(offspring_lattice, offspring_species, offspring_frac_coords) 
         
+        # merge sites in the offspring structure
+        offspring_structure = self.mergeSites(offspring_structure)
+        
         # make the offspring organism from the offspring structure, and return it
         offspring = Organism(offspring_structure, id_generator, self.name)
         
         # print out a message
-        print("Creating offspring organism {} from parent organisms {} and {} with the mating variation".format(offspring.id, parent_orgs[0].id, parent_orgs[1].id))
+        print("Creating offspring organism {} from parent organisms {} and {} with the mating variation ".format(offspring.id, parent_orgs[0].id, parent_orgs[1].id))
         
         return offspring
     
@@ -1338,7 +1356,6 @@ class Mating(object):
             
             random: Python's built in PRNG
         '''
-       
         # if shape is cluster, then no shift
         if geometry.shape == 'cluster':
             pass
@@ -1362,7 +1379,56 @@ class Mating(object):
             shifted_org.translateAtomsIntoCell()
             return shifted_org
         
+    
+    def mergeSites(self, structure):
+        '''
+        Merges sites in the structure that have the same element and are closer that self.merge_sites times the atomic radius. Merging means
+        replacing two sites in the structure with one site at the mean of the two sites positions.
         
+        Args:
+            structure: the Structure whose sites to merge
+        '''
+        for site in structure.sites:
+            # get the atomic radius of the element at this site
+            symbol = site.specie.symbol
+            element = Element(symbol)
+            a_radius = element.atomic_radius
+            # compute the cutoff radius
+            cut_radius = a_radius*self.merge_sites
+            # get all the sites within the cutoff radius of the site
+            neighbors = structure.get_neighbors(site, cut_radius)
+            # list to hold the sites to merge
+            sites_to_merge = []
+            # get all of the neighbors that have the same symbol as the site
+            for neighbor in neighbors:
+                if neighbor[0].specie.symbol == symbol:
+                    sites_to_merge.append(neighbor[0])
+            # compute the location of the merged site, if there are sites to merge
+            if len(sites_to_merge) > 0:
+                # take the sum of the fractional coordinates of the sites to merge 
+                new_frac_coords = site.frac_coords
+                for site_to_merge in sites_to_merge:
+                    new_frac_coords = np.add(new_frac_coords, site_to_merge.frac_coords)
+                # divide by the number of sites to merge to get the average coordinates
+                new_frac_coords = new_frac_coords/(float(len(sites_to_merge) + 1))
+                # remove the sites that were merged from the structure
+                indices_to_remove = []
+                indices_to_remove.append(structure.sites.index(site))
+                for site_to_merge in sites_to_merge:
+                    for site in structure.sites:
+                        # this is necessary to deal with edge cases, and because sometimes the neighbor sites lie outside the cell
+                        if site.is_periodic_image(site_to_merge):
+                            indices_to_remove.append(structure.sites.index(site))
+                structure.remove_sites(indices_to_remove)
+                # add the new merged site to the structure
+                structure.append(element, new_frac_coords)
+                # call the method recursively on the new structure
+                return self.mergeSites(structure)
+                
+        # return the argument structure (only reach here if no merges happened)
+        return structure
+        
+                
         
 class StructureMut(object):
     '''
@@ -1531,7 +1597,7 @@ class StructureMut(object):
         offspring.translateAtomsIntoCell()
         
         # print out a message
-        print("Creating offspring organism {} from parent organism {} with the structure mutation variation".format(offspring.id, parent_org[0].id))
+        print("Creating offspring organism {} from parent organism {} with the structure mutation variation ".format(offspring.id, parent_org[0].id))
         
         # return the offspring
         return offspring 
@@ -1691,7 +1757,7 @@ class NumStoichsMut(object):
         offspring = Organism(structure, id_generator, self.name)
         
         # print out a message
-        print("Creating offspring organism {} from parent organism {} with the number of stoichiometries mutation variation".format(offspring.id, parent_org[0].id))
+        print("Creating offspring organism {} from parent organism {} with the number of stoichiometries mutation variation ".format(offspring.id, parent_org[0].id))
         
         return offspring
         
@@ -1854,7 +1920,7 @@ class Permutation(object):
         offspring = Organism(structure, id_generator, self.name)
         
         # print out a message
-        print("Creating offspring organism {} from parent organism {} with the permutation variation".format(offspring.id, parent_org[0].id))
+        print("Creating offspring organism {} from parent organism {} with the permutation variation ".format(offspring.id, parent_org[0].id))
         
         return offspring
         
@@ -2598,7 +2664,7 @@ class RandomOrganismCreator(object):
         
         # return a random organism with the scaled random structure
         random_org = Organism(random_structure, id_generator, self.name)
-        print('Random organism creator making organism {}'.format(random_org.id))
+        print('Random organism creator making organism {} '.format(random_org.id))
         
         # for testing
         #print('Random organism composition: {}'.format(random_org.composition.formula.replace(' ', '')))
@@ -2611,7 +2677,7 @@ class RandomOrganismCreator(object):
         Increments num_made, and if necessary, updates is_finished
         '''
         self.num_made = self.num_made + 1
-        print('Organisms left for {}: {}'.format(self.name, self.number - self.num_made))
+        print('Organisms left for {}: {} '.format(self.name, self.number - self.num_made))
         if self.num_made == self.number:
             self.is_finished = True
                 
@@ -2667,17 +2733,17 @@ class FileOrganismCreator(object):
             try:
                 new_struct = Structure.from_file(str(self.path_to_folder) + "/" + str(self.files[self.num_made - 1]))
                 new_org = Organism(new_struct, id_generator, self.name)
-                print('Making organism {} from file: {}'.format(new_org.id, self.files[self.num_made - 1]))
+                print('Making organism {} from file: {} '.format(new_org.id, self.files[self.num_made - 1]))
                 # update status each time the method is called, since this is an attempts-based creator
                 self.updateStatus()
                 return new_org
             # return None if a structure couldn't be read from a file
             except:
-                print('Error reading structure from file: {}'.format(self.files[self.num_made - 1])) 
+                print('Error reading structure from file: {} '.format(self.files[self.num_made - 1])) 
                 self.updateStatus()
                 return None
         else:
-            print('File {} has invalid extension - file must end with .cif or begin with POSCAR'.format(self.files[self.num_made - 1]))
+            print('File {} has invalid extension - file must end with .cif or begin with POSCAR '.format(self.files[self.num_made - 1]))
             self.updateStatus()
             return None
         
@@ -2704,7 +2770,7 @@ class FileOrganismCreator(object):
         Increments num_made, and if necessary, updates is_finished
         '''
         self.num_made = self.num_made + 1
-        print('Organisms left for {}: {}'.format(self.name, self.number - self.num_made))
+        print('Organisms left for {}: {} '.format(self.name, self.number - self.num_made))
         if self.num_made == len(self.files):
             self.is_finished = True
         
@@ -2834,7 +2900,7 @@ class RedundancyGuard(object):
                 if new_organism.id != organism.id:
                 # check if their structures match
                     if self.structure_matcher.fit(new_organism.structure, organism.structure):
-                        print("Organism {} failed structural redundancy - looks like organism {}".format(new_organism.id, organism.id))
+                        print("Organism {} failed structural redundancy - looks like organism {} ".format(new_organism.id, organism.id))
                         return organism
                 
         # if the new organism has been relaxed, then only check its structure against those of organisms in whole pop that have also been relaxed
@@ -2844,13 +2910,13 @@ class RedundancyGuard(object):
                 if new_organism.id != organism.id and organism.epa != None:
                     # check if their structures match
                     if self.structure_matcher.fit(new_organism.structure, organism.structure):
-                        print("Organism {} failed structural redundancy - looks like organism {}".format(new_organism.id, organism.id))
+                        print("Organism {} failed structural redundancy - looks like organism {} ".format(new_organism.id, organism.id))
                         return organism
             
                     # if specified, check if their epa's match within the epa difference interval
                     if self.epa_diff > 0:
                         if abs(new_organism.epa - organism.epa) < self.epa_diff:
-                            print("Organism {} failed energy per atom redundancy - looks like organism {}".format(new_organism.id, organism.id))
+                            print("Organism {} failed energy per atom redundancy - looks like organism {} ".format(new_organism.id, organism.id))
                             return organism    
         # should only get here if no organisms are redundant with the new organism
         return None    
@@ -3033,8 +3099,6 @@ class Development(object):
     '''
     A development object is used to develop an organism before evaluating its energy or adding it
     to the pool. Doesn't do redundancy checking.
-    
-    This is a singleton class.
     '''
     def __init__(self, niggli, scale_density):
         '''
@@ -3070,12 +3134,12 @@ class Development(object):
         '''
         # check max num atoms constraint
         if len(organism.structure.sites) > constraints.max_num_atoms:
-            print("Organism {} failed max number of atoms constraint".format(organism.id))
+            print("Organism {} failed max number of atoms constraint ".format(organism.id))
             return None
             
         # check min num atoms constraint
         if len(organism.structure.sites) < constraints.min_num_atoms:
-            print("Organism {} failed min number of atoms constraint".format(organism.id))
+            print("Organism {} failed min number of atoms constraint ".format(organism.id))
             return None
         
         # check if the organism has the right composition for fixed-composition searches
@@ -3084,7 +3148,7 @@ class Development(object):
             reduced_composition = composition_space.endpoints[0].reduced_composition
             org_reduced_composition = organism.composition.reduced_composition
             if not reduced_composition.almost_equals(org_reduced_composition):
-                print("Organism {} has incorrect composition".format(organism.id))
+                print("Organism {} has incorrect composition ".format(organism.id))
                 return None
         
         # check if the organism is in the composition space for phase-diagram searches
@@ -3101,13 +3165,13 @@ class Development(object):
             composition_checker = CompoundPhaseDiagram(pdentries, composition_space.endpoints)
             # use the CompoundPhaseDiagram to check if the organism is in the composition space by seeing how many entries it returns
             if len(composition_checker.transform_entries(pdentries, composition_space.endpoints)[0]) == len(composition_space.endpoints):
-                print("Organism {} is outside the composition space".format(organism.id))
+                print("Organism {} is outside the composition space ".format(organism.id))
                 return None
             # check the endpoints if we're not making the initial population
             elif len(pool.toList()) > 0:
                 for endpoint in composition_space.endpoints:
                     if endpoint.almost_equals(organism.composition.reduced_composition):
-                        print("Organism {} is at a composition endpoint".format(organism.id))
+                        print("Organism {} is at a composition endpoint ".format(organism.id))
                         return None
                         
         # optionally do Niggli cell reduction 
@@ -3130,7 +3194,7 @@ class Development(object):
                     return None
             # TODO: call special cell reduction for other geometries here if needed (doesn't makes sense for wires or clusters)
                      
-        # optionally scale the volume per atom
+        # optionally scale the volume per atom of unrelaxed structures
         if self.scale_density and len(pool.promotion_set) > 0 and organism.epa == None:
             # scale to the average of the volumes per atom of the organisms in the promotion set, and increase by 10%
             if composition_space.objective_function == 'epa':
@@ -3223,20 +3287,20 @@ class Development(object):
         lengths = organism.structure.lattice.abc
         for length in lengths:
             if length > constraints.max_lattice_length:
-                print("Organism {} failed max lattice length constraint".format(organism.id))
+                print("Organism {} failed max lattice length constraint ".format(organism.id))
                 return None
             elif length < constraints.min_lattice_length:
-                print("Organism {} failed min lattice length constraint".format(organism.id))
+                print("Organism {} failed min lattice length constraint ".format(organism.id))
                 return None
             
         # check the max and min lattice angle constraints
         angles = organism.structure.lattice.angles
         for angle in angles:
             if angle > constraints.max_lattice_angle:
-                print("Organism {} failed max lattice angle constraint".format(organism.id))
+                print("Organism {} failed max lattice angle constraint ".format(organism.id))
                 return None
             elif angle < constraints.min_lattice_angle:
-                print("Organism {} failed min lattice angle constraint".format(organism.id))
+                print("Organism {} failed min lattice angle constraint ".format(organism.id))
                 return None
             
         # check the per-species minimum interatomic distance constraints
@@ -3255,17 +3319,17 @@ class Development(object):
                 # check each neighbor in the sphere to see if it has the forbidden type
                 for neighbor in neighbors:
                     if neighbor[0].specie.symbol == species_symbol:
-                        print("Organism {} failed per-species minimum interatomic distance constraint".format(organism.id))
+                        print("Organism {} failed per-species minimum interatomic distance constraint ".format(organism.id))
                         return None
             
         # check the max size constraint (can only fail for non-bulk geometries)
         if geometry.getSize(organism) > geometry.max_size:
-            print("Organism {} failed max size constraint".format(organism.id))
+            print("Organism {} failed max size constraint ".format(organism.id))
             return None
         
         # check the min size constraint (can only fail for non-bulk geometries)
         if geometry.getSize(organism) < geometry.min_size:
-            print("Organism {} failed min size constraint".format(organism.id))
+            print("Organism {} failed min size constraint ".format(organism.id))
             return None
         
         # return the organism if it survived
@@ -3404,7 +3468,7 @@ class GulpEnergyCalculator(object):
         gin_file.write(gulp_input)
         gin_file.close()
         
-        print('Starting GULP calculation on organism {}'.format(organism.id))
+        print('Starting GULP calculation on organism {} '.format(organism.id))
         
         # run the gulp calculation by running a 'callgulp' script as a subprocess. If errors are thrown, print them to the gulp output file
         try:
@@ -3415,7 +3479,7 @@ class GulpEnergyCalculator(object):
             gout_file.write(e.output)
             gout_file.close()
             # error message and set dictionary element to None before returning
-            print('Error running GULP on organism {}'.format(organism.id))
+            print('Error running GULP on organism {} '.format(organism.id))
             dictionary[key] = None
             return
         
@@ -3428,7 +3492,7 @@ class GulpEnergyCalculator(object):
         conv_err_string = "Conditions for a minimum have not been satisfied"
         gradient_norm = self.getGradNorm(gulp_output)
         if conv_err_string in gulp_output and gradient_norm > 0.1:
-            print('The GULP calculation on organism {} did not converge'.format(organism.id))
+            print('The GULP calculation on organism {} did not converge '.format(organism.id))
             dictionary[key] = None
             return
        
@@ -3437,7 +3501,7 @@ class GulpEnergyCalculator(object):
             # TODO: will have to change this line if pymatgen fixes the gulp parser
             relaxed_structure = self.get_relaxed_structure(gulp_output)
         except:
-            print('Error reading structure of organism {} from GULP output'.format(organism.id))
+            print('Error reading structure of organism {} from GULP output '.format(organism.id))
             dictionary[key] = None
             return
         
@@ -3445,7 +3509,7 @@ class GulpEnergyCalculator(object):
         try:
             total_energy = self.getEnergy(gulp_output)
         except:
-            print('Error reading energy of organism {} from GULP output'.format(organism.id))
+            print('Error reading energy of organism {} from GULP output '.format(organism.id))
             dictionary[key] = None
             return
         
@@ -3461,7 +3525,7 @@ class GulpEnergyCalculator(object):
         organism.total_energy = organism.epa*organism.structure.num_sites
         
         # print out the enerngy per atom of the organism
-        print('Setting energy of organism {} to {} eV/atom'.format(organism.id, organism.epa))
+        print('Setting energy of organism {} to {} eV/atom '.format(organism.id, organism.epa))
         
         # store the relaxed organism in the specified dictionary with the specified key 
         dictionary[key] = organism
