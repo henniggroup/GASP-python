@@ -365,7 +365,7 @@ def makeObjects(parameters):
         elif parameters['Variations']['Mating'] == None:
             # Mating sub block was left blank
             print('If the "Mating" flag is used, its "fraction" flag must also be set.')
-            print('Quittig...')
+            print('Quitting...')
             quit()
         else:
             # Mating sub block was used is not empty. Check that the non-optional 'fraction' flag specifies a valid value
@@ -385,7 +385,7 @@ def makeObjects(parameters):
         elif parameters['Variations']['StructureMut'] == None:
             # StructureMut sub block was left blank
             print('If the "StructureMut" flag is used, its "fraction" flag must also be set.')
-            print('Quittig...')
+            print('Quitting...')
             quit()
         else:
             # StructureMut sub block was used is not empty. Check that the non-optional 'fraction' flag specifies a valid value
@@ -405,7 +405,7 @@ def makeObjects(parameters):
         elif parameters['Variations']['NumStoichsMut'] == None:
             # NumStoichsMut block was left blank
             print('If the "NumStoichsMut" flag is used, its "fraction" flag must also be set.')
-            print('Quittig...')
+            print('Quitting...')
             quit()
         else:
             # NumStoichsMut sub block was used is not empty. Check that the non-optional 'fraction' flag specifies a valid value

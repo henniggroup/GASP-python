@@ -3455,6 +3455,9 @@ class GulpEnergyCalculator(object):
         job_dir_path = str(getcwd()) + '/temp/' + str(organism.id)
         mkdir(job_dir_path)
         
+        # just for Shreyas' convenience, write out the unrelaxed structure to a poscar file
+        organism.structure.to(fmt='poscar', filename= job_dir_path + '/POSCAR.' + str(organism.id) + '_unrelaxed')
+        
         # get the structure in gulp input format
         # TODO: might be better to make my own implementation of this so abritrary elements can have shells (not just all anions and/or all cations)
         structure_lines = self.gulp_io.structure_lines(organism.structure, anion_shell_flg = self.anions_shell, cation_shell_flg = self.cations_shell, symm_flg = False)

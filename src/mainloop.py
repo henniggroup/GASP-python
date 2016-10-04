@@ -8,17 +8,19 @@ import threading
 import random
 
 # get the path to the input file (in yaml format)
-#input_file = os.path.abspath(sys.argv[1]) 
+input_file = os.path.abspath(sys.argv[1]) 
 
 # parse the input file as nested dictionaries
-# TODO: this should be in try-except clause, since opening the file is something that could fail (e.g., wrong path given, etc.)
-# TODO: should also check here if the input file exists before jumping in and trying to load it
-#    with open(input_file, 'r') as f:
-#        parameters = yaml.load(f)
+try:
+    with open(input_file, 'r') as f:
+        parameters = yaml.load(f)
+except:
+    print('Error reading input file.')
+    print('Quitting')
 
 # just for testing. Normally we'll read the input file as an argument
-with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
-    parameters = yaml.load(f)
+#with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
+#    parameters = yaml.load(f)
 
 # make the objects needed by the algorithm
 objects_dict = objects_maker.makeObjects(parameters)
@@ -38,7 +40,8 @@ pool = objects_dict['pool']
 variations = objects_dict['variations']
 id_generator = objects_dict['id_generator']
 
-os.chdir('/Users/benjaminrevard/testing/gaspy_testing') # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
+# this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
+#os.chdir('/Users/benjaminrevard/testing/gaspy_testing') 
 
 # make the run directory and move into it
 garun_dir = str(os.getcwd()) + '/' + run_dir_name
