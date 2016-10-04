@@ -3100,7 +3100,7 @@ class Development(object):
     A development object is used to develop an organism before evaluating its energy or adding it
     to the pool. Doesn't do redundancy checking.
     '''
-    def __init__(self, niggli, scale_density):
+    def __init__(self, development_parameters): 
         '''
         Creates a Development object.
         
@@ -3109,8 +3109,34 @@ class Development(object):
             
             scale_density: a boolean indicating whether or not to scale the density
         '''
-        self.niggli = niggli
-        self.scale_density = scale_density
+        # defaults
+        self.default_niggli = True
+        self.default_scale_density = True
+        
+        # set defaults if development_parameters equals 'default' or None
+        if development_parameters == None or development_parameters == 'default':
+            self.niggli = self.default_niggli
+            self.scale_density = self.default_scale_density
+        
+        # otherwise, parse the parameters and set to defaults if necessary
+        else:
+            if 'niggli' in development_parameters:
+                if development_parameters['niggli'] == None or development_parameters['niggli'] == 'default':
+                    self.niggli = self.default_niggli
+                else:
+                    self.niggli = development_parameters['niggli']
+            else:
+                # if no 'niggli' flag, then just use the default
+                self.niggli = self.default_niggli
+                
+            if 'scale_density' in development_parameters:
+                if development_parameters['scale_density'] == None or development_parameters['scale_density'] == 'default':
+                    self.scale_density = self.default_scale_density
+                else:
+                    self.scale_density = development_parameters['scale_density']
+            else:
+                # if no 'scale_density' flag, then just use the default
+                self.scale_density = self.default_scale_density
         
     
     def develop(self, organism, composition_space, constraints, geometry, pool):

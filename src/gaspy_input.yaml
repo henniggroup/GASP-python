@@ -20,14 +20,14 @@ EnergyCode: # should only have one specified
           header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file  # the path to the header file
           potential_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/AlCu_potential_file  # the path to the potential file
 #
-#	vasp:
-#		incar: path to incar file
-#		kpoints: path to kpoints file
-#		potcars: # one for each element
-#			C: path to C potcar file
-#			Si: path to Si potcar file
+#	   vasp:
+#		   incar: path to incar file
+#		   kpoints: path to kpoints file
+#		   potcars: # one for each element
+#			   C: path to C potcar file
+#			   Si: path to Si potcar file
 
-#	lammps: # TODO: the input files needed for lammps
+#	   lammps: # TODO: the input files needed for lammps
 
 
 # The parameters for making the initial population. For epa searches, the entire block is optional and if not specified, makes 28 random organisms. 
@@ -82,13 +82,14 @@ NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Op
 
 
 
-#Niggli: True # whether to do Niggli cell reduction. Optional, and defaults to True. If used, handles other geometries (sheet, etc.) appropriately
+# whether to do some optional operations during development
+Development:
+     niggli: True # whether to do Niggli cell reduction. Optional, and defaults to True. If used, handles other geometries (sheet, etc.) appropriately
 
-
-#ScaleDensity: True # whether to scale the density (volume per atom) of an organism created with one of the variations before doing an energy calculation. 
-                    # Optional, and defaults to True.  
-                    # For epa searches, the density is set to the average of the densities of the organisms in the promotion set (plus 10%)
-                    # For pd searches, the density is set to the weighted average of the of densities of structures on the convex hull to which this organism's composition decomposes (plus 10%)
+     scale_density: True # whether to scale the density (volume per atom) of an organism created with one of the variations before doing an energy calculation. 
+                         # Optional, and defaults to True.  
+                         # For epa searches, the density is set to the average of the densities of the organisms in the promotion set (plus 10%)
+                         # For pd searches, the density is set to the weighted average of the of densities of structures on the convex hull to which this organism's composition decomposes (plus 10%)
                     
 
 

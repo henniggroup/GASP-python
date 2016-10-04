@@ -46,35 +46,13 @@ def makeObjects(parameters):
     # put the geometry in the dictionary
     objects_dict['geometry'] = geometry
     
-    # make the niggli object
-    if 'Niggli' in parameters:
-        if parameters['Niggli'] == None or parameters['Niggli'] == 'default':
-            niggli = True
-        else:
-            niggli = parameters['Niggli']
-    else:
-        # if no Niggli block is given in the input file, set it to True
-        niggli = True
-        
-    # put the niggli reduction in the dictionary
-    objects_dict['niggli'] = niggli
-    
-    # make the scale density object
-    if 'ScaleDesnsity' in parameters:
-        if parameters['ScaleDensity'] == None or parameters['ScaleDensity'] == 'default':
-            scale_density = True
-        else:
-            scale_density = parameters['ScaleDensity']
-    else:
-        # if no ScaleDensity block is given in the input file, set it to True
-        scale_density = True
-        
-    # put the scale density in the dictionary
-    objects_dict['scale_density'] = scale_density
-   
     # make the development object
-    development = classes.Development(niggli, scale_density)
-    
+    if 'Development' in parameters:
+        development = classes.Development(parameters['Development'])
+    else:
+        # if no Development block is given in the input file, then just use default values for everything
+        development = classes.Development('default')
+        
     # put the development in the dictionary
     objects_dict['development'] = development
 
@@ -132,51 +110,53 @@ def makeObjects(parameters):
                 print('Please use the "from_files" flag in the InitialPopulation block to provide the reference structures.')
                 print('Quitting...')
                 quit()  
-            # if nothing is given after the from_files flag
-            elif parameters['InitialPopulation']['from_files'] == None:
-                print('The path to the folder containing the files must be provided. Please use the "path_to_folder" flag.')
+        # if nothing is given after the from_files flag
+        elif parameters['InitialPopulation']['from_files'] == None:
+            print('The path to the folder containing the files must be provided. Please use the "path_to_folder" flag.')
+            print('Quitting...')
+            quit()
+        # if path_to_folder flag is not given
+        elif 'path_to_folder' not in parameters['InitialPopulation']['from_files']:
+            print('Incorrect flag given after "from_files" in the InitialPopulation block. Please use the "path_to_folder" flag.')
+            print('Quitting...')
+            quit()
+        else:
+            given_path = parameters['InitialPopulation']['from_files']['path_to_folder']
+            # check if no path was given after path_to_folder flag
+            if given_path == None:
+                print('The path to the folder containing the files for the initial population must be provided. Please give the path after the "path_to_folder" flag.')
                 print('Quitting...')
                 quit()
-            elif 'path_to_folder' not in parameters['InitialPopulation']['from_files']:
-                print('Incorrect flag given after "from_files" in the InitialPopulation block. Please use the "path_to_folder" flag.')
+            # check that the given path exists
+            elif not os.path.exists(given_path):
+                print('The given folder containing structures for the initial population does not exist.')
                 print('Quitting...')
                 quit()
-            else:
-                given_path = parameters['InitialPopulation']['from_files']['path_to_folder']
-                # check if no path was given after path_to_folder flag
-                if given_path == None:
-                    print('The path to the folder containing the files for the initial population must be provided. Please give the path after the "path_to_folder" flag.')
-                    print('Quitting...')
-                    quit()
-                elif not os.path.exists(given_path):
-                    print('The given folder containing structures for the initial population does not exist.')
-                    print('Quitting...')
-                    quit()
-                # if the folder exists, check that it contains files
-                elif len([f for f in os.listdir(given_path) if os.path.isfile(os.path.join(given_path, f))]) == 0:
-                    print('The given folder containing structures for the initial population does not contain any files.')
-                    print('Quitting...')
-                    quit()
-                else:   
-                    files_organism_creator = classes.FileOrganismCreator(given_path)
-                    # check that the provided files cover all the composition space endpoints
-                    if composition_space.objective_function == 'pd':
-                        # all the structures created from the provided files
-                        structures = files_organism_creator.getStructures()
-                        # list to hold the composition space endpoints for which structures have been provided
-                        provided_endpoints = []
-                        for endpoint in composition_space.endpoints:
-                            for structure in structures:
-                                if structure.composition.reduced_composition.almost_equals(endpoint.reduced_composition) and endpoint not in provided_endpoints:
-                                    provided_endpoints.append(endpoint)
-                        # check if we got them all
-                        for endpoint in composition_space.endpoints:
-                            if endpoint not in provided_endpoints:
-                                print('Error: valid structure files not provided to the initial population for all endpoints of the composition space.')
-                                print('Quitting...')
-                                quit()
-                    organism_creators.append(files_organism_creator)
-            # TODO: if other organism creators are used, they should be instantiated here
+            # if the folder exists, check that it contains files
+            elif len([f for f in os.listdir(given_path) if os.path.isfile(os.path.join(given_path, f))]) == 0:
+                print('The given folder containing structures for the initial population does not contain any files.')
+                print('Quitting...')
+                quit()
+            else:   
+                files_organism_creator = classes.FileOrganismCreator(given_path)
+                # check that the provided files cover all the composition space endpoints
+                if composition_space.objective_function == 'pd':
+                    # all the structures created from the provided files
+                    structures = files_organism_creator.getStructures()
+                    # list to hold the composition space endpoints for which structures have been provided
+                    provided_endpoints = []
+                    for endpoint in composition_space.endpoints:
+                        for structure in structures:
+                            if structure.composition.reduced_composition.almost_equals(endpoint.reduced_composition) and endpoint not in provided_endpoints:
+                                provided_endpoints.append(endpoint)
+                    # check if we got them all
+                    for endpoint in composition_space.endpoints:
+                        if endpoint not in provided_endpoints:
+                            print('Error: valid structure files not provided to the initial population for all endpoints of the composition space.')
+                            print('Quitting...')
+                            quit()
+                organism_creators.append(files_organism_creator)
+        # TODO: if other organism creators are used, they should be instantiated here
 
     # If more than one organism creator, sort them so that the attempts-based ones are at the front and the successes-based ones are at the back
     if len(organism_creators) > 1:
@@ -490,8 +470,7 @@ def printParameters(objects_dict):
     organism_creators = objects_dict['organism_creators']
     num_calcs_at_once = objects_dict['num_calcs_at_once']
     composition_space = objects_dict['composition_space']
-    scale_density = objects_dict['scale_density']
-    niggli = objects_dict['niggli']
+    development = objects_dict['development']
     constraints = objects_dict['constraints']
     geometry = objects_dict['geometry']
     redundancy_guard = objects_dict['redundancy_guard']
@@ -592,12 +571,10 @@ def printParameters(objects_dict):
                     parameters_file.write('        ' + pair + '\n')
     parameters_file.write('\n')
     
-    # write whether to scale the density
-    parameters_file.write('ScaleDensity: ' + str(scale_density) + '\n')
-    parameters_file.write('\n')
-    
-    # write whether to do Niggli cell reduction
-    parameters_file.write('Niggli: ' + str(niggli) + '\n')
+    # write the development 
+    parameters_file.write('Development: \n')
+    parameters_file.write('    niggli: ' + str(development.niggli) + '\n')
+    parameters_file.write('    scale_density: ' + str(development.scale_density) + '\n')
     parameters_file.write('\n')
     
     # write the constraints

@@ -22,6 +22,9 @@ except:
 #with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
 #    parameters = yaml.load(f)
 
+# this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
+#os.chdir('/Users/benjaminrevard/testing/gaspy_testing') 
+
 # make the objects needed by the algorithm
 objects_dict = objects_maker.makeObjects(parameters)
 
@@ -39,9 +42,6 @@ energy_calculator = objects_dict['energy_calculator']
 pool = objects_dict['pool']
 variations = objects_dict['variations']
 id_generator = objects_dict['id_generator']
-
-# this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
-#os.chdir('/Users/benjaminrevard/testing/gaspy_testing') 
 
 # make the run directory and move into it
 garun_dir = str(os.getcwd()) + '/' + run_dir_name
