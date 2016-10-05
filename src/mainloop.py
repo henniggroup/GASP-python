@@ -8,22 +8,22 @@ import threading
 import random
 
 # get the path to the input file (in yaml format)
-#input_file = os.path.abspath(sys.argv[1]) 
+input_file = os.path.abspath(sys.argv[1]) 
 
 # parse the input file as nested dictionaries
-#try:
-#    with open(input_file, 'r') as f:
-#        parameters = yaml.load(f)
-#except:
-#    print('Error reading input file.')
-#    print('Quitting')
+try:
+    with open(input_file, 'r') as f:
+        parameters = yaml.load(f)
+except:
+    print('Error reading input file.')
+    print('Quitting')
 
 # just for testing. Normally we'll read the input file as an argument
-with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
-    parameters = yaml.load(f)
+#with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
+#    parameters = yaml.load(f)
 
 # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
-os.chdir('/Users/benjaminrevard/testing/gaspy_testing') 
+#os.chdir('/Users/benjaminrevard/testing/gaspy_testing') 
 
 # make the objects needed by the algorithm
 objects_dict = objects_maker.makeObjects(parameters)
