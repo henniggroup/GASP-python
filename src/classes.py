@@ -12,6 +12,7 @@ from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.phasediagram.analyzer import PDAnalyzer
 from pymatgen.transformations.standard_transformations import RotationTransformation
 import pymatgen.command_line.gulp_caller as gulp_caller
+from pymatgen.io.lammps.data import LammpsData
 
 from _pyio import __metaclass__
 from _collections import deque
@@ -23,6 +24,7 @@ from fractions import Fraction
 import copy
 import math
 import warnings
+import shutil
 from subprocess import check_output, CalledProcessError, STDOUT
 from numpy import inf, Inf
 from scipy.spatial.qhull import ConvexHull
@@ -223,7 +225,7 @@ class Organism(object):
             coords = self.structure.cart_coords
         else:
             coords = self.structure.frac_coords
-        # find the largest and smallest coordinates in each dimenstion
+        # find the largest and smallest coordinates in each dimension
         minx = Inf
         maxx = -Inf
         miny = Inf
@@ -3394,7 +3396,94 @@ class VaspEnergyCalculator(object):
         # 1. prepare input files for calculation
         # 2. submit calculation (by running external script)
         # 3. when external script returns, parse organism from the energy code output files
+        
+        
+
+class LammpsEnergyCalculator(object):
+    '''
+    Calculates the energy of an organism using LAMMPS.
+    '''
+    def __init__(self, input_script):
+        '''
+        Args:
+            input_script: the path to the lammps input script
+            
+        Precondition: the input script exists and is valid
+        '''
+        # the name of the energy code being used
+        self.name = 'lammps'
+            
+        # save the path to the lammps input script
+        self.input_script = input_script
+            
+        # for processing lammps input
+        self.lammps_data = LammpsData()
+        
     
+    def doEnergyCalculation(self, organism, dictionary, key):
+        '''
+        Calculates the energy of an organism using LAMMPS, and stores the relaxed organism in the provided dictionary at the provided key. 
+        If the calculation fails, stores None in the dictionary instead.
+        
+        Args:
+            organism: the organism whose energy we want to calculate
+            
+            dictionary: a dictionary in which to store the relaxed organism
+            
+            key: the key specifying where to store the relaxed organism in the dictionary
+            
+        Precondition: the garun directory and temp subdirectory exist, and we are currently located inside the garun directory
+        
+        TODO: think about ways to make this more robust - look at Will's code
+        TODO: might be better to eventually use the custodian package for error handling...
+        '''
+        # make the job directory
+        job_dir_path = str(getcwd()) + '/temp/' + str(organism.id)
+        mkdir(job_dir_path)
+        
+        # copy the input script to the job directory
+        shutil.copy(self.input_script, job_dir_path)
+        
+        # make a data.in file from the structure of the organism - try using self.lammps_data for this (methods get_basic_system_info and write_data_file look useful)
+        # problem: this doesn't return the bounding box
+        system_info = self.lammps_data.get_basic_system_info(organism.structure)
+        
+        # get the min and max of each coordinate attained by the lattice vectors (xlo, xhi, ylo, yhi, zlo, zhi)
+        xmin = Inf
+        xmax = -Inf
+        ymin = Inf
+        ymax = -Inf
+        zmin = Inf
+        zmax = -Inf
+        lattice_coords = organism.structure.lattice.matrix
+        for i in range(0, 3):
+            if lattice_coords[i][0] < xmin:
+                xmin = lattice_coords[i][0]
+            if lattice_coords[i][0] > xmax:
+                xmax = lattice_coords[i][0]
+            if lattice_coords[i][1] < ymin:
+                ymin = lattice_coords[i][1]
+            if lattice_coords[i][1] > ymax:
+                ymax = lattice_coords[i][1]
+            if lattice_coords[i][2] < zmin:
+                zmin = lattice_coords[i][2]
+            if lattice_coords[i][2] > zmax:
+                zmax = lattice_coords[i][2]
+        
+        # get the tilt factors (xy, xz, yz)
+        
+        
+        
+        # build the input file
+        #    1. get the bounding box from the strucure
+        #    2. get the atoms types, numbers and masses from system_info
+        #    3. get the atom coordinates from the structure
+        
+        # use a subprocess to call the calllammps script, with the lammps_input_script as the argument
+        
+        # parse the energy and relaxed structure from the lammps output, checking for errors
+        
+        # do the rest of the stuff in the method in GulpEnergyCalculator
 
 
 class GulpEnergyCalculator(object):
@@ -3407,8 +3496,6 @@ class GulpEnergyCalculator(object):
             header_file: the path to the gulp header file
             
             potential_file: the path to the gulp potential file
-            
-            run_dir_name: the name of the garun directory containing all the output of the search (just the name, not the path)
             
         Precondition: the header and potential files exist and are valid
         '''
@@ -3485,10 +3572,10 @@ class GulpEnergyCalculator(object):
         organism.structure.to(fmt='poscar', filename= job_dir_path + '/POSCAR.' + str(organism.id) + '_unrelaxed')
         
         # get the structure in gulp input format
-        # TODO: might be better to make my own implementation of this so abritrary elements can have shells (not just all anions and/or all cations)
+        # TODO: might be better to make my own implementation of this so arbitrary elements can have shells (not just all anions and/or all cations)
         structure_lines = self.gulp_io.structure_lines(organism.structure, anion_shell_flg = self.anions_shell, cation_shell_flg = self.cations_shell, symm_flg = False)
         
-        # make the gulp input from the structrure, header and potential
+        # make the gulp input from the structure, header and potential
         gulp_input = self.header + structure_lines + self.potential
         
         # print gulp input to a file for user's reference 
@@ -3501,7 +3588,10 @@ class GulpEnergyCalculator(object):
         
         # run the gulp calculation by running a 'callgulp' script as a subprocess. If errors are thrown, print them to the gulp output file
         try:
+            garun_dir = str(os.getcwd())
+            os.chdir(job_dir_path)
             gulp_output = check_output(['callgulp', gin_path], stderr = STDOUT)  
+            os.chdir(garun_dir)
         except CalledProcessError as e:
             # print the output of the bad gulp calc to a file for the user's reference
             gout_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')

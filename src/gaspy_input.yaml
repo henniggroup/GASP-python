@@ -19,6 +19,9 @@ EnergyCode: # should only have one specified
      gulp: 
           header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file  # the path to the header file
           potential_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/AlCu_potential_file  # the path to the potential file
+          
+#    lammps: 
+#         input_script: /path/to/input/script   # the path to the lammps input script
 #
 #	   vasp:
 #		   incar: path to incar file
@@ -27,7 +30,7 @@ EnergyCode: # should only have one specified
 #			   C: path to C potcar file
 #			   Si: path to Si potcar file
 
-#	   lammps: # TODO: the input files needed for lammps
+
 
 
 # The parameters for making the initial population. For epa searches, the entire block is optional and if not specified, makes 28 random organisms. 
