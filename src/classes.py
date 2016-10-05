@@ -3588,10 +3588,9 @@ class GulpEnergyCalculator(object):
         
         # run the gulp calculation by running a 'callgulp' script as a subprocess. If errors are thrown, print them to the gulp output file
         try:
-            garun_dir = str(os.getcwd())
             os.chdir(job_dir_path)
             gulp_output = check_output(['callgulp', gin_path], stderr = STDOUT)  
-            os.chdir(garun_dir)
+            os.chdir('../..')
         except CalledProcessError as e:
             # print the output of the bad gulp calc to a file for the user's reference
             gout_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')
