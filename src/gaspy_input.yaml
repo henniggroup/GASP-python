@@ -17,7 +17,7 @@ CompositionSpace:
 EnergyCode: # should only have one specified
 
      gulp: 
-          header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file  # the path to the header file
+          header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file_dump  # the path to the header file
           potential_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/AlCu_potential_file  # the path to the potential file
           
 #    lammps: 

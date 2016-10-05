@@ -3564,9 +3564,11 @@ class GulpEnergyCalculator(object):
         TODO: think about ways to make this more robust - look at Will's code
         TODO: might be better to eventually use the custodian package for error handling...
         '''
+        # get the garun directory (where we currently are)
+        garun_dir_path = str(os.getcwd())
         # make the job directory
-        job_dir_path = str(getcwd()) + '/temp/' + str(organism.id)
-        mkdir(job_dir_path)
+        job_dir_path = garun_dir_path + '/temp/' + str(organism.id)
+        os.mkdir(job_dir_path)
         
         # just for Shreyas' convenience, write out the unrelaxed structure to a poscar file
         organism.structure.to(fmt='poscar', filename= job_dir_path + '/POSCAR.' + str(organism.id) + '_unrelaxed')
@@ -3587,10 +3589,8 @@ class GulpEnergyCalculator(object):
         print('Starting GULP calculation on organism {} '.format(organism.id))
         
         # run the gulp calculation by running a 'callgulp' script as a subprocess. If errors are thrown, print them to the gulp output file
-        try:
-            os.chdir(job_dir_path)
-            gulp_output = check_output(['callgulp', gin_path], stderr = STDOUT)  
-            os.chdir('../..')
+        try:  
+            gulp_output = check_output(['callgulp', job_dir_path], stderr = STDOUT) 
         except CalledProcessError as e:
             # print the output of the bad gulp calc to a file for the user's reference
             gout_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')
