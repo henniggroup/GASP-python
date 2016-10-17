@@ -206,48 +206,74 @@ def makeObjects(parameters):
         quit()
     elif 'gulp' in parameters['EnergyCode']:
         if parameters['EnergyCode']['gulp'] == None:
-            print('No gulp header or potential files given. Please use the "header_file" and "potential_file" flags.')
+            print('No GULP header or potential files given. Please use the "header_file" and "potential_file" flags.')
             print('Quitting...')
             quit()
         else:
             # get the header file
             if 'header_file' not in parameters['EnergyCode']['gulp']:
-                print('A gulp header file must be provided. Please use the "header_file" flag.')
+                print('A GULP header file must be provided. Please use the "header_file" flag.')
                 print('Quitting...')
                 quit()
             elif parameters['EnergyCode']['gulp']['header_file'] == None:
-                print('No gulp header file given after the "header_file" flag. Please provide one.')
+                print('No GULP header file given after the "header_file" flag. Please provide one.')
                 print('Quitting...')
                 quit()
             else:
-                # check that the given header file exists
+                # get the path to the header file
                 header_file_path = parameters['EnergyCode']['gulp']['header_file']
+                # check that the given header file exists
                 if not os.path.exists(header_file_path):
-                    print('The given gulp header file does not exist.')
+                    print('The given GULP header file does not exist.')
                     print('Quitting...')
                     quit() 
             # get the potential file 
             if 'potential_file' not in parameters['EnergyCode']['gulp']:
-                print('A gulp potential file must be provided. Please use the "potential_file" flag.')
+                print('A GULP potential file must be provided. Please use the "potential_file" flag.')
                 print('Quitting...')
                 quit()
             elif parameters['EnergyCode']['gulp']['potential_file'] == None:
-                print('No gulp potential file given after the "potential_file" flag. Please provide one.')
+                print('No GULP potential file given after the "potential_file" flag. Please provide one.')
                 print('Quitting...')
                 quit()   
             else:
-                # check that the given potential file exists
+                # get the path to the potential file
                 potential_file_path = parameters['EnergyCode']['gulp']['potential_file']
+                # check that the given potential file exists
                 if not os.path.exists(potential_file_path):
-                    print('The given gulp potential file does not exist.')
+                    print('The given GULP potential file does not exist.')
                     print('Quitting...')
                     quit()
             # if we made it this far, then both the header and potential file exist, so make the gulp energy calculator
             energy_calculator = classes.GulpEnergyCalculator(header_file_path, potential_file_path)
         
     elif 'lammps' in parameters['EnergyCode']:
-        # TODO: read in the stuff for setting up lammps calcs
-        pass
+        if parameters['EnergyCode']['lammps'] == None:
+            print('No LAMMPS input script given. Please use the "input_script" flag.')
+            print('Quitting...')
+            quit()
+        else:
+            # get the input script
+            if 'input_script' not in parameters['EnergyCode']['lammps']:
+                print('A LAMMPS input script must be provided. Please use the "header_file" flag.')
+                print('Quitting...')
+                quit()
+            elif parameters['EnergyCode']['lammps']['input_script'] == None:
+                print('No LAMMPS input script given after the "input_script" flag. Please provide one.')
+                print('Quitting...')
+                quit()
+            else:
+                # get the path to the input script
+                input_script_path = parameters['EnergyCode']['lammps']['input_script']
+                # check that the given input script exists
+                if not os.path.exists(input_script_path):
+                    print('The given LAMMPS input script does not exist.')
+                    print('Quitting...')
+                    quit()
+            # if we made it this far, then the input script exists, so make the lammps energy calculator
+            energy_calculator = classes.LammpsEnergyCalculator(input_script_path)
+       
+            
     elif 'vasp' in parameters['EnergyCode']:
         # TODO: read in the stuff for vasp calcs
         pass

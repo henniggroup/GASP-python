@@ -25,7 +25,7 @@ import copy
 import math
 import warnings
 import shutil
-from subprocess import check_output, CalledProcessError, STDOUT
+import subprocess
 from numpy import inf, Inf
 from scipy.spatial.qhull import ConvexHull
 
@@ -103,11 +103,12 @@ class Organism(object):
         rotation = RotationTransformation([0, 0, 1], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][1], self.structure.lattice.matrix[0][0]))
         self.structure = rotation.apply_transformation(self.structure)
         # rotate about the y-axis to make a parallel to the x-axis
-        rotation = RotationTransformation([0, 1, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][2], self.structure.lattice.matrix[0][0]))
+        rotation = RotationTransformation([0, 1, 0], (180/np.pi)*np.arctan2(self.structure.lattice.matrix[0][2], self.structure.lattice.matrix[0][0]))
         self.structure = rotation.apply_transformation(self.structure)
         # rotate about the x-axis to make b lie in the x-y plane
         rotation = RotationTransformation([1, 0, 0], 180 - (180/np.pi)*np.arctan2(self.structure.lattice.matrix[1][2], self.structure.lattice.matrix[1][1]))
         self.structure = rotation.apply_transformation(self.structure)
+        # for testing
         # make sure they are all pointing in positive directions
         if self.structure.lattice.matrix[0][0] < 0:
             # rotate about y-axis to make a positive
@@ -3415,9 +3416,6 @@ class LammpsEnergyCalculator(object):
             
         # save the path to the lammps input script
         self.input_script = input_script
-            
-        # for processing lammps input
-        self.lammps_data = LammpsData()
         
     
     def doEnergyCalculation(self, organism, dictionary, key):
@@ -3433,57 +3431,294 @@ class LammpsEnergyCalculator(object):
             key: the key specifying where to store the relaxed organism in the dictionary
             
         Precondition: the garun directory and temp subdirectory exist, and we are currently located inside the garun directory
-        
-        TODO: think about ways to make this more robust - look at Will's code
-        TODO: might be better to eventually use the custodian package for error handling...
         '''
         # make the job directory
         job_dir_path = str(getcwd()) + '/temp/' + str(organism.id)
         mkdir(job_dir_path)
         
-        # copy the input script to the job directory
+        # copy the lammps input script to the job directory
         shutil.copy(self.input_script, job_dir_path)
         
-        # make a data.in file from the structure of the organism - try using self.lammps_data for this (methods get_basic_system_info and write_data_file look useful)
-        # problem: this doesn't return the bounding box
-        system_info = self.lammps_data.get_basic_system_info(organism.structure)
+        # get the path to the lammps input script in the job directory
+        script_name = os.path.basename(self.input_script)
+        input_script_path = job_dir_path + '/' + str(script_name)
         
-        # get the min and max of each coordinate attained by the lattice vectors (xlo, xhi, ylo, yhi, zlo, zhi)
-        xmin = Inf
-        xmax = -Inf
-        ymin = Inf
-        ymax = -Inf
-        zmin = Inf
-        zmax = -Inf
+        # take supercell if needed to make the structure conform to lammps' preconditions
+        self.conformToLammps(organism)
+        
+        # just for testing, write out the unrelaxed structure to a poscar file
+        #organism.structure.to(fmt='poscar', filename= job_dir_path + '/POSCAR.' + str(organism.id) + '_unrelaxed')
+        
+        # write the data file (in.data) containing the structure
+        self.writeDataFile(organism, job_dir_path)
+        
+        print('Starting LAMMPS calculation on organism {} '.format(organism.id))
+        
+        # run the lammps calculation by running a 'calllammps' script as a subprocess. If errors are thrown, print them to the log.lammps file
+        try:  
+            lammps_output = subprocess.check_output(['calllammps', input_script_path], stderr = subprocess.STDOUT) 
+        except subprocess.CalledProcessError as e:
+            # print the output of a bad lammps call to a file for the user's reference
+            with open(job_dir_path + '/log.lammps', 'w') as log_file:
+                log_file.write(e.output)
+            # error message and set dictionary element to None before returning
+            print('Error running LAMMPS on organism {} '.format(organism.id))
+            dictionary[key] = None
+            return
+        
+        # write the lammps output to a file called log.lammps
+        with open(job_dir_path + '/log.lammps', 'w') as log_file:
+            log_file.write(lammps_output)
+        
+        # get the symbols of the elements in the structure
+        symbols = organism.structure.symbol_set
+        
+        # parse the relaxed structure from the atom.dump file
+        try:
+            relaxed_structure = self.getRelaxedStructure(job_dir_path + '/dump.atom', job_dir_path + '/in.data', symbols)
+        except:
+            print('Error reading structure of organism {} from LAMMPS output '.format(organism.id))
+            dictionary[key] = None
+            return
+        
+        # parse the total energy from the log.lammps file
+        try:
+            total_energy = self.getEnergy(job_dir_path + '/log.lammps')
+        except:
+            print('Error reading energy of organism {} from LAMMPS output '.format(organism.id))
+            dictionary[key] = None
+            return
+        
+        # assign the relaxed structure and energy to the organism, and compute the epa
+        organism.structure = relaxed_structure
+        organism.total_energy = total_energy
+        organism.epa = total_energy/organism.structure.num_sites
+        
+        # print out the energy per atom of the organism
+        print('Setting energy of organism {} to {} eV/atom '.format(organism.id, organism.epa))
+        
+        # store the relaxed organism in the specified dictionary with the specified key 
+        dictionary[key] = organism
+        
+    
+    def conformToLammps(self, organism):
+        '''
+        Modifies and organism's structure to conform to the requirements of lammps, which are
+        
+            1. the lattice vectors lie in the principal directions
+            2. the maximum extent in the Cartesian x-direction is achieved by lattice vector a
+            3. the maximum extent in the Cartesian y-direction is achieved by lattice vector b
+            4. the maximum extent in the Cartesian z-direction is achieved by lattice vector c
+            
+        by taking supercells along lattice vectors when needed.
+        
+        Args:
+            organism: an Organism object whose structure this method modifies
+        '''
+        # rotate the organism into the principal directions
+        organism.rotateToPrincipalDirections()
+        # get the lattice vectors of the organism
         lattice_coords = organism.structure.lattice.matrix
-        for i in range(0, 3):
-            if lattice_coords[i][0] < xmin:
-                xmin = lattice_coords[i][0]
-            if lattice_coords[i][0] > xmax:
-                xmax = lattice_coords[i][0]
-            if lattice_coords[i][1] < ymin:
-                ymin = lattice_coords[i][1]
-            if lattice_coords[i][1] > ymax:
-                ymax = lattice_coords[i][1]
-            if lattice_coords[i][2] < zmin:
-                zmin = lattice_coords[i][2]
-            if lattice_coords[i][2] > zmax:
-                zmax = lattice_coords[i][2]
+        # get the x-components of the lattice vectors
+        ax = lattice_coords[0][0]
+        bx = lattice_coords[1][0]
+        cx = lattice_coords[2][0]
+        # get the y-components of the lattice vectors
+        by = lattice_coords[1][1]
+        cy = lattice_coords[2][1]
+        # take a supercell if needed
+        if ax < bx or ax < cx:
+            # double the a lattice vector of the organism's structure
+            organism.structure.make_supercell([2, 1, 1])
+            # call method recursively on new organism
+            self.conformToLammps(organism)
+        elif by < cy:
+            # double the b lattice vector
+            organism.structure.make_supercell([1, 2, 1])
+            # call method recursively on new organism
+            self.conformToLammps(organism)
+            
+            
+    def writeDataFile(self, organism, job_dir_path):
+        '''
+        Writes the file (called in.data) containing the structure that LAMMPS reads.
         
-        # get the tilt factors (xy, xz, yz)
+        Args:
+            organism: the Organism object that is being evaluated
+            
+            job_dir_path: the path the job directory (as a string) where the file will be written
+        '''
+        # get xhi, yhi and zhi from the lattice vectors
+        lattice_coords = organism.structure.lattice.matrix
+        xhi = lattice_coords[0][0]
+        yhi = lattice_coords[1][1]
+        zhi = lattice_coords[2][2]
+        box_size = [[0.0, xhi], [0.0, yhi], [0.0, zhi]]
+        
+        # get xy, xz and yz from the lattice vectors
+        xy = lattice_coords[1][0]
+        xz = lattice_coords[2][0]
+        yz = lattice_coords[2][1]
+        
+        # make a LammpsData object
+        ldata = LammpsData.from_structure(organism.structure, box_size, set_charge=True)
+        
+        # write the data to a file
+        # This method doesn't write the tilts, so we have to add those. It also writes the molecule id of each atom, so we have to remove those
+        ldata.write_data_file(job_dir_path + '/in.data')
+        
+        # read the in.data file as a list of strings
+        with open(job_dir_path + '/in.data', 'r') as f:
+            lines = f.readlines()
+        
+        # find the location to insert the tilts
+        insertion_index = 0
+        for line in lines:
+            if 'zhi' in line:
+                insertion_index = lines.index(line) + 1
+            
+        # build the string containing the tilts
+        tilts_string = str(xy) + ' ' + str(xz) + ' ' + str(yz) + ' xy xz yz\n'
+                
+        # insert the tilts string
+        lines.insert(insertion_index, tilts_string) 
+        
+        # get the index of the line where the atoms info starts
+        atoms_index = 0
+        for line in lines:
+            if 'Atoms' in line:
+                atoms_index = lines.index(line) + 2
+        
+        # remove the the molecule id's
+        for i in range(len(organism.structure.sites)):
+            split_line = lines[atoms_index + i].split()
+            # remove the molecule id
+            del split_line[1]
+            # build the new line
+            modified_line = ''
+            for item in split_line:
+                modified_line = modified_line + item + ' '
+            modified_line = modified_line + '\n'
+            # replace the old line with the modified one
+            lines[atoms_index + i] = modified_line
+            
+        # add a new line character to the end of the last line
+        lines[-1] = lines[-1] + '\n' 
+        
+        # overwrite the in.data file with the new contents, including the tilts
+        with open(job_dir_path + '/in.data', 'w') as f:
+            for line in lines:
+                f.write('%s' % line) 
+            
+        
+    def getRelaxedStructure(self, atom_dump_path, data_in_path, element_symbols):
+        '''
+        Parses the relaxed structure from the dump.atom file
+        
+        Returns the relaxed structure as a Structure object
+        
+        Args:
+            atom_dump_path: the path (as a string) to the dump.atom file
+            
+            in_data_path: the path (as a string) to the in.data file
+            
+            element_symbols: a tuple containing the set of chemical symbols of the elements in the structure
+        '''
+        # read the dump.atom file as a list of strings
+        with open(atom_dump_path, 'r') as atom_dump:
+            lines = atom_dump.readlines()
+            
+        # get the lattice vectors
+        a_data = lines[5].split()
+        b_data = lines[6].split()
+        c_data = lines[6].split()
+        
+        # parse the tilt factors
+        xy = float(a_data[2])
+        xz = float(b_data[2])
+        yz = float(c_data[2])
+        
+        # parse the bounds
+        xlo_bound = float(a_data[0])
+        xhi_bound = float(a_data[1])
+        ylo_bound = float(b_data[0])
+        yhi_bound = float(b_data[1])
+        zlo_bound = float(c_data[0])
+        zhi_bound = float(c_data[1])
+        
+        # compute xlo, xhi, ylo, yhi, zlo and zhi according to the conversion given by LAMMPS 
+        # http://lammps.sandia.gov/doc/Section_howto.html#howto-12
+        xlo = xlo_bound - min([0.0, xy, xz, xy + xz])
+        xhi = xhi_bound - max([0.0, xy, xz, xy + xz])
+        ylo = ylo_bound - min(0.0, yz)
+        yhi = yhi_bound - max([0.0, yz])
+        zlo = zlo_bound
+        zhi = zhi_bound
+        
+        # construct a Lattice object from the lo's and hi's and tilts
+        a = [xhi - xlo, 0.0, 0.0]
+        b = [xy, yhi - ylo, 0.0]
+        c = [xz, yz, zhi - zlo]
+        relaxed_lattice = Lattice([a, b, c])
+        
+        # get the number of atoms
+        num_atoms = int(lines[3])
+        
+        # get the atomic types and their Cartesian coordinates
+        types = []
+        relaxed_cart_coords = []
+        for i in range(num_atoms):
+            atom_info = lines[9 + i].split()
+            types.append(int(atom_info[1]))
+            relaxed_cart_coords.append([float(atom_info[2]), float(atom_info[3]), float(atom_info[4])])
+            
+        # read the atom types and corresponding atomic masses from the in.data file
+        with open(data_in_path, 'r') as data_in:
+            lines = data_in.readlines()
+        types_masses = {}
+        for i in range(len(lines)):
+            if 'Masses' in lines[i]:
+                for j in range(len(element_symbols)):
+                    types_masses[int(lines[i + j + 2].split()[0])] = float(lines[i + j + 2].split()[1])
+                
+        # map the atom types to chemical symbols
+        types_symbols = {}
+        for symbol in element_symbols:
+            for atom_type in types_masses:
+                # round the atomic masses to one decimal point for comparison
+                # TODO: this doesn't work...
+                if format(float(Element(symbol).atomic_mass), '.1f') == format(types_masses[atom_type], '.1f'):
+                    types_symbols[atom_type] = symbol
+                    
+        # make a list of chemical symbols (one for each site) from the atom types
+        relaxed_symbols = []
+        for atom_type in types:
+            relaxed_symbols.append(types_symbols[atom_type])
+            
+        # make a Structure object from the relaxed lattice, symbols, and coordinates
+        return Structure(relaxed_lattice, relaxed_symbols, relaxed_cart_coords, coords_are_cartesian=True)
         
         
+    def getEnergy(self, lammps_log_path):
+        '''
+        Parses the final energy from the log.lammps file written by LAMMPS
         
-        # build the input file
-        #    1. get the bounding box from the strucure
-        #    2. get the atoms types, numbers and masses from system_info
-        #    3. get the atom coordinates from the structure
+        Returns the total energy as a float.
         
-        # use a subprocess to call the calllammps script, with the lammps_input_script as the argument
-        
-        # parse the energy and relaxed structure from the lammps output, checking for errors
-        
-        # do the rest of the stuff in the method in GulpEnergyCalculator
+        Args:
+            lammps_log_path: the path (as a string) to the log.lammps file
+        '''
+        # read the log.lammps file as a list of strings
+        with open(lammps_log_path, 'r') as f:
+            lines = f.readlines()
+        # search for the line with the keywords
+        match_strings = ['Step', 'Temp', 'E_pair', 'E_mol', 'TotEng']
+        for i in range(len(lines)):
+            if all(match in lines[i] for match in match_strings):
+                energy = float(lines[i + 2].split()[4])
+        # need to go through whole file to make sure we got the last one, since the energy is written multiple times (after each step)
+        return energy
+
 
 
 class GulpEnergyCalculator(object):
@@ -3590,8 +3825,8 @@ class GulpEnergyCalculator(object):
         
         # run the gulp calculation by running a 'callgulp' script as a subprocess. If errors are thrown, print them to the gulp output file
         try:  
-            gulp_output = check_output(['callgulp', job_dir_path], stderr = STDOUT) 
-        except CalledProcessError as e:
+            gulp_output = subprocess.check_output(['callgulp', gin_path], stderr = subprocess.STDOUT) 
+        except subprocess.CalledProcessError as e:
             # print the output of the bad gulp calc to a file for the user's reference
             gout_file = open(job_dir_path + '/' + str(organism.id) + '.gout', 'w')
             gout_file.write(e.output)
@@ -3634,7 +3869,7 @@ class GulpEnergyCalculator(object):
         # parse the number of atoms used by gulp from the gulp output (sometimes gulp takes a supercell)
         num_atoms = self.getNumAtoms(gulp_output)
             
-        # for conveniance/testing...
+        # for convenience/testing...
         #relaxed_structure.to('poscar', job_dir_path + '/' + str(organism.id) + '.vasp')
             
         # assign the relaxed structure and energy to the organism, and compute the epa
@@ -3642,7 +3877,7 @@ class GulpEnergyCalculator(object):
         organism.epa = total_energy/num_atoms
         organism.total_energy = organism.epa*organism.structure.num_sites
         
-        # print out the enerngy per atom of the organism
+        # print out the energy per atom of the organism
         print('Setting energy of organism {} to {} eV/atom '.format(organism.id, organism.epa))
         
         # store the relaxed organism in the specified dictionary with the specified key 
@@ -3675,8 +3910,7 @@ class GulpEnergyCalculator(object):
         for line in output_lines:
             if "Final energy" in line:
                 # the energy is the fourth element in the line
-                line_parts = line.split()
-                return float(line_parts[3])
+                return float(line.split()[3])
        
        
     def getNumAtoms(self, gout):
@@ -3875,4 +4109,20 @@ class StoppingCriteria(object):
             # TODO: check the tolerances for the structure matching algorithm - pymatgen's defualts might be too loose...
             if self.found_structure.matches(organism.structure):
                 self.are_satisfied = True
+                
+                
+                
+####### for testing #######
+
+#id_generator = IDGenerator()
+#structure = Structure.from_file('/Users/benjaminrevard/testing/gaspy_testing/garun/temp/62/POSCAR.62_unrelaxed')
+#organism = Organism(structure, id_generator, 'testing')
+
+#print(organism.structure.lattice)
+#print('')
+#organism.rotateToPrincipalDirections()
+#print('')
+#print(organism.structure.lattice)
+
+
            

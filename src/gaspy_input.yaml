@@ -4,8 +4,11 @@
 # after parsing this, we need to have some sort of check to make sure the endpoints are valid
 # also, based on this, determine whether we are doing a phase diagram search or not (so we know which objective funtion to use)
 CompositionSpace:
-     - Al
-     - Cu
+    # - C
+
+    # - Al
+    # - Cu
+     - AlCu
     
     # - Al2O3
 
@@ -16,12 +19,16 @@ CompositionSpace:
 # says which energy code to use, and where the needed input files are. NOT optional
 EnergyCode: # should only have one specified
 
-     gulp: 
-          header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file_dump  # the path to the header file
-          potential_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/AlCu_potential_file  # the path to the potential file
+#     gulp: 
+#          header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file_dump  # the path to the header file
+#          potential_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/AlCu_potential_file  # the path to the potential file
           
-#    lammps: 
-#         input_script: /path/to/input/script   # the path to the lammps input script
+      lammps: 
+         input_script: /Users/benjaminrevard/testing/gaspy_testing/lammps_files/in.min   # the path to the lammps input script
+                      # the lammps input script must
+                      #  1. use the 'charge' atom_style
+                      #  2. read a file called 'in.data' with the read_data option
+                      #  3. dump the output to a file called 'dump.atom' with dump option
 #
 #	   vasp:
 #		   incar: path to incar file
@@ -35,13 +42,13 @@ EnergyCode: # should only have one specified
 
 # The parameters for making the initial population. For epa searches, the entire block is optional and if not specified, makes 28 random organisms. 
 # For pd searches, it is not optional, and structures at each endpoint of the composition space must be provided with the "from_files" flag. Generally, some random structures should also be made.
-InitialPopulation:
-     from_files:
-          path_to_folder: /Users/benjaminrevard/testing/gaspy_testing/Al_Cu_ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files
+#InitialPopulation:
+#     from_files:
+#          path_to_folder: /Users/benjaminrevard/testing/gaspy_testing/Al_Cu_ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files
 
-     random:
-          number: 38  # number of random structures to make
-          volume: from_atomic_radii  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
+#     random:
+#          number: 38  # number of random structures to make
+#          volume: from_atomic_radii  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
                      # <num|random|from_atomic_radii> num - the number of cubic Angstroms per atom to scale to
                      #                                random - no volume scaling - the volume is just the result of the random lattice vectors 
                      #                                from_atomic_radii - scales the volume to 2 times the sum of the volumes of the atoms, as computed from their atomic radii. This is default behavior
@@ -86,10 +93,10 @@ NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Op
 
 
 # whether to do some optional operations during development
-Development:
-     niggli: True # whether to do Niggli cell reduction. Optional, and defaults to True. If used, handles other geometries (sheet, etc.) appropriately
+#Development:
+#     niggli: True # whether to do Niggli cell reduction. Optional, and defaults to True. If used, handles other geometries (sheet, etc.) appropriately
 
-     scale_density: True # whether to scale the density (volume per atom) of an organism created with one of the variations before doing an energy calculation. 
+#     scale_density: True # whether to scale the density (volume per atom) of an organism created with one of the variations before doing an energy calculation. 
                          # Optional, and defaults to True.  
                          # For epa searches, the density is set to the average of the densities of the organisms in the promotion set (plus 10%)
                          # For pd searches, the density is set to the weighted average of the of densities of structures on the convex hull to which this organism's composition decomposes (plus 10%)

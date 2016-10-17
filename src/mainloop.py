@@ -16,7 +16,7 @@ try:
         parameters = yaml.load(f)
 except:
     print('Error reading input file.')
-    print('Quitting')
+    print('Quitting...')
 
 # just for testing. Normally we'll read the input file as an argument
 #with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
