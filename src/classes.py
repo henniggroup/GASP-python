@@ -480,7 +480,7 @@ class Pool(object):
             
         Precondition: the pool is empty (no organisms have been previously added to it)
         '''
-        print('Populating the pool with the initial population')
+        print('Populating the pool with the initial population...')
         
         # get the list of organisms in the initial population
         organisms_list = initial_population.initial_population
@@ -738,21 +738,30 @@ class Pool(object):
     
     def computeFitnesses(self):
         '''
-        Calculates and assigns fitnesses to all organisms in the pool.
+        Calculates and assigns fitnesses to all organisms in the pool. If selection.num_parents is less than pool.size, 
+        then the fitnesses are computed relative to the selection.num_parents + 1 best organisms in the pool.
         
         Precondition: the organisms in the pool all have up-to-date values
-        
-        TODO: ways to speed this up:
-                keep track of the best and worst values in the pool so we don't have to search for them each time
-                the fitnesses of all the organisms only change if the best or worst value changed 
         '''
-        # get the best and worst values
-        best_value = self.getBestInPool().value
-        worst_value = self.getWorstInPool().value
+        # get the best organisms to act as parents (and have non-zero fitnesses)
+        if self.selection.num_parents < self.size:
+            # get the best selection.num_parents + 1 organisms
+            best_organisms = self.getNBestOrganisms(self.selection.num_parents + 1)
+        else:
+            best_organisms = self.getNBestOrganisms(self.size)
+            
+        # get the best and worst values in this subset of organisms
+        best_value = best_organisms[-1].value
+        worst_value = best_organisms[0].value
         
-        # update all the fitnesses
-        for organism in self.toList():
+        # compute the fitnesses of the organisms in this subset
+        for organism in best_organisms:
             organism.fitness = (organism.value - worst_value)/(best_value - worst_value)
+            
+        # assign organisms not in this subset fitnesses of zero
+        for organism in self.toList():
+            if organism not in best_organisms:
+                organism.fitness = 0.0
 
 
     def getBestInPool(self):
@@ -784,37 +793,31 @@ class Pool(object):
         Calculates and assigns selection probabilities to all the organisms in the pool.
         
         Precondition: the organisms in the pool all have up-to-date fitnesses
-        
-        TODO: there might be ways to speed this up, similar to computing fitnesses...
         '''
-        # get a list of the best organisms in the pool, sorted by increasing fitness
-        best_organisms = self.getNBestOrganisms(self.selection.num_parents)
+        # get a list of the organisms in the pool, sorted by increasing fitness
+        organisms = self.toList()
+        organisms.sort(key = lambda x: x.fitness, reverse = False)
         
-        # get the denominator of the expression for fitness
+        # get the denominator of the expression for selection probability
         denom = 0
-        for organism in best_organisms:
+        for organism in organisms:
             denom = denom + math.pow(organism.fitness, self.selection.power)
             
         # compute the selection probability and interval location for each organism in best_organisms
+        # the interval location is defined here as the starting point of the interval
         selection_loc = 0
-        for organism in best_organisms:
+        for organism in organisms:
             organism.selection_prob = math.pow(organism.fitness, self.selection.power)/denom
             organism.selection_loc = selection_loc
             # increment the selection location by this organism's selection probability
             selection_loc = selection_loc + organism.selection_prob
-            
-        # for any organisms not in best_organisms, set the selection probability and location to zero
-        for organism in self.toList():
-            if organism not in best_organisms:
-                organism.selection_prob = 0
-                organism.selection_loc = 0
         
        
     def getNBestOrganisms(self, N):
         '''
-        Returns a list containing the N best organisms in the pool, sorted in order of increasing fitness
+        Returns a list containing the N best organisms in the pool, sorted in order of decreasing value
         
-        Precondition: all the organisms in the pool have up-to-date fitnesses
+        Precondition: all the organisms in the pool have up-to-date values
         
         Args:
             N: the number of best organisms to get
@@ -822,8 +825,8 @@ class Pool(object):
         # get a list of all the organisms in the pool
         pool_list = self.toList()
         
-        # sort it in order of increasing fitness
-        pool_list.sort(key = lambda x: x.fitness, reverse = False)
+        # sort it in order of decreasing value
+        pool_list.sort(key = lambda x: x.value, reverse = True)
         
         # get a sublist consisting of the last N elements of pool_list
         return pool_list[len(pool_list) - N:]
@@ -875,7 +878,7 @@ class Pool(object):
         # print out the value and fitness of each organism
         print('Summary of the pool:')
         for organism in pool_list:
-            print('Organism {} has value {} and fitness {} '.format(organism.id, organism.value, organism.fitness))
+            print('Organism {} has value {} and fitness {} and selection probability {} '.format(organism.id, organism.value, organism.fitness, organism.selection_prob))
                 
     
     def printProgress(self, composition_space):
@@ -2447,6 +2450,7 @@ class CompositionSpace(object):
         print(string_to_print)
 
 
+
 class RandomOrganismCreator(object):
     '''
     Creates random organisms for the initial population
@@ -3205,26 +3209,27 @@ class Development(object):
                         
         # optionally do Niggli cell reduction 
         # sometimes pymatgen's reduction routine fails, so we check for that. 
-        # TODO: what should we do when it fails? For now we're just rejecting it...
         if self.niggli:
-            if geometry.shape == "bulk":
+            if geometry.shape == 'bulk':
                 # do normal Niggli cell reduction
                 try:
                     organism.structure = organism.structure.get_reduced_structure()
                     organism.rotateToPrincipalDirections()
                 except:
+                    print('Niggli cell reduction failed on organism {} during development '.format(organism.id))
                     return None
-            elif geometry.shape == "sheet":
+            elif geometry.shape == 'sheet':
                 # do the sheet Niggli cell reduction
                 try:
                     organism.reduceSheetCell()
                     organism.rotateToPrincipalDirections()
                 except:
+                    print('2D Niggli cell reduction failed on organism {} during development '.format(organism.id))
                     return None
             # TODO: call special cell reduction for other geometries here if needed (doesn't makes sense for wires or clusters)
                      
         # optionally scale the volume per atom of unrelaxed structures
-        if self.scale_density and len(pool.promotion_set) > 0 and organism.epa == None:
+        if self.scale_density and len(pool.promotion_set) > 0 and organism.epa == None and geometry.shape == 'bulk':
             # scale to the average of the volumes per atom of the organisms in the promotion set, and increase by 10%
             if composition_space.objective_function == 'epa':
                 # get average volume per atom of the organisms in the promotion set
@@ -3242,6 +3247,7 @@ class Development(object):
                     organism.structure.scale_lattice(new_vol)
                     # check if the volume scaling worked 
                     if str(organism.structure.lattice.a) == 'nan' or organism.structure.lattice.a > 100:
+                        print('Volume scaling failed on organism {} during development '.format(organism.id))
                         return None 
                     
             # scale to the weighted average of the volumes per atom of the structures on the convex hull that this one would decompose to      
@@ -3310,6 +3316,7 @@ class Development(object):
                     organism.structure.scale_lattice(new_vol)
                     # check if the volume scaling worked 
                     if str(organism.structure.lattice.a) == 'nan' or organism.structure.lattice.a > 100:
+                        print('Volume scaling failed on organism {} during development '.format(organism.id))
                         return None 
                         
         # check the max and min lattice length constraints
@@ -4052,7 +4059,8 @@ class StoppingCriteria(object):
             if 'value_achieved' in stopping_parameters:
                 if stopping_parameters['value_achieved'] == None or stopping_parameters['value_achieved'] == 'default':
                     self.value_achieved = self.default_value_achieved
-                else:
+                # checking objective function values only makes sense for fixed-composition searches
+                elif composition_space.objective_function == 'epa':
                     self.value_achieved = stopping_parameters['value_achieved']
             else:
                 self.value_achieved = self.default_value_achieved
@@ -4106,7 +4114,7 @@ class StoppingCriteria(object):
             if organism.value <= self.value_achieved:
                 self.are_satisfied = True
         if self.found_structure != None:
-            # TODO: check the tolerances for the structure matching algorithm - pymatgen's defualts might be too loose...
+            # TODO: check the tolerances for the structure matching algorithm - pymatgen's defaults might be too loose...
             if self.found_structure.matches(organism.structure):
                 self.are_satisfied = True
                 

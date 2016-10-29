@@ -19,12 +19,12 @@ CompositionSpace:
 # says which energy code to use, and where the needed input files are. NOT optional
 EnergyCode: # should only have one specified
 
-#     gulp: 
-#          header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file_dump  # the path to the header file
-#          potential_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/AlCu_potential_file  # the path to the potential file
+     gulp: 
+          header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file  # the path to the header file
+          potential_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/AlCu_potential_file  # the path to the potential file
           
-      lammps: 
-         input_script: /Users/benjaminrevard/testing/gaspy_testing/lammps_files/in.min   # the path to the lammps input script
+#      lammps: 
+#         input_script: /Users/benjaminrevard/testing/gaspy_testing/lammps_files/in.min   # the path to the lammps input script
                       # the lammps input script must
                       #  1. use the 'charge' atom_style
                       #  2. read a file called 'in.data' with the read_data option
@@ -105,7 +105,7 @@ NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Op
 
 # The parameters to use for determining if two organisms are redundant. Entire block is optional and if not specified, does structural comparisons (with default tolerances), but not value comparisons
 #RedundancyGuard: 
-#     lattice_length_tol:   # fractional length tolerance (ltol argument of structure_matcher). Defaults to 0.1
+#     lattice_length_tol:   # fractional length tolerance (ltol argument of structure_matcher). Defaults to 0.05
 #     lattice_angle_tol:    # angle tolerance in degrees (angle_tol argument of structure_matcher). Defaults to 2
 #     site_tol:             # site tolerance - fraction of average free length per atom (stol argument of structure_matcher). Defaults to 0.1 	
 #     use_primitive_cell:   # whether the structure matching algorithm takes the primitive cells of the structures before trying to match (primitive_cell argument of structure_matcher). Defaults to True
@@ -161,7 +161,7 @@ NumCalcsAtOnce: 5  # the max number of energy calculations to submit at once. Op
 
 
 # entire block is optional
-#Selection:
-#     num_parents:   # the number of parents from the pool with non-zero selection probabilities. Optional, and defaults to pool.size
-#     power:         # the exponent of the power law. Optional, and defaults to 1
+Selection:
+     num_parents: 10   # the number of parents from the pool with non-zero selection probabilities. Optional, and defaults to pool.size
+     power: 1        # the exponent of the power law. Optional, and defaults to 1
 
