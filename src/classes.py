@@ -13,6 +13,7 @@ from pymatgen.phasediagram.analyzer import PDAnalyzer
 from pymatgen.transformations.standard_transformations import RotationTransformation
 import pymatgen.command_line.gulp_caller as gulp_caller
 from pymatgen.io.lammps.data import LammpsData
+from pymatgen.io.vasp.outputs import Vasprun
 
 from _pyio import __metaclass__
 from _collections import deque
@@ -273,10 +274,14 @@ class InitialPopulation():
         Args:
             organism_to_add: the organism to add to the pool
         '''
+        # sort the sites of the organism to add
+        organism_to_add.structure.sort()
+        
         # write the organism we're adding to a poscar file
         organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(organism_to_add.id))
         
         print('Adding organism {} to the initial population'.format(organism_to_add.id))
+        
         # print out the composition and total energy (needed for making phase diagram plots and tracking number of atoms in cell)
         print('Organism {} has composition {} and total energy {}'.format(organism_to_add.id, organism_to_add.composition.formula.replace(' ', ''), organism_to_add.total_energy))
         self.initial_population.append(organism_to_add)
@@ -296,6 +301,9 @@ class InitialPopulation():
             old_org: the organism in the initial population to replace
             new_org: the new organism to replace the old one
         '''
+        # sort the sites of the new organism
+        new_org.structure.sort()
+        
         # write the new organism to a poscar file
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
         
@@ -557,6 +565,9 @@ class Pool(object):
         # increment the number of adds to the pool
         self.num_adds = self.num_adds + 1
         
+        # sort the sites of the organism to add
+        organism_to_add.structure.sort()
+        
         # write the organism we're adding to a poscar file
         organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(organism_to_add.id))
         
@@ -652,6 +663,9 @@ class Pool(object):
         print('Replacing organism {} with organism {} in the pool '.format(old_org.id, new_org.id))
         # print out the composition and total energy (needed for making phase diagram plots and tracking number of atoms in cell)
         print('Organism {} has composition {} and total energy {} '.format(new_org.id, new_org.composition.formula.replace(' ', ''), new_org.total_energy))
+        
+        # sort the sites of the new organism
+        new_org.structure.sort()
         
         # write the new organism to a poscar file
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
@@ -3011,7 +3025,7 @@ class Constraints(object):
             else:
                 self.max_lattice_angle = self.default_max_lattice_angle    
                   
-            # the per-species min interatomic distances
+            # the per-species minimum interatomic distances
             if 'per_species_mids' in constraints_parameters:
                 if constraints_parameters['per_species_mids'] != None and constraints_parameters['per_species_mids'] != 'default':
                     self.per_species_mids = constraints_parameters['per_species_mids'] 
@@ -3377,20 +3391,30 @@ class VaspEnergyCalculator(object):
     '''
     Calculates the energy of an organism using VASP.
     '''
-    def __init__(self, vasp_code_params, run_dir_name):
+    def __init__(self, incar_file, kpoints_file, potcar_files):
         '''
         Args:
-            vasp_code_params: the parameters needed for preparing a vasp calculation (INCAR, KPOINTS, POTCAR files)
+            incar_file: the path to the INCAR file
             
-            run_dir_name: the name of the garun directory containing all the output of the search (just the name, not the path)
+            kpoints_file: the path to the KPOINTS file
+            
+            potcar_files: a dictionary containing the paths to the POTCAR files, with the element symbols as keys
         '''
-        # TODO: implement me
+        # the name of the energy code being used
         self.name = 'vasp'
+        
+        # the paths to the INCAR and KPOINTS files
+        self.incar_file = incar_file
+        self.kpoints_file = kpoints_file
+        
+        # the dictionary containing the paths to the elemental POTCAR files (with element symbols as keys)
+        self.potcar_files = potcar_files              
     
     
-    def doEnergyCalculation(self, org):
+    def doEnergyCalculation(self, organism, dictionary, key):
         '''
-        Calculates the energy of an organism using VASP
+        Calculates the energy of an organism using VASP, and stores the relaxed organism in the provided dictionary at the provided key.
+        If the calculation fails, stores None in the dictionary instead. 
         
         Returns an organism that has been parsed from the output files of the energy code, or None if the calculation 
         failed. Does not do development or redundancy checking.
@@ -3398,12 +3422,81 @@ class VaspEnergyCalculator(object):
         Args:
             organism: the organism whose energy we want to calculate
             
-        TODO: use custodian package for error handling
+            dictionary: a dictionary in which to store the relaxed organism
+            
+            key: the key specifying where to store the relaxed organism in the dictionary
+            
+        Precondition: the garun directory and temp subdirectory exist, and we are currently located inside the garun directory
+            
+        TODO: see about using the custodian package for error handling
         '''
-        # TODO: implement me
-        # 1. prepare input files for calculation
-        # 2. submit calculation (by running external script)
-        # 3. when external script returns, parse organism from the energy code output files
+        # make the job directory
+        job_dir_path = str(getcwd()) + '/temp/' + str(organism.id)
+        mkdir(job_dir_path)
+        
+        # copy the INCAR file to the job directory
+        shutil.copy(self.incar_file, job_dir_path)
+        
+        # copy the KPOINTS file to the job directory
+        shutil.copy(self.kpoints_file, job_dir_path)
+                
+        # sort the structure of the organism
+        organism.structure.sort()
+        
+        # write the POSCAR file from the sorted structure
+        organism.structure.to(fmt = 'poscar', filename = job_dir_path + '/POSCAR')
+        
+        # get a list of the element symbols in the sorted order
+        symbols = []
+        for site in organism.structure.sites:
+            symbols.append(site.specie.symbol)
+        
+        # remove duplicates
+        symbols = list(set(symbols))
+        
+        # write the POTCAR file by concatenating the appropriate elemental POTCAR files
+        total_potcar_path = job_dir_path + '/POTCAR'
+        with open(total_potcar_path, 'w') as total_potcar_file:
+            for symbol in symbols:
+                with open(self.potcar_files[symbol], 'r') as potcar_file:
+                    for line in potcar_file:
+                        total_potcar_file.write(line)
+        
+        print('Starting VASP calculation on organism {} '.format(organism.id))
+        
+        # do the vasp calculation by running a 'callvasp' script as a subprocess. 
+        try:  
+            subprocess.call(['callvasp', job_dir_path], stderr = subprocess.STDOUT) 
+        except:
+            # error message and set dictionary element to None before returning
+            print('Error running VASP on organism {} '.format(organism.id))
+            dictionary[key] = None
+            return
+        
+        # parse the relaxed structure from the CONTCAR file
+        try:
+            relaxed_structure = Structure.from_file(job_dir_path + '/CONTCAR')
+        except:
+            print('Error reading structure of organism {} from CONTCAR file '.format(organism.id))
+            dictionary[key] = None
+            return
+        
+        # make a Vasprun object by reading the vasprun.xml file
+        vasprun = Vasprun(job_dir_path + '/vasprun.xml', ionic_step_skip=None, ionic_step_offset=None, parse_dos=False, parse_eigen=False, parse_projected_eigen=False, parse_potcar_file=False)
+        
+        # get the total energy from the vasprun
+        total_energy = vasprun.final_energy
+         
+        # assign the relaxed structure and energy to the organism, and compute the epa
+        organism.structure = relaxed_structure
+        organism.total_energy = total_energy
+        organism.epa = total_energy/organism.structure.num_sites
+        
+        # print out the energy per atom of the organism
+        print('Setting energy of organism {} to {} eV/atom '.format(organism.id, organism.epa))
+        
+        # store the relaxed organism in the specified dictionary with the specified key 
+        dictionary[key] = organism
         
         
 
@@ -3461,7 +3554,7 @@ class LammpsEnergyCalculator(object):
         
         print('Starting LAMMPS calculation on organism {} '.format(organism.id))
         
-        # run the lammps calculation by running a 'calllammps' script as a subprocess. If errors are thrown, print them to the log.lammps file
+        # do the lammps calculation by running a 'calllammps' script as a subprocess. If errors are thrown, print them to the log.lammps file
         try:  
             lammps_output = subprocess.check_output(['calllammps', input_script_path], stderr = subprocess.STDOUT) 
         except subprocess.CalledProcessError as e:

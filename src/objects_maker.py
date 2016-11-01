@@ -272,11 +272,84 @@ def makeObjects(parameters):
                     quit()
             # if we made it this far, then the input script exists, so make the lammps energy calculator
             energy_calculator = classes.LammpsEnergyCalculator(input_script_path)
-       
             
     elif 'vasp' in parameters['EnergyCode']:
-        # TODO: read in the stuff for vasp calcs
-        pass
+        if parameters['EnergyCode']['vasp'] == None:
+            print('No VASP input files given.')
+            print('Quitting...')
+            quit()
+        else:
+            # the INCAR file
+            if 'incar' not in parameters['EnergyCode']['vasp']:
+                print('An INCAR file must be provided. Please use the "incar" flag.')
+                print('Quitting...')
+                quit()
+            elif parameters['EnergyCode']['vasp']['incar'] == None:
+                print('No INCAR file was given after the "incar" flag. Please provide one.')
+                print('Quitting...')
+                quit()
+            else:
+                # get the path to the INCAR file
+                incar_path = parameters['EnergyCode']['vasp']['incar']
+                # check that the given INCAR file exists
+                if not os.path.exists(incar_path):
+                    print('The given INCAR file does not exist.')
+                    print('Quitting...')
+                    quit()
+            # the KPOINTS file
+            if 'kpoints' not in parameters['EnergyCode']['vasp']:
+                print('A KPOINTS file must be provided. Please use the "kpoints" flag.')
+                print('Quitting...')
+                quit()
+            elif parameters['EnergyCode']['vasp']['kpoints'] == None:
+                print('No KPOINTS file was given after the "kpoints" flag. Please provide one.')
+                print('Quitting...')
+                quit()
+            else:
+                # get the path to the KPOINTS file
+                kpoints_path = parameters['EnergyCode']['vasp']['kpoints']
+                # check that the given KPOINTS file exists
+                if not os.path.exists(kpoints_path):
+                    print('The given KPOINTS file does not exist.')
+                    print('Quitting...')
+                    quit()
+            # the POTCAR files
+            if 'potcars' not in parameters['EnergyCode']['vasp']:
+                print('POTCAR file(s) must be provided. Please use the "potcars" flag.')
+                print('Quitting...')
+                quit()
+            elif parameters['EnergyCode']['vasp']['potcars'] == None:
+                print('No POTCAR files were given after the "potcars" flag. Please provide them.')
+                print('Quitting...')
+                quit()
+            else:
+                # get the dictionary containing the paths to the POTCAR files of each element
+                potcar_paths = parameters['EnergyCode']['vasp']['potcars']
+                # check that enough POTCAR files have been provided
+                elements_list = composition_space.get_all_elements()
+                if len(potcar_paths) < len(elements_list):
+                    print('Not enough POTCAR files provided - one must be given for each element in the composition space. Please provide them.')
+                    print('Quitting...')
+                    quit()
+                # check that each element has been specified below the 'potcars' flag
+                for element in elements_list:
+                    if element.symbol not in potcar_paths:
+                        print('No POTCAR file given for {}. Please provide one.'.format(element.symbol))
+                        print('Quitting...')
+                        quit()
+                # for each element, check that a POTCAR file has been given and that it exists
+                for key in potcar_paths:
+                    if potcar_paths[key] == None:
+                        print('No POTCAR file given for {}. Please provide one.'.format(key))
+                        print('Quitting...')
+                        quit()
+                    elif not os.path.exists(potcar_paths[key]):
+                        print('The POTCAR file given for {} does not exist.'.format(key))
+                        print('Quitting...')
+                        quit()
+            # if we made it this far, then the all the files were provided properly and exist, so make the vasp energy calculator
+            energy_calculator = classes.VaspEnergyCalculator(incar_path, kpoints_path, potcar_paths)
+    
     # TODO: add other energy codes here
     else:
         print('The given energy code name is invalid.')

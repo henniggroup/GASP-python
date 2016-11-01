@@ -28,7 +28,7 @@ except:
 # make the objects needed by the algorithm
 objects_dict = objects_maker.makeObjects(parameters)
 
-# get the objects from the dictionary
+# get the objects from the dictionary for convenience
 run_dir_name = objects_dict['run_dir_name']
 organism_creators = objects_dict['organism_creators']
 num_calcs_at_once = objects_dict['num_calcs_at_once']
