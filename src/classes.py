@@ -538,7 +538,7 @@ class Pool(object):
         # print out some info on the organisms in the initial population
         print('Summary of the initial population: ')
         for organism in organisms_list:
-            print('Organism {} has value {} and fitness {} '.format(organism.id, organism.value, organism.fitness))
+            print('Organism {} has value {} and fitness {} and selection probability {} '.format(organism.id, organism.value, organism.fitness, organism.selection_prob))
         
     
     def addOrganism(self, organism_to_add, composition_space):
@@ -604,10 +604,6 @@ class Pool(object):
             else:
                 self.queue.appendleft(organism_to_add)
                     
-        # compute fitnesses and selection probabilities
-        self.computeFitnesses()
-        self.computeSelectionProbs()
-        
     
     def getWorstInPromotionSet(self):
         '''
@@ -699,10 +695,6 @@ class Pool(object):
         # for pd searches, make sure promotion set and queue memberships are correct in light of the new organism
         if composition_space.objective_function == 'pd':
             self.checkPromotionSetPD()
-        
-        # recompute fitnesses and selection probabilities of all organisms in the pool
-        self.computeFitnesses()
-        self.computeSelectionProbs()
         
     
     def computePDValues(self, organisms_list, composition_space):
@@ -887,7 +879,7 @@ class Pool(object):
         pool_list = self.toList()
         
         # sort it in order of decreasing fitness
-        pool_list.sort(key = lambda x: x.fitness, reverse = True)
+        pool_list.sort(key = lambda x: x.value, reverse = False)
         
         # print out the value and fitness of each organism
         print('Summary of the pool:')
@@ -3485,7 +3477,7 @@ class VaspEnergyCalculator(object):
         vasprun = Vasprun(job_dir_path + '/vasprun.xml', ionic_step_skip=None, ionic_step_offset=None, parse_dos=False, parse_eigen=False, parse_projected_eigen=False, parse_potcar_file=False)
         
         # get the total energy from the vasprun
-        total_energy = vasprun.final_energy
+        total_energy = float(vasprun.final_energy)
          
         # assign the relaxed structure and energy to the organism, and compute the epa
         organism.structure = relaxed_structure

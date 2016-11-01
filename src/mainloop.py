@@ -239,7 +239,11 @@ while not stopping_criteria.are_satisfied:
                     redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
                     if redundant_org != None:
                         if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
+			    # replace the organism
                             pool.replaceOrganism(redundant_org, developed_org, composition_space)
+			    # recompute fitnesses and selection probabilities
+			    pool.computeFitnesses()
+   			    pool.computeSelectionProbs()
                             # print out a summary of the pool
                             pool.printSummary(composition_space)
                             # print out the progress of the search - either the best value (for epa) or the volume of the convex hull (for pd)
@@ -266,6 +270,10 @@ while not stopping_criteria.are_satisfied:
                             removed_org = pool.queue.pop()
                             removed_org.is_active = False
                             print('Removing organism {} from the pool '.format(removed_org.id))
+
+			# recompute fitnesses and selection probabilities
+			pool.computeFitnesses()
+			pool.computeSelectionProbs()
                             
                         # print out a summary of the pool
                         pool.printSummary(composition_space)
@@ -309,6 +317,8 @@ while num_to_get > 0:
                     if redundant_org != None:
                         if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
                             pool.replaceOrganism(redundant_org, developed_org, composition_space)
+			    pool.computeFitnesses()
+		  	    pool.computeSelectionProbs()
                             pool.printSummary(composition_space)
                             pool.printProgress(composition_space)
                             print('Number of energy calculations so far: {} '.format(num_finished_calcs))
@@ -319,6 +329,9 @@ while num_to_get > 0:
                         removed_org = pool.queue.pop()
                         removed_org.is_active = False
                         print('Removing organism {} from the pool '.format(removed_org.id))
+		        # recompute fitnesses and selection probabilities
+			pool.computeFitnesses()
+			pool.computeSelectionProbs()
                         # print out a summary of the pool
                         pool.printSummary(composition_space)
                         pool.printProgress(composition_space)
