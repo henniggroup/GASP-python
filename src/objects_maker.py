@@ -403,10 +403,14 @@ def makeObjects(parameters):
     variations = []
 
     # the default fractions for the variations
-    default_mating_fraction = 0.8
     default_structure_mut_fraction = 0.1
     default_num_stoichs_mut_fraction = 0.1
-    default_permutation_fraction = 0.0
+    if len(composition_space.get_all_swappable_pairs()) > 0:
+        default_mating_fraction = 0.7
+        default_permutation_fraction = 0.1
+    else:
+        default_mating_fraction = 0.8
+        default_permutation_fraction = 0.0
 
     # TODO: get rid of code duplication below
     # create the variation objects

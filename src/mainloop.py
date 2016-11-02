@@ -61,7 +61,7 @@ objects_maker.printParameters(objects_dict)
 # list to hold copies of all the valid organisms made by the algorithm
 whole_pop = []
 
-# the number of energy calculations completed. This only gets incremented for successful energy calcs (ones that returned a structure and an energy)
+# the number of energy calculations completed. This gets incremented for both successful and unsuccessful energy calculations
 num_finished_calcs = 0
 
 # create the initial population
@@ -107,6 +107,8 @@ for creator in organism_creators:
             # check for dead threads
             for thread in threads:
                 if not thread.is_alive():
+                    # increment the number of completed energy calculations
+                    num_finished_calcs += 1
                     # get the relaxed structure from the dictionary
                     thread_index = threads.index(thread)
                     relaxed_org = relaxed_organisms[thread_index]
@@ -114,7 +116,7 @@ for creator in organism_creators:
                     relaxed_organisms[thread_index] = None
                     # if the relaxed organism is not None, then do development and redundancy checking
                     if relaxed_org != None:
-                        num_finished_calcs += 1
+                        
                         geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
                         developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, pool)
                         if developed_org != None:
@@ -172,6 +174,8 @@ while num_to_get > 0:
     for thread in threads:
         thread_index = threads.index(thread)
         if not thread.is_alive() and thread_index not in handled_indices:
+            # increment the number of completed energy calculations
+            num_finished_calcs += 1
             # get the relaxed structure from the dictionary
             relaxed_org = relaxed_organisms[thread_index]
             # record that this thread has been handled
@@ -181,8 +185,6 @@ while num_to_get > 0:
             relaxed_organisms[thread_index] = None
             # if the relaxed organism is not None, then do development and redundancy checking
             if relaxed_org != None:
-                # update the number of energy calculations
-                num_finished_calcs += 1
                 geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
                 developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, pool)
                 if developed_org != None:
@@ -225,6 +227,8 @@ while not stopping_criteria.are_satisfied:
     # check for dead threads
     for thread in threads:
         if not thread.is_alive():
+            # increment the number of completed energy calculations
+            num_finished_calcs += 1
             # get the relaxed structure from the dictionary
             thread_index = threads.index(thread)
             relaxed_org = relaxed_organisms[thread_index]
@@ -232,18 +236,17 @@ while not stopping_criteria.are_satisfied:
             relaxed_organisms[thread_index] = None
             # if the relaxed organism is not None, then do development and redundancy checking
             if relaxed_org != None:
-                num_finished_calcs += 1
                 geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
                 developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, pool)
                 if developed_org != None:
                     redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
                     if redundant_org != None:
                         if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
-			    # replace the organism
+                            # replace the organism
                             pool.replaceOrganism(redundant_org, developed_org, composition_space)
-			    # recompute fitnesses and selection probabilities
-			    pool.computeFitnesses()
-   			    pool.computeSelectionProbs()
+                            # recompute fitnesses and selection probabilities
+                            pool.computeFitnesses()
+                            pool.computeSelectionProbs()
                             # print out a summary of the pool
                             pool.printSummary(composition_space)
                             # print out the progress of the search - either the best value (for epa) or the volume of the convex hull (for pd)
@@ -271,9 +274,9 @@ while not stopping_criteria.are_satisfied:
                             removed_org.is_active = False
                             print('Removing organism {} from the pool '.format(removed_org.id))
 
-			# recompute fitnesses and selection probabilities
-			pool.computeFitnesses()
-			pool.computeSelectionProbs()
+                        # recompute fitnesses and selection probabilities
+                        pool.computeFitnesses()
+                        pool.computeSelectionProbs()
                             
                         # print out a summary of the pool
                         pool.printSummary(composition_space)
@@ -300,6 +303,8 @@ while num_to_get > 0:
     for thread in threads:
         thread_index = threads.index(thread)
         if not thread.is_alive() and thread_index not in handled_indices:
+            # increment the number of completed energy calculations
+            num_finished_calcs += 1
             # get the relaxed structure from the dictionary
             relaxed_org = relaxed_organisms[thread_index]
             # record that this thread has been handled
@@ -309,7 +314,6 @@ while num_to_get > 0:
             relaxed_organisms[thread_index] = None
             # if the relaxed organism is not None, then do development and redundancy checking
             if relaxed_org != None:
-                num_finished_calcs += 1
                 geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
                 developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, pool)
                 if developed_org != None:
@@ -317,8 +321,8 @@ while num_to_get > 0:
                     if redundant_org != None:
                         if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
                             pool.replaceOrganism(redundant_org, developed_org, composition_space)
-			    pool.computeFitnesses()
-		  	    pool.computeSelectionProbs()
+                            pool.computeFitnesses()
+                            pool.computeSelectionProbs()
                             pool.printSummary(composition_space)
                             pool.printProgress(composition_space)
                             print('Number of energy calculations so far: {} '.format(num_finished_calcs))
@@ -329,9 +333,9 @@ while num_to_get > 0:
                         removed_org = pool.queue.pop()
                         removed_org.is_active = False
                         print('Removing organism {} from the pool '.format(removed_org.id))
-		        # recompute fitnesses and selection probabilities
-			pool.computeFitnesses()
-			pool.computeSelectionProbs()
+                        # recompute fitnesses and selection probabilities
+                        pool.computeFitnesses()
+                        pool.computeSelectionProbs()
                         # print out a summary of the pool
                         pool.printSummary(composition_space)
                         pool.printProgress(composition_space)

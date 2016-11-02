@@ -1806,7 +1806,7 @@ class Permutation(object):
         # TODO: are these good default values?
         self.default_mu_num_swaps = 2                                    # the average number of pairs to swap
         self.default_sigma_num_swaps = 1                                 # the standard deviation of pairs to swap
-        self.default_pairs_to_swap = composition_space.get_all_pairs()   # which atomic pairs to swap
+        self.default_pairs_to_swap = composition_space.get_all_swappable_pairs()   # which atomic pairs to swap
         
         # the average number of swaps
         if 'mu_num_swaps' not in permutation_params:
@@ -2444,6 +2444,30 @@ class CompositionSpace(object):
             for j in range(i + 1, len(elements)):
                 pairs.append(str(elements[i].symbol + " " + elements[j].symbol))
         return pairs
+    
+    
+    def get_all_swappable_pairs(self):
+        '''
+        Computes all pairs of elements in the the composition space that are allowed to be swapped (anions can only be swapped with other anions). 
+        
+        Returns a list of strings, where each string contains the symbols of two elements, separated by a space.
+        
+        Does not include self-pairs (e.g., "Cu Cu")
+        '''
+        # list of elemental symbols of anions
+        anions_list = ['N', 'P', 'As', 'O', 'S', 'Se', 'Te', 'F', 'Cl', 'Br', 'I', 'At']
+        
+        # start with the list of all possible pairs
+        all_pairs = self.get_all_pairs()
+        
+        # get the subset of pairs that are allowed
+        allowed_pairs = []
+        for pair in all_pairs:
+            symbol1 = pair.split()[0]
+            symbol2 = pair.split()[1]
+            if (symbol1 in anions_list and symbol2 in anions_list) or (symbol1 not in anions_list and symbol2 not in anions_list):
+                allowed_pairs.append(pair)
+        return allowed_pairs
     
     
     def printEndpoints(self):
@@ -3477,7 +3501,12 @@ class VaspEnergyCalculator(object):
         vasprun = Vasprun(job_dir_path + '/vasprun.xml', ionic_step_skip=None, ionic_step_offset=None, parse_dos=False, parse_eigen=False, parse_projected_eigen=False, parse_potcar_file=False)
         
         # get the total energy from the vasprun
-        total_energy = float(vasprun.final_energy)
+        try:
+            total_energy = float(vasprun.final_energy)
+        except:
+            print('Error reading energy of organism {} from vasprun.xml file '.format(organism.id))
+            dictionary[key] = None
+            return
          
         # assign the relaxed structure and energy to the organism, and compute the epa
         organism.structure = relaxed_structure
