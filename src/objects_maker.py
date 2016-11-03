@@ -594,13 +594,21 @@ def printParameters(objects_dict):
     for endpoint in composition_space.endpoints:
         parameters_file.write('    - ' + endpoint.reduced_formula + '\n')
     parameters_file.write('\n')
-        
-    # write the objective function
-    parameters_file.write('ObjectiveFunction: ' + composition_space.objective_function + '\n')
-    parameters_file.write('\n')
     
     # write the name of the energy code being used
-    parameters_file.write('EnergyCode: ' + energy_calculator.name + '\n')
+    parameters_file.write('EnergyCode: \n')
+    parameters_file.write('    ' + energy_calculator.name + ': \n')
+    if energy_calculator.name == 'gulp':
+        parameters_file.write('        header_file: ' + energy_calculator.header_path + '\n')
+        parameters_file.write('        potential_file: ' + energy_calculator.potential_path + '\n')
+    elif energy_calculator.name == 'lammps':
+        parameters_file.write('        input_script: ' + energy_calculator.input_script + '\n')
+    elif energy_calculator.name == 'vasp':
+        parameters_file.write('        incar: ' + energy_calculator.incar_file + '\n')
+        parameters_file.write('        kpoints: ' + energy_calculator.kpoints_file + '\n')
+        parameters_file.write('        potcars: \n')
+        for key in energy_calculator.potcar_files:
+            parameters_file.write('            ' + potcar + ': ' + energy_calculator.potcar_files[key] + '/n')
     parameters_file.write('\n')
     
     # write the number of energy calculations to run at once
@@ -620,18 +628,18 @@ def printParameters(objects_dict):
             parameters_file.write('        path_to_folder: ' + str(creator.path_to_folder) + '\n')
     parameters_file.write('\n')
     
-    # write the selection probability distribution
-    parameters_file.write('Selection: \n')
-    parameters_file.write('    num_parents: ' + str(pool.selection.num_parents) + '\n')
-    parameters_file.write('    power: ' + str(pool.selection.power) + '\n')
-    parameters_file.write('\n')
-    
-    # write the pool info
+     # write the pool info
     parameters_file.write('Pool: \n')
     parameters_file.write('    size: ' + str(pool.size) + '\n')
     parameters_file.write('    num_promoted: ' + str(pool.num_promoted) + '\n')
     parameters_file.write('\n')
     
+    # write the selection probability distribution
+    parameters_file.write('Selection: \n')
+    parameters_file.write('    num_parents: ' + str(pool.selection.num_parents) + '\n')
+    parameters_file.write('    power: ' + str(pool.selection.power) + '\n')
+    parameters_file.write('\n')
+
     # write the variations info
     parameters_file.write('Variations: \n')
     for variation in variations:
@@ -668,10 +676,10 @@ def printParameters(objects_dict):
                 parameters_file.write('    Permutation: \n')
                 parameters_file.write('        fraction: ' + str(variation.fraction) + '\n')
                 parameters_file.write('        mu_num_swaps: ' + str(variation.mu_num_swaps) + '\n')
-                parameters_file.write('        sigma_num_swaps = ' + str(variation.sigma_num_swaps) + '\n')
+                parameters_file.write('        sigma_num_swaps: ' + str(variation.sigma_num_swaps) + '\n')
                 parameters_file.write('        pairs_to_swap: \n')
                 for pair in variation.pairs_to_swap:
-                    parameters_file.write('        ' + pair + '\n')
+                    parameters_file.write('            - ' + pair + '\n')
     parameters_file.write('\n')
     
     # write the development 

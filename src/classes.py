@@ -442,11 +442,21 @@ class Pool(object):
             
             run_dir_name: the name (not path) of the garun directory
         '''
-        # the default values
-        if composition_space.objective_function == 'epa':
-            self.default_size = 21
-        elif composition_space.objective_function == 'pd':
-            self.default_size = 30
+        # the default values 
+        if len(composition_space.endpoints) == 1:
+            # then we're doing a fixed composition search
+            self.default_size = 20
+        elif len(composition_space.endpoints) == 2:
+            # then we're doing a binary phase diagram search search
+            self.default_size = 25
+        elif len(composition_space.endpoints) == 3:
+            # then we're doing a ternary phase diagram search
+            self.default_size = 75
+        elif len(composition_space.endpoints) == 4:
+            # then we're doing a quaternary phase diagram search
+            self.default_size = 150
+        
+        # this only gets used for fixed composition searches
         self.default_num_promoted = 3
         
         # if entire Pool block was set to default or left blank
@@ -2448,24 +2458,24 @@ class CompositionSpace(object):
     
     def get_all_swappable_pairs(self):
         '''
-        Computes all pairs of elements in the the composition space that are allowed to be swapped (anions can only be swapped with other anions). 
+        Computes all pairs of elements in the the composition space that are allowed to be swapped based on their electronegativities. 
+        Only pairs whose electronegativities differ by 1.1 or less are allowed to be swapped.
         
         Returns a list of strings, where each string contains the symbols of two elements, separated by a space.
         
         Does not include self-pairs (e.g., "Cu Cu")
         '''
-        # list of elemental symbols of anions
-        anions_list = ['N', 'P', 'As', 'O', 'S', 'Se', 'Te', 'F', 'Cl', 'Br', 'I', 'At']
-        
         # start with the list of all possible pairs
         all_pairs = self.get_all_pairs()
         
         # get the subset of pairs that are allowed
         allowed_pairs = []
         for pair in all_pairs:
-            symbol1 = pair.split()[0]
-            symbol2 = pair.split()[1]
-            if (symbol1 in anions_list and symbol2 in anions_list) or (symbol1 not in anions_list and symbol2 not in anions_list):
+            element1 = Element(pair.split()[0])
+            element2 = Element(pair.split()[1])
+            # compute the electronegativity difference
+            diff = abs(element1.X - element2.X)
+            if diff <= 1.1:
                 allowed_pairs.append(pair)
         return allowed_pairs
     
@@ -3498,7 +3508,18 @@ class VaspEnergyCalculator(object):
             return
         
         # make a Vasprun object by reading the vasprun.xml file
-        vasprun = Vasprun(job_dir_path + '/vasprun.xml', ionic_step_skip=None, ionic_step_offset=None, parse_dos=False, parse_eigen=False, parse_projected_eigen=False, parse_potcar_file=False)
+        try:
+            vasprun = Vasprun(job_dir_path + '/vasprun.xml', ionic_step_skip=None, ionic_step_offset=None, parse_dos=False, parse_eigen=False, parse_projected_eigen=False, parse_potcar_file=False)
+        except:
+            print('Error parsing vasprun.xml file for organism {} '.format(organism.id))
+            dictionary[key] = None
+            return
+        
+        # check if the vasp calculation converged
+        if not vasprun.converged:
+            print('VASP relaxation of organism {} did not converge '.format(organism.id))
+            dictionary[key] = None
+            return
         
         # get the total energy from the vasprun
         try:
@@ -3858,6 +3879,10 @@ class GulpEnergyCalculator(object):
         # the name of the energy code being used
         self.name = 'gulp'
         
+        # the paths to the header and potential files
+        self.header_path = header_file
+        self.potential_path = potential_file
+        
         # read the gulp header file and store it as a string
         with open (header_file, "r") as gulp_header_file:
             self.header = gulp_header_file.read()
@@ -4150,10 +4175,19 @@ class StoppingCriteria(object):
             composition_space: a CompositionSpace object
         '''
         # set the defaults
-        if composition_space.objective_function == 'epa':
-            self.default_num_energy_calcs = 500
-        elif composition_space.objective_function == 'pd':
+        if len(composition_space.endpoints) == 1:
+            # for fixed composition searches
+            self.default_num_energy_calcs = 800
+        elif len(composition_space.endpoints) == 2:
+            # for binary phase diagram searches
             self.default_num_energy_calcs = 1000
+        elif len(composition_space.endpoints) == 3:
+            # for ternary phase diagram searches
+            self.default_num_energy_calcs = 3000
+        elif len(composition_space.endpoint) == 4:
+            # for quaternary phase diagram searches
+            self.default_num_energy_calcs = 6000
+            
         self.default_value_achieved = None
         self.default_found_structure = None
         

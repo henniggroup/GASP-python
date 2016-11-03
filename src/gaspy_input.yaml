@@ -6,9 +6,9 @@
 CompositionSpace:
     # - C
 
-     - Al
-     - Cu
-    # - AlCu
+    # - Al
+    # - Cu
+     - AlCu
     
     # - Al2O3
 
@@ -23,32 +23,32 @@ EnergyCode: # should only have one specified
 #          header_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/header_file  # the path to the header file
 #          potential_file: /Users/benjaminrevard/testing/gaspy_testing/gulp_files/AlCu_potential_file  # the path to the potential file
           
-#      lammps: 
-#         input_script: /Users/benjaminrevard/testing/gaspy_testing/lammps_files/in.min   # the path to the lammps input script
+      lammps: 
+         input_script: /Users/benjaminrevard/testing/gaspy_testing/lammps_files/in.min   # the path to the lammps input script
                       # the lammps input script must
                       #  1. use the 'charge' atom_style
                       #  2. read a file called 'in.data' with the read_data option
                       #  3. dump the output to a file called 'dump.atom' with dump option
 #
-    vasp:
-        incar: /Users/benjaminrevard/testing/gaspy_testing/vasp_files/INCAR
-        kpoints: /Users/benjaminrevard/testing/gaspy_testing/vasp_files/KPOINTS
-        potcars:
-            Al: /Users/benjaminrevard/testing/gaspy_testing/vasp_files/Al_POTCAR
-            Cu: /Users/benjaminrevard/testing/gaspy_testing/vasp_files/Cu_POTCAR
+#    vasp:
+#        incar: /Users/benjaminrevard/testing/gaspy_testing/vasp_files/INCAR
+#        kpoints: /Users/benjaminrevard/testing/gaspy_testing/vasp_files/KPOINTS
+#        potcars:
+#            Al: /Users/benjaminrevard/testing/gaspy_testing/vasp_files/Al_POTCAR
+#            Cu: /Users/benjaminrevard/testing/gaspy_testing/vasp_files/Cu_POTCAR
 
 
 
 
 # The parameters for making the initial population. For epa searches, the entire block is optional and if not specified, makes 28 random organisms. 
 # For pd searches, it is not optional, and structures at each endpoint of the composition space must be provided with the "from_files" flag. Generally, some random structures should also be made.
-InitialPopulation:
-     from_files:
-          path_to_folder: /Users/benjaminrevard/testing/gaspy_testing/Al_Cu_ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files
+#InitialPopulation:
+#     from_files:
+#          path_to_folder: /Users/benjaminrevard/testing/gaspy_testing/Al_Cu_ref_states   # path to directory containing the poscar files. Structures are unpadded in the mainloop, so they can be padded in the files
 
-     random:
-          number: 38  # number of random structures to make
-          volume: from_atomic_radii  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
+#     random:
+#          number: 33  # number of random structures to make
+#          volume: from_atomic_radii  # volume per atom to scale the random structures to (cubic Angstroms per atom) 
                      # <num|random|from_atomic_radii> num - the number of cubic Angstroms per atom to scale to
                      #                                random - no volume scaling - the volume is just the result of the random lattice vectors 
                      #                                from_atomic_radii - scales the volume to 2 times the sum of the volumes of the atoms, as computed from their atomic radii. This is default behavior
