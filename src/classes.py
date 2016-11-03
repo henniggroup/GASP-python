@@ -4184,7 +4184,7 @@ class StoppingCriteria(object):
         elif len(composition_space.endpoints) == 3:
             # for ternary phase diagram searches
             self.default_num_energy_calcs = 3000
-        elif len(composition_space.endpoint) == 4:
+        elif len(composition_space.endpoints) == 4:
             # for quaternary phase diagram searches
             self.default_num_energy_calcs = 6000
             
