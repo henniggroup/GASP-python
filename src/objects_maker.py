@@ -608,7 +608,7 @@ def printParameters(objects_dict):
         parameters_file.write('        kpoints: ' + energy_calculator.kpoints_file + '\n')
         parameters_file.write('        potcars: \n')
         for key in energy_calculator.potcar_files:
-            parameters_file.write('            ' + potcar + ': ' + energy_calculator.potcar_files[key] + '/n')
+            parameters_file.write('            ' + key + ': ' + energy_calculator.potcar_files[key] + '/n')
     parameters_file.write('\n')
     
     # write the number of energy calculations to run at once
