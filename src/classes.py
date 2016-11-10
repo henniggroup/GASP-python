@@ -210,7 +210,11 @@ class Organism(object):
         unpadded_lattice = Lattice([[rax, ray, 0.0], [rbx, rby, 0.0], [0.0, 0.0, cz]])
         # set the organism's structure to the unpadded one, and make sure all the atoms are located inside the cell
         self.structure = Structure(unpadded_lattice, rspecies, rcartesian_coords, coords_are_cartesian=True)
-        self.translateAtomsIntoCell()
+        # figure out how much we need to translate the atoms to get them back to their original vertical locations in the cell
+        z_shift = cartesian_coords[0][2] - rcartesian_coords[0][2]
+        # do the vertical translation
+        site_indices = [i for i in range(len(self.structure.sites))]
+        self.structure.translate_sites(site_indices, vector = [0, 0, z_shift], frac_coords = False, to_unit_cell = False) 
         
         
     def getBoundingBox(self, cart_coords = True):
@@ -983,7 +987,7 @@ class OffspringGenerator(object):
                 offspring = variation.doVariation(pool, random, geometry, id_generator)
                 offspring = development.develop(offspring, composition_space, constraints, geometry, pool)
                 # don't need to worry about replacement, since we're only dealing with unrelaxed organisms here
-                if (offspring != None) and (redundancy_guard.checkRedundancy(offspring, whole_pop) == None):
+                if (offspring != None) and (redundancy_guard.check_redundancy(offspring, whole_pop) == None):
                     return offspring
                 else:
                     num_tries = num_tries + 1
@@ -1380,13 +1384,13 @@ class Mating(object):
         '''
         # if shape is cluster, then no shift
         if geometry.shape == 'cluster':
-            pass
+            return organism
         # if shape is wire, then don't shift if not c lattice vector
         elif geometry.shape == 'wire' and lattice_vector_index != 2:
-            pass
+            return organism
         # if shape is sheet, then don't shift if c lattice vector
         elif geometry.shape == 'sheet' and lattice_vector_index == 2:
-            pass
+            return organism
         # otherwise, shift all the atoms along the specified lattice vector by a random amount
         else:
             # make a copy of the organism
@@ -2392,7 +2396,7 @@ class CompositionSpace(object):
         Creates a CompositionSpace object, which is list of pymatgen.core.composition.Composition objects
         
         Args:
-            endpoints: the list dictionaries mapping element symbols to amounts, with each one representing a composition
+            endpoints: the list of compositions, as strings
         '''
         for i in range(len(endpoints)):
             endpoints[i] = Composition(endpoints[i])
@@ -2826,8 +2830,6 @@ class FileOrganismCreator(object):
 class RedundancyGuard(object):
     '''
     A redundancy guard.
-    
-    This is a singleton class.
     '''
     
     def __init__(self, redundancy_parameters):
@@ -2929,7 +2931,7 @@ class RedundancyGuard(object):
         self.epa_diff = self.default_epa_diff
     
         
-    def checkRedundancy(self, new_organism, whole_pop):
+    def check_redundancy(self, new_organism, orgs_list):
         '''
         Checks for redundancy, both structural and if specified, epa (d-value)
         
@@ -2938,22 +2940,22 @@ class RedundancyGuard(object):
         Args:
             new_organism: the organism to check for redundancy
             
-            whole_pop: the list containing all organisms to check against
+            orgs_list: the list containing all organisms to check against
         '''
-        # if the new organism hasn't been relaxed, then check its structure against that of every organism in whole pop
+        # if the new organism hasn't been relaxed, then check its structure against that of every organism in the list
         if new_organism.epa == None:
-            for organism in whole_pop:
-                # need to check id's because copies of both relaxed and unrelaxed organisms are added to whole pop
+            for organism in orgs_list:
+                # need to check id's because copies of both relaxed and unrelaxed organisms are added to the whole pop list of organisms
                 if new_organism.id != organism.id:
                 # check if their structures match
                     if self.structure_matcher.fit(new_organism.structure, organism.structure):
                         print("Organism {} failed structural redundancy - looks like organism {} ".format(new_organism.id, organism.id))
                         return organism
                 
-        # if the new organism has been relaxed, then only check its structure against those of organisms in whole pop that have also been relaxed
+        # if the new organism has been relaxed, then only check its structure against those of organisms in the list that have also been relaxed
         else:
-            for organism in whole_pop:
-                # need to check id's because copies of both relaxed and unrelaxed organisms are added to whole pop
+            for organism in orgs_list:
+                # need to check id's because copies of both relaxed and unrelaxed organisms are added to whole pop list of organisms
                 if new_organism.id != organism.id and organism.epa != None:
                     # check if their structures match
                     if self.structure_matcher.fit(new_organism.structure, organism.structure):
@@ -3147,7 +3149,7 @@ class Development(object):
     A development object is used to develop an organism before evaluating its energy or adding it
     to the pool. Doesn't do redundancy checking.
     '''
-    def __init__(self, development_parameters): 
+    def __init__(self, development_parameters, geometry): 
         '''
         Creates a Development object.
         
@@ -3155,10 +3157,16 @@ class Development(object):
             niggli: a boolean indicating whether or not to do Niggli cell reduction
             
             scale_density: a boolean indicating whether or not to scale the density
+            
+            geometry: a Geometry object
         '''
         # defaults
         self.default_niggli = True
-        self.default_scale_density = True
+        
+        if geometry.shape == 'bulk':
+            self.default_scale_density = True
+        else:
+            self.default_scale_density = False
         
         # set defaults if development_parameters equals 'default' or None
         if development_parameters == None or development_parameters == 'default':
@@ -3269,7 +3277,7 @@ class Development(object):
             # TODO: call special cell reduction for other geometries here if needed (doesn't makes sense for wires or clusters)
                      
         # optionally scale the volume per atom of unrelaxed structures
-        if self.scale_density and len(pool.promotion_set) > 0 and organism.epa == None and geometry.shape == 'bulk':
+        if self.scale_density and len(pool.promotion_set) > 0 and organism.epa == None:
             # scale to the average of the volumes per atom of the organisms in the promotion set, and increase by 10%
             if composition_space.objective_function == 'epa':
                 # get average volume per atom of the organisms in the promotion set
@@ -3417,7 +3425,7 @@ class VaspEnergyCalculator(object):
     '''
     Calculates the energy of an organism using VASP.
     '''
-    def __init__(self, incar_file, kpoints_file, potcar_files):
+    def __init__(self, incar_file, kpoints_file, potcar_files, geometry):
         '''
         Args:
             incar_file: the path to the INCAR file
@@ -3425,6 +3433,8 @@ class VaspEnergyCalculator(object):
             kpoints_file: the path to the KPOINTS file
             
             potcar_files: a dictionary containing the paths to the POTCAR files, with the element symbols as keys
+            
+            geometry: a Geometry object
         '''
         # the name of the energy code being used
         self.name = 'vasp'
@@ -3509,7 +3519,10 @@ class VaspEnergyCalculator(object):
         
         # make a Vasprun object by reading the vasprun.xml file
         try:
-            vasprun = Vasprun(job_dir_path + '/vasprun.xml', ionic_step_skip=None, ionic_step_offset=None, parse_dos=False, parse_eigen=False, parse_projected_eigen=False, parse_potcar_file=False)
+            # suppress the warnings produced by Vasprun. We check for convergence below, so we don't need these warnings to be printed 
+            with warnings.catch_warnings(): 
+                warnings.simplefilter('ignore')
+                vasprun = Vasprun(job_dir_path + '/vasprun.xml', ionic_step_skip=None, ionic_step_offset=None, parse_dos=False, parse_eigen=False, parse_projected_eigen=False, parse_potcar_file=False)
         except:
             print('Error parsing vasprun.xml file for organism {} '.format(organism.id))
             dictionary[key] = None
@@ -3546,10 +3559,12 @@ class LammpsEnergyCalculator(object):
     '''
     Calculates the energy of an organism using LAMMPS.
     '''
-    def __init__(self, input_script):
+    def __init__(self, input_script, geometry):
         '''
         Args:
             input_script: the path to the lammps input script
+            
+            geometry: a Geometry object
             
         Precondition: the input script exists and is valid
         '''
@@ -3867,12 +3882,14 @@ class GulpEnergyCalculator(object):
     '''
     Calculates the energy of an organism using GULP.
     '''
-    def __init__(self, header_file, potential_file):
+    def __init__(self, header_file, potential_file, geometry):
         '''
         Args:
             header_file: the path to the gulp header file
             
             potential_file: the path to the gulp potential file
+            
+            geometry: a Geometry object
             
         Precondition: the header and potential files exist and are valid
         '''
@@ -3884,18 +3901,33 @@ class GulpEnergyCalculator(object):
         self.potential_path = potential_file
         
         # read the gulp header file and store it as a string
-        with open (header_file, "r") as gulp_header_file:
-            self.header = gulp_header_file.read()
+        with open (header_file, 'r') as gulp_header_file:
+            self.header = gulp_header_file.readlines()
             
         # read the gulp potential file and store it as a string
-        with open (potential_file, "r") as gulp_potential_file:
-            self.potential = gulp_potential_file.read()
+        with open (potential_file, 'r') as gulp_potential_file:
+            self.potential = gulp_potential_file.readlines()
         
         # for processing gulp input and output
         self.gulp_io = gulp_caller.GulpIO()
         
         # whether the anions and cations are polarizable in the gulp potential
         self.anions_shell, self.cations_shell = self.getShells()
+        
+        # determine which lattice parameters should be relaxed in the gulp run, and make the corresponding
+        # flags to put at the end of the line in the input file containing the 'cell' keyword
+        if geometry.shape == 'bulk':
+            # relax a, b, c, alpha, beta, gamma
+            self.lattice_flags = ' 1 1 1 1 1 1'
+        elif geometry.shape == 'sheet':
+            # relax a, b and gamma but not c, alpha and beta
+            self.lattice_flags = ' 1 1 0 0 0 1'
+        elif geometry.shape == 'wire':
+            # relax c, but not a, b, alpha, beta and gamma
+            self.lattice_flags = ' 0 0 1 0 0 0'
+        elif geometry.shape == 'cluster':
+            # don't relax any of the lattice parameters
+            self.lattice_flags = ' 0 0 0 0 0 0'
         
     
     def getShells(self):
@@ -3906,7 +3938,7 @@ class GulpEnergyCalculator(object):
         '''
         # get the symbols of the elements with shells
         shells = []
-        for line in self.potential.split('\n'):
+        for line in self.potential:
             if 'shel' in line:
                 line_parts = line.split()
                 # the element symbol is always right before the 'shel' keyword
@@ -3958,14 +3990,31 @@ class GulpEnergyCalculator(object):
         # TODO: might be better to make my own implementation of this so arbitrary elements can have shells (not just all anions and/or all cations)
         structure_lines = self.gulp_io.structure_lines(organism.structure, anion_shell_flg = self.anions_shell, cation_shell_flg = self.cations_shell, symm_flg = False)
         
+        # split the structure lines into a list of strings, one for each line
+        structure_lines = structure_lines.split('\n')
+        
+        # for some reason, and empty line gets added at the end, so remove it here
+        del structure_lines[-1]
+        
+        # add the flags indicating which lattice parameters to relax
+        structure_lines[1] = structure_lines[1] + self.lattice_flags
+        
+        # add the flags for relaxing the ion positions (in all three dimensions)
+        for i in range(3, len(structure_lines)):
+            structure_lines[i] = structure_lines[i] + ' 1 1 1'
+            
+        # add newline characters to the end of each of the structure lines
+        for i in range(len(structure_lines)):
+            structure_lines[i] = structure_lines[i] + '\n'
+        
         # make the gulp input from the structure, header and potential
         gulp_input = self.header + structure_lines + self.potential
         
         # print gulp input to a file for user's reference 
         gin_path = job_dir_path + '/' + str(organism.id) + '.gin'
-        gin_file = open(gin_path, 'w')
-        gin_file.write(gulp_input)
-        gin_file.close()
+        with open(gin_path, 'w') as gin_file:
+            for line in gulp_input:
+                gin_file.write(line)
         
         print('Starting GULP calculation on organism {} '.format(organism.id))
         
@@ -4016,7 +4065,7 @@ class GulpEnergyCalculator(object):
         num_atoms = self.getNumAtoms(gulp_output)
             
         # for convenience/testing...
-        #relaxed_structure.to('poscar', job_dir_path + '/' + str(organism.id) + '.vasp')
+        relaxed_structure.to('poscar', job_dir_path + '/' + str(organism.id) + '.vasp')
             
         # assign the relaxed structure and energy to the organism, and compute the epa
         organism.structure = relaxed_structure
@@ -4271,8 +4320,25 @@ class StoppingCriteria(object):
 ####### for testing #######
 
 #id_generator = IDGenerator()
-#structure = Structure.from_file('/Users/benjaminrevard/testing/gaspy_testing/garun/temp/62/POSCAR.62_unrelaxed')
+#comp_space = CompositionSpace(['Al2O3'])
+#constraints = Constraints(None, comp_space)
+#geometry = Geometry({'shape': 'sheet'})
+
+#structure = Structure.from_file('/Users/benjaminrevard/testing/gaspy_testing/2D_gulp_alumina/garun/temp/10067/POSCAR.10067_relaxed')
 #organism = Organism(structure, id_generator, 'testing')
+
+# unpad
+#geometry.unpad(organism, constraints)
+#organism.structure.to(fmt='poscar', filename='/Users/benjaminrevard/testing/gaspy_testing/2D_gulp_alumina/garun/temp/10067/10067_unpadded.vasp')
+
+# reduce
+#organism.reduceSheetCell()
+#organism.structure.to(fmt='poscar', filename='/Users/benjaminrevard/testing/gaspy_testing/2D_gulp_alumina/garun/temp/10067/10067_reduced.vasp')
+
+
+
+
+
 
 #print(organism.structure.lattice)
 #print('')

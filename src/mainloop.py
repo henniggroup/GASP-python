@@ -18,12 +18,16 @@ except:
     print('Error reading input file.')
     print('Quitting...')
 
+
+
 # just for testing. Normally we'll read the input file as an argument
 #with open('/Users/benjaminrevard/GASPy/gaspy/src/gaspy_input.yaml', 'r') as f:
 #    parameters = yaml.load(f)
 
 # this line is just for testing. Normally the code will be executed in the folder where the search is to be done...
 #os.chdir('/Users/benjaminrevard/testing/gaspy_testing') 
+
+
 
 # make the objects needed by the algorithm
 objects_dict = objects_maker.makeObjects(parameters)
@@ -93,7 +97,7 @@ for creator in organism_creators:
                 developed_org = development.develop(new_organism, composition_space, constraints, geometry, pool)
                 if developed_org != None: # successful development
                     # check for redundancy
-                    redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                    redundant_org = redundancy_guard.check_redundancy(developed_org, whole_pop)
                     if redundant_org == None: # no redundancy
                         whole_pop.append(copy.deepcopy(developed_org)) # we want to add copies to whole_pop so the organisms in whole_pop don't change upon relaxation, etc.
                         stopping_criteria.updateCalcCounter()  # if num calcs is one of the stopping criteria, this updates it   
@@ -120,7 +124,7 @@ for creator in organism_creators:
                         geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
                         developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, pool)
                         if developed_org != None:
-                            redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                            redundant_org = redundancy_guard.check_redundancy(developed_org, whole_pop)
                             if redundant_org != None:
                                 if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
                                     initial_population.replaceOrganism(redundant_org, developed_org, composition_space)
@@ -154,7 +158,7 @@ for creator in organism_creators:
                             developed_org = development.develop(new_organism, composition_space, constraints, geometry, pool)
                             if developed_org != None:
                                 # check for redundancy
-                                redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                                redundant_org = redundancy_guard.check_redundancy(developed_org, whole_pop)
                                 if redundant_org == None: # no redundancy
                                     whole_pop.append(copy.deepcopy(developed_org))
                                     stopping_criteria.updateCalcCounter() 
@@ -188,7 +192,7 @@ while num_to_get > 0:
                 geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
                 developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, pool)
                 if developed_org != None:
-                    redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                    redundant_org = redundancy_guard.check_redundancy(developed_org, whole_pop)
                     if redundant_org != None:
                         if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
                             initial_population.replaceOrganism(redundant_org, developed_org, composition_space)
@@ -239,9 +243,10 @@ while not stopping_criteria.are_satisfied:
                 geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
                 developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, pool)
                 if developed_org != None:
-                    redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                    # check for redundancy with the organisms in the pool first
+                    redundant_org = redundancy_guard.check_redundancy(developed_org, pool.toList())
                     if redundant_org != None:
-                        if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
+                        if redundant_org.epa > developed_org.epa:
                             # replace the organism
                             pool.replaceOrganism(redundant_org, developed_org, composition_space)
                             # recompute fitnesses and selection probabilities
@@ -253,7 +258,11 @@ while not stopping_criteria.are_satisfied:
                             pool.printProgress(composition_space)
                             # print out how many energy calculations have been done so far
                             print('Number of energy calculations so far: {} '.format(num_finished_calcs))
-                    else: 
+                    # if not redundant with an organism in the pool, check for redundancy with all the organisms in whole_pop
+                    else:
+                        redundant_org = redundancy_guard.check_redundancy(developed_org, whole_pop)     
+                    # if no redundancy in either the pool or whole_pop, then add the new organism to the pool
+                    if redundant_org == None: 
                         stopping_criteria.checkOrganism(developed_org) # if value achieved or found structure stopping criteria are used, this checks if it's met
                         pool.addOrganism(developed_org, composition_space)
                         whole_pop.append(developed_org)
@@ -317,17 +326,26 @@ while num_to_get > 0:
                 geometry.unpad(relaxed_org, constraints) # for bulk search, this does nothing
                 developed_org = development.develop(relaxed_org, composition_space, constraints, geometry, pool)
                 if developed_org != None:
-                    redundant_org = redundancy_guard.checkRedundancy(developed_org, whole_pop)
+                    # check for redundancy with the organisms in the pool first
+                    redundant_org = redundancy_guard.check_redundancy(developed_org, pool.toList())
                     if redundant_org != None:
-                        if redundant_org.is_active and redundant_org.epa > developed_org.epa:  
+                        if redundant_org.epa > developed_org.epa:
+                            # replace the organism
                             pool.replaceOrganism(redundant_org, developed_org, composition_space)
+                            # recompute fitnesses and selection probabilities
                             pool.computeFitnesses()
                             pool.computeSelectionProbs()
+                            # print out a summary of the pool
                             pool.printSummary(composition_space)
+                            # print out the progress of the search - either the best value (for epa) or the volume of the convex hull (for pd)
                             pool.printProgress(composition_space)
+                            # print out how many energy calculations have been done so far
                             print('Number of energy calculations so far: {} '.format(num_finished_calcs))
-                            
-                    else: 
+                    # if not redundant with an organism in the pool, check for redundancy with all the organisms in whole_pop
+                    else:
+                        redundant_org = redundancy_guard.check_redundancy(developed_org, whole_pop)     
+                    # if no redundancy in either the pool or whole_pop, then add the new organism to the pool
+                    if redundant_org == None: 
                         pool.addOrganism(developed_org, composition_space)
                         whole_pop.append(developed_org)
                         removed_org = pool.queue.pop()

@@ -48,10 +48,10 @@ def makeObjects(parameters):
     
     # make the development object
     if 'Development' in parameters:
-        development = classes.Development(parameters['Development'])
+        development = classes.Development(parameters['Development'], geometry)
     else:
         # if no Development block is given in the input file, then just use default values for everything
-        development = classes.Development('default')
+        development = classes.Development('default', geometry)
         
     # put the development in the dictionary
     objects_dict['development'] = development
@@ -245,7 +245,7 @@ def makeObjects(parameters):
                     print('Quitting...')
                     quit()
             # if we made it this far, then both the header and potential file exist, so make the gulp energy calculator
-            energy_calculator = classes.GulpEnergyCalculator(header_file_path, potential_file_path)
+            energy_calculator = classes.GulpEnergyCalculator(header_file_path, potential_file_path, geometry)
         
     elif 'lammps' in parameters['EnergyCode']:
         if parameters['EnergyCode']['lammps'] == None:
@@ -271,7 +271,7 @@ def makeObjects(parameters):
                     print('Quitting...')
                     quit()
             # if we made it this far, then the input script exists, so make the lammps energy calculator
-            energy_calculator = classes.LammpsEnergyCalculator(input_script_path)
+            energy_calculator = classes.LammpsEnergyCalculator(input_script_path, geometry)
             
     elif 'vasp' in parameters['EnergyCode']:
         if parameters['EnergyCode']['vasp'] == None:
@@ -348,7 +348,7 @@ def makeObjects(parameters):
                         print('Quitting...')
                         quit()
             # if we made it this far, then the all the files were provided properly and exist, so make the vasp energy calculator
-            energy_calculator = classes.VaspEnergyCalculator(incar_path, kpoints_path, potcar_paths)
+            energy_calculator = classes.VaspEnergyCalculator(incar_path, kpoints_path, potcar_paths, geometry)
     
     # TODO: add other energy codes here
     else:
@@ -608,7 +608,7 @@ def printParameters(objects_dict):
         parameters_file.write('        kpoints: ' + energy_calculator.kpoints_file + '\n')
         parameters_file.write('        potcars: \n')
         for key in energy_calculator.potcar_files:
-            parameters_file.write('            ' + key + ': ' + energy_calculator.potcar_files[key] + '/n')
+            parameters_file.write('            ' + key + ': ' + energy_calculator.potcar_files[key] + '\n')
     parameters_file.write('\n')
     
     # write the number of energy calculations to run at once
