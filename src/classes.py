@@ -1336,6 +1336,8 @@ class Mating(object):
             return 5 
         elif volume_ratio >= 48 and volume_ratio < 96:
             return 6
+        else:
+            return 7
     
     
     def doubleParent(self, organism, geometry, random):
@@ -3651,6 +3653,9 @@ class LammpsEnergyCalculator(object):
         organism.total_energy = total_energy
         organism.epa = total_energy/organism.structure.num_sites
         
+        # just for testing...
+        #organism.structure.to(fmt='poscar', filename= job_dir_path + '/POSCAR.' + str(organism.id) + '_relaxed')
+        
         # print out the energy per atom of the organism
         print('Setting energy of organism {} to {} eV/atom '.format(organism.id, organism.epa))
         
@@ -3788,7 +3793,7 @@ class LammpsEnergyCalculator(object):
         # get the lattice vectors
         a_data = lines[5].split()
         b_data = lines[6].split()
-        c_data = lines[6].split()
+        c_data = lines[7].split()
         
         # parse the tilt factors
         xy = float(a_data[2])
@@ -3983,8 +3988,8 @@ class GulpEnergyCalculator(object):
         job_dir_path = garun_dir_path + '/temp/' + str(organism.id)
         os.mkdir(job_dir_path)
         
-        # just for Shreyas' convenience, write out the unrelaxed structure to a poscar file
-        organism.structure.to(fmt='poscar', filename= job_dir_path + '/POSCAR.' + str(organism.id) + '_unrelaxed')
+        # just for testing, write out the unrelaxed structure to a poscar file
+        #organism.structure.to(fmt='poscar', filename= job_dir_path + '/POSCAR.' + str(organism.id) + '_unrelaxed')
         
         # get the structure in gulp input format
         # TODO: might be better to make my own implementation of this so arbitrary elements can have shells (not just all anions and/or all cations)
