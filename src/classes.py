@@ -2995,6 +2995,7 @@ class Constraints(object):
         self.default_max_lattice_length = 20
         self.default_min_lattice_angle = 40
         self.default_max_lattice_angle = 140
+        self.default_mid_factor = 0.7
         
         # set defaults if constraints_parameters equals 'default' or None
         if constraints_parameters == None or constraints_parameters == 'default':
@@ -3065,7 +3066,7 @@ class Constraints(object):
                             elements = key.split()
                             radius1 = Element(elements[0]).atomic_radius
                             radius2 = Element(elements[1]).atomic_radius
-                            self.per_species_mids[key] = 0.75*(radius1 + radius2)
+                            self.per_species_mids[key] = self.default_mid_factor*(radius1 + radius2)
                     # check to see if any pairs are missing, and if so, add them and set to default values
                     self.set_some_mids_to_defaults(composition_space)
                 # if the per_species_mids block has been left blank or set to default, then set all the pairs to defaults
@@ -3105,7 +3106,7 @@ class Constraints(object):
         self.per_species_mids = {}
         for i in range(0, len(elements)):
             for j in range(i, len(elements)):
-                self.per_species_mids[str(elements[i].symbol + " " + elements[j].symbol)] = 0.75*(elements[i].atomic_radius + elements[j].atomic_radius)
+                self.per_species_mids[str(elements[i].symbol + " " + elements[j].symbol)] = self.default_mid_factor*(elements[i].atomic_radius + elements[j].atomic_radius)
         
     
     def set_some_mids_to_defaults(self, composition_space):
@@ -3131,7 +3132,7 @@ class Constraints(object):
         # calculate the per species mids for all the missing pairs and add them to self.per_species_mids
         for pair in missing_pairs:
             p = pair.split()
-            self.per_species_mids[str(pair)] = 0.75*(Element(p[0]).atomic_radius + Element(p[1]).atomic_radius)
+            self.per_species_mids[str(pair)] = self.default_mid_factor*(Element(p[0]).atomic_radius + Element(p[1]).atomic_radius)
     
     
     def get_max_mid(self):
