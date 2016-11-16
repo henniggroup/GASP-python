@@ -1416,48 +1416,51 @@ class Mating(object):
         Args:
             structure: the Structure whose sites to merge
         '''
+        # list to hold the data for the new sites (produced from merging) 
+        species = []
+	frac_coords = []
+	# list to hold the indices of the sites that have been merged (so they won't be in the new structure) 
+        merged_indices = [] 
+
+        # go through the structure site by site and merge pairs of sites if needed
         for site in structure.sites:
-            # get the atomic radius of the element at this site
-            symbol = site.specie.symbol
-            element = Element(symbol)
-            a_radius = element.atomic_radius
-            # compute the cutoff radius
-            cut_radius = a_radius*self.merge_sites
-            # get all the sites within the cutoff radius of the site
-            neighbors = structure.get_neighbors(site, cut_radius)
-            # list to hold the sites to merge
-            sites_to_merge = []
-            # get all of the neighbors that have the same symbol as the site
-            for neighbor in neighbors:
-                if neighbor[0].specie.symbol == symbol:
-                    sites_to_merge.append(neighbor[0])
-            # compute the location of the merged site, if there are sites to merge
-            if len(sites_to_merge) > 0:
-                # take the sum of the fractional coordinates of the sites to merge 
-                new_frac_coords = site.frac_coords
-                for site_to_merge in sites_to_merge:
-                    new_frac_coords = np.add(new_frac_coords, site_to_merge.frac_coords)
-                # divide by the number of sites to merge to get the average coordinates
-                new_frac_coords = new_frac_coords/(float(len(sites_to_merge) + 1))
-                # remove the sites that were merged from the structure
-                indices_to_remove = []
-                indices_to_remove.append(structure.sites.index(site))
-                for site_to_merge in sites_to_merge:
-                    for site in structure.sites:
-                        # this is necessary to deal with edge cases, and because sometimes the neighbor sites lie outside the cell
-                        if site.is_periodic_image(site_to_merge):
-                            indices_to_remove.append(structure.sites.index(site))
-                structure.remove_sites(indices_to_remove)
-                # add the new merged site to the structure
-                structure.append(element, new_frac_coords)
-                # call the method recursively on the new structure
-                return self.mergeSites(structure)
-                
-        # return the argument structure (only reach here if no merges happened)
-        return structure
+            # check that the site hasn't already been merged
+            if structure.sites.index(site) not in merged_indices:
+                symbol = site.specie.symbol
+                element = Element(site.specie.symbol)
+                a_radius = element.atomic_radius
+	        for other_site in structure.sites:
+		    # check that the other site hasn't already been merged
+	            if structure.sites.index(other_site) not in merged_indices:
+                        # check that the other site is not the site, and that it has the same symbol as the site
+	                if other_site != site and other_site.specie.symbol == symbol:
+                            # check the distance between the sites
+                            if site.distance(other_site) < a_radius*self.merge_sites:
+			        # record that both of these sites have been merged 
+                                merged_indices.append(structure.sites.index(other_site))
+	                        merged_indices.append(structure.sites.index(site))
+                                # compute the fractional coordinates of the new site 
+                                new_frac_coords = np.add(site.frac_coords, other_site.frac_coords)/2.0
+			        species.append(site.specie)
+                                frac_coords.append(new_frac_coords)
+
+	# get the data for the sites that were NOT merged
+        for site in structure.sites:
+            if structure.sites.index(site) not in merged_indices:
+                species.append(site.specie)
+                frac_coords.append(site.frac_coords)
+
+        # make a new structure
+        new_structure = Structure(structure.lattice, species, frac_coords)
+
+	# if any merges were done, call mergeSites recursively on the new structure
+	if len(new_structure.sites) < len(structure.sites):
+	    return self.mergeSites(new_structure)
+	else:
+            return new_structure
         
-                
         
+
 class StructureMut(object):
     '''
     A operator to create an offspring organism by mutating the structure of a parent organism.
