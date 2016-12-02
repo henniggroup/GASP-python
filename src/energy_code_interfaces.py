@@ -11,9 +11,11 @@ Energy Code Interfaces module:
 This module contains the classes used to compute the energies of structures
 with external energy codes.
 
-1. VaspEnergyCalculator: for using VASP to compute energies.
-2. LammpsEnergyCalculator: for using LAMMSP to compute energies.
-3. GulpEnergyCalculator: for using GULP to compute energies.
+1. VaspEnergyCalculator: for using VASP to compute energies
+
+2. LammpsEnergyCalculator: for using LAMMSP to compute energies
+
+3. GulpEnergyCalculator: for using GULP to compute energies
 
 """
 
@@ -24,7 +26,6 @@ from pymatgen.io.vasp.outputs import Vasprun
 from pymatgen.io.lammps.data import LammpsData
 import pymatgen.command_line.gulp_caller as gulp_caller
 
-from os import mkdir, getcwd
 import shutil
 import subprocess
 import warnings
@@ -49,15 +50,11 @@ class VaspEnergyCalculator(object):
             geometry: a Geometry object
         '''
 
-        # the name of the energy code being used
         self.name = 'vasp'
 
-        # the paths to the INCAR and KPOINTS files
+        # paths to the INCAR, KPOINTS and POTCARs files
         self.incar_file = incar_file
         self.kpoints_file = kpoints_file
-
-        # the dictionary containing the paths to the elemental POTCAR files
-        # (with element symbols as keys)
         self.potcar_files = potcar_files
 
     def do_energy_calculation(self, organism, dictionary, key):
@@ -65,10 +62,6 @@ class VaspEnergyCalculator(object):
         Calculates the energy of an organism using VASP, and stores the relaxed
         organism in the provided dictionary at the provided key. If the
         calculation fails, stores None in the dictionary instead.
-
-        Returns an organism that has been parsed from the output files of the
-        energy code, or None if the calculation failed. Does not do development
-        or redundancy checking.
 
         Args:
             organism: the organism whose energy we want to calculate
@@ -81,31 +74,25 @@ class VaspEnergyCalculator(object):
         Precondition: the garun directory and temp subdirectory
             exist, and we are currently located inside the garun directory
 
-        TODO: see about using the custodian package for error handling
+        TODO: maybe use the custodian package for error handling
         """
 
         # make the job directory
-        job_dir_path = str(getcwd()) + '/temp/' + str(organism.id)
-        mkdir(job_dir_path)
+        job_dir_path = str(os.getcwd()) + '/temp/' + str(organism.id)
+        os.mkdir(job_dir_path)
 
-        # copy the INCAR file to the job directory
+        # copy the INCAR and KPOINTS files to the job directory
         shutil.copy(self.incar_file, job_dir_path)
-
-        # copy the KPOINTS file to the job directory
         shutil.copy(self.kpoints_file, job_dir_path)
 
-        # sort the structure of the organism
+        # sort the structure of the organism and write to POSCAR file
         organism.structure.sort()
-
-        # write the POSCAR file from the sorted structure
         organism.structure.to(fmt='poscar', filename=job_dir_path + '/POSCAR')
 
         # get a list of the element symbols in the sorted order
         symbols = []
         for site in organism.structure.sites:
             symbols.append(site.specie.symbol)
-
-        # remove duplicates
         symbols = list(set(symbols))
 
         # write the POTCAR file by concatenating the appropriate elemental
@@ -117,15 +104,12 @@ class VaspEnergyCalculator(object):
                     for line in potcar_file:
                         total_potcar_file.write(line)
 
+        # run 'callvasp' script as a subprocess to run VASP
         print('Starting VASP calculation on organism {} '.format(organism.id))
-
-        # do the vasp calculation by running a 'callvasp' script as a
-        # subprocess
         try:
             subprocess.call(['callvasp', job_dir_path],
                             stderr=subprocess.STDOUT)
         except:
-            # error message and set dictionary element to None before returning
             print('Error running VASP on organism {} '.format(organism.id))
             dictionary[key] = None
             return
@@ -141,9 +125,7 @@ class VaspEnergyCalculator(object):
 
         # make a Vasprun object by reading the vasprun.xml file
         try:
-            # suppress the warnings produced by Vasprun. We check for
-            # convergence below, so we don't need these warnings to be printed
-            with warnings.catch_warnings():
+            with warnings.catch_warnings():  # don't need warning, so suppress
                 warnings.simplefilter('ignore')
                 vasprun = Vasprun(job_dir_path + '/vasprun.xml',
                                   ionic_step_skip=None, ionic_step_offset=None,
@@ -172,18 +154,11 @@ class VaspEnergyCalculator(object):
             dictionary[key] = None
             return
 
-        # assign the relaxed structure and energy to the organism, and compute
-        # the epa
         organism.structure = relaxed_structure
         organism.total_energy = total_energy
         organism.epa = total_energy/organism.structure.num_sites
-
-        # print out the energy per atom of the organism
         print('Setting energy of organism {} to {} '
               'eV/atom '.format(organism.id, organism.epa))
-
-        # store the relaxed organism in the specified dictionary with the
-        # specified key
         dictionary[key] = organism
 
 
@@ -202,10 +177,9 @@ class LammpsEnergyCalculator(object):
         Precondition: the input script exists and is valid
         """
 
-        # the name of the energy code being used
         self.name = 'lammps'
 
-        # save the path to the lammps input script
+        # the path to the lammps input script
         self.input_script = input_script
 
     def do_energy_calculation(self, organism, dictionary, key):
@@ -227,52 +201,41 @@ class LammpsEnergyCalculator(object):
         """
 
         # make the job directory
-        job_dir_path = str(getcwd()) + '/temp/' + str(organism.id)
-        mkdir(job_dir_path)
+        job_dir_path = str(os.getcwd()) + '/temp/' + str(organism.id)
+        os.mkdir(job_dir_path)
 
-        # copy the lammps input script to the job directory
+        # copy the lammps input script to the job directory and get its path
         shutil.copy(self.input_script, job_dir_path)
-
-        # get the path to the lammps input script in the job directory
         script_name = os.path.basename(self.input_script)
         input_script_path = job_dir_path + '/' + str(script_name)
 
-        # take supercell if needed to make the structure conform to lammps'
-        # preconditions
         self.conform_to_lammps(organism)
+        self.write_data_file(organism, job_dir_path)  # write in.data file
 
         # just for testing, write out the unrelaxed structure to a poscar file
         # organism.structure.to(fmt='poscar', filename= job_dir_path +
         #    '/POSCAR.' + str(organism.id) + '_unrelaxed')
 
-        # write the data file (in.data) containing the structure
-        self.write_data_file(organism, job_dir_path)
-
+        # run 'calllammps' script as a subprocess to run LAMMPS
         print('Starting LAMMPS calculation on organism {} '.format(
             organism.id))
-
-        # do the lammps calculation by running a 'calllammps' script as a
-        # subprocess. If errors are thrown, print them to the log.lammps file
         try:
             lammps_output = subprocess.check_output(
                 ['calllammps', input_script_path], stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
-            # print the output of a bad lammps call to a file for the user's
-            # reference
+            # write the output of a bad LAMMPS call to for the user's reference
             with open(job_dir_path + '/log.lammps', 'w') as log_file:
                 log_file.write(e.output)
             print('Error running LAMMPS on organism {} '.format(organism.id))
             dictionary[key] = None
             return
 
-        # write the lammps output to a file called log.lammps
+        # write the LAMMPS output
         with open(job_dir_path + '/log.lammps', 'w') as log_file:
             log_file.write(lammps_output)
 
-        # get the symbols of the elements in the structure
-        symbols = organism.structure.symbol_set
-
         # parse the relaxed structure from the atom.dump file
+        symbols = organism.structure.symbol_set
         try:
             relaxed_structure = self.get_relaxed_structure(
                 job_dir_path + '/dump.atom', job_dir_path + '/in.data',
@@ -292,22 +255,11 @@ class LammpsEnergyCalculator(object):
             dictionary[key] = None
             return
 
-        # assign the relaxed structure and energy to the organism, and compute
-        # the epa
         organism.structure = relaxed_structure
         organism.total_energy = total_energy
         organism.epa = total_energy/organism.structure.num_sites
-
-        # just for testing...
-        # organism.structure.to(fmt='poscar', filename= job_dir_path +
-        #    '/POSCAR.' + str(organism.id) + '_relaxed')
-
-        # print out the energy per atom of the organism
         print('Setting energy of organism {} to {} eV/atom '.format(
             organism.id, organism.epa))
-
-        # store the relaxed organism in the specified dictionary with the
-        # specified key
         dictionary[key] = organism
 
     def conform_to_lammps(self, organism):
@@ -329,27 +281,18 @@ class LammpsEnergyCalculator(object):
             organism: an Organism object whose structure this method modifies
         """
 
-        # rotate the organism into the principal directions
         organism.rotate_to_principal_directions()
-        # get the lattice vectors of the organism
         lattice_coords = organism.structure.lattice.matrix
-        # get the x-components of the lattice vectors
         ax = lattice_coords[0][0]
         bx = lattice_coords[1][0]
         cx = lattice_coords[2][0]
-        # get the y-components of the lattice vectors
         by = lattice_coords[1][1]
         cy = lattice_coords[2][1]
-        # take a supercell if needed
         if ax < bx or ax < cx:
-            # double the a lattice vector of the organism's structure
             organism.structure.make_supercell([2, 1, 1])
-            # call method recursively on new organism
             self.conform_to_lammps(organism)
         elif by < cy:
-            # double the b lattice vector
             organism.structure.make_supercell([1, 2, 1])
-            # call method recursively on new organism
             self.conform_to_lammps(organism)
 
     def write_data_file(self, organism, job_dir_path):
@@ -395,10 +338,8 @@ class LammpsEnergyCalculator(object):
             if 'zhi' in line:
                 insertion_index = lines.index(line) + 1
 
-        # build the string containing the tilts
+        # build the string containing the tilts and add it
         tilts_string = str(xy) + ' ' + str(xz) + ' ' + str(yz) + ' xy xz yz\n'
-
-        # insert the tilts string
         lines.insert(insertion_index, tilts_string)
 
         # get the index of the line where the atoms info starts
@@ -410,17 +351,12 @@ class LammpsEnergyCalculator(object):
         # remove the the molecule id's
         for i in range(len(organism.structure.sites)):
             split_line = lines[atoms_index + i].split()
-            # remove the molecule id
             del split_line[1]
-            # build the new line
             modified_line = ''
             for item in split_line:
                 modified_line = modified_line + item + ' '
             modified_line = modified_line + '\n'
-            # replace the old line with the modified one
             lines[atoms_index + i] = modified_line
-
-        # add a new line character to the end of the last line
         lines[-1] = lines[-1] + '\n'
 
         # overwrite the in.data file with the new contents, including the tilts
@@ -485,7 +421,7 @@ class LammpsEnergyCalculator(object):
         # get the number of atoms
         num_atoms = int(lines[3])
 
-        # get the atomic types and their Cartesian coordinates
+        # get the atom types and their Cartesian coordinates
         types = []
         relaxed_cart_coords = []
         for i in range(num_atoms):
@@ -495,8 +431,7 @@ class LammpsEnergyCalculator(object):
                                         float(atom_info[3]),
                                         float(atom_info[4])])
 
-        # read the atom types and corresponding atomic masses from the in.data
-        # file
+        # read the atom types and corresponding atomic masses from in.data
         with open(data_in_path, 'r') as data_in:
             lines = data_in.readlines()
         types_masses = {}
@@ -515,14 +450,11 @@ class LammpsEnergyCalculator(object):
                         types_masses[atom_type], '.1f'):
                     types_symbols[atom_type] = symbol
 
-        # make a list of chemical symbols (one for each site) from the atom
-        # types
+        # make a list of chemical symbols (one for each site)
         relaxed_symbols = []
         for atom_type in types:
             relaxed_symbols.append(types_symbols[atom_type])
 
-        # make a Structure object from the relaxed lattice, symbols, and
-        # coordinates
         return Structure(relaxed_lattice, relaxed_symbols, relaxed_cart_coords,
                          coords_are_cartesian=True)
 
@@ -539,13 +471,12 @@ class LammpsEnergyCalculator(object):
         # read the log.lammps file as a list of strings
         with open(lammps_log_path, 'r') as f:
             lines = f.readlines()
-        # search for the line with the keywords
+
+        # get the last line with the keywords (where the final energy is)
         match_strings = ['Step', 'Temp', 'E_pair', 'E_mol', 'TotEng']
         for i in range(len(lines)):
             if all(match in lines[i] for match in match_strings):
                 energy = float(lines[i + 2].split()[4])
-        # need to go through whole file to make sure we got the last one, since
-        # the energy is written multiple times (after each step)
         return energy
 
 
@@ -566,18 +497,15 @@ class GulpEnergyCalculator(object):
         Precondition: the header and potential files exist and are valid
         """
 
-        # the name of the energy code being used
         self.name = 'gulp'
 
         # the paths to the header and potential files
         self.header_path = header_file
         self.potential_path = potential_file
 
-        # read the gulp header file and store it as a string
+        # read the gulp header and potential files
         with open(header_file, 'r') as gulp_header_file:
             self.header = gulp_header_file.readlines()
-
-        # read the gulp potential file and store it as a string
         with open(potential_file, 'r') as gulp_potential_file:
             self.potential = gulp_potential_file.readlines()
 
@@ -587,20 +515,20 @@ class GulpEnergyCalculator(object):
         # whether the anions and cations are polarizable in the gulp potential
         self.anions_shell, self.cations_shell = self.get_shells()
 
-        # determine which lattice parameters should be relaxed in the gulp run,
-        # and make the corresponding flags to put at the end of the line in the
-        # input file containing the 'cell' keyword
+        # determine which lattice parameters should be relaxed
+        # and make the corresponding flags for the input file
+        #
+        # relax a, b, c, alpha, beta, gamma
         if geometry.shape == 'bulk':
-            # relax a, b, c, alpha, beta, gamma
             self.lattice_flags = ' 1 1 1 1 1 1'
+        # relax a, b and gamma but not c, alpha and beta
         elif geometry.shape == 'sheet':
-            # relax a, b and gamma but not c, alpha and beta
             self.lattice_flags = ' 1 1 0 0 0 1'
+        # relax c, but not a, b, alpha, beta and gamma
         elif geometry.shape == 'wire':
-            # relax c, but not a, b, alpha, beta and gamma
             self.lattice_flags = ' 0 0 1 0 0 0'
+        # don't relax any of the lattice parameters
         elif geometry.shape == 'cluster':
-            # don't relax any of the lattice parameters
             self.lattice_flags = ' 0 0 0 0 0 0'
 
     def get_shells(self):
@@ -617,10 +545,7 @@ class GulpEnergyCalculator(object):
         for line in self.potential:
             if 'shel' in line:
                 line_parts = line.split()
-                # the element symbol is always right before the 'shel' keyword
                 shells.append(str(line_parts[line_parts.index('shel') - 1]))
-
-        # remove duplicates
         shells = list(set(shells))
 
         # determine whether the elements with shells are anions and/or cations
@@ -632,7 +557,6 @@ class GulpEnergyCalculator(object):
                 anions_shell = True
             elif element in gulp_caller._cations:
                 cations_shell = True
-
         return anions_shell, cations_shell
 
     def do_energy_calculation(self, organism, dictionary, key):
@@ -652,65 +576,48 @@ class GulpEnergyCalculator(object):
         Precondition: the garun directory and temp subdirectory exist, and we
             are currently located inside the garun directory
 
-        TODO: think about ways to make this more robust - look at Will's code
-        TODO: might be better to eventually use the custodian package for error
-            handling...
+        TODO: maybe use the custodian package for error handling
         """
 
-        # get the garun directory (where we currently are)
-        garun_dir_path = str(os.getcwd())
         # make the job directory
-        job_dir_path = garun_dir_path + '/temp/' + str(organism.id)
+        job_dir_path = str(os.getcwd()) + '/temp/' + str(organism.id)
         os.mkdir(job_dir_path)
 
         # just for testing, write out the unrelaxed structure to a poscar file
         # organism.structure.to(fmt='poscar', filename= job_dir_path +
         #    '/POSCAR.' + str(organism.id) + '_unrelaxed')
 
-        # get the structure in gulp input format
-        # TODO: might be better to make my own implementation of this so
-        # arbitrary elements can have shells (not just all anions and/or all
-        # cations)
+        # TODO put this in its own method
+        # make GULP input file
         structure_lines = self.gulp_io.structure_lines(
             organism.structure, anion_shell_flg=self.anions_shell,
             cation_shell_flg=self.cations_shell, symm_flg=False)
-
-        # split the structure lines into a list of strings, one for each line
         structure_lines = structure_lines.split('\n')
+        del structure_lines[-1]  # remove empty line that gets added
 
-        # for some reason, and empty line gets added at the end, so remove it
-        del structure_lines[-1]
-
-        # add the flags indicating which lattice parameters to relax
+        # add flags for relaxing lattice parameters and ion positions
         structure_lines[1] = structure_lines[1] + self.lattice_flags
-
-        # add the flags for relaxing the ion positions (in all 3 dimensions)
         for i in range(3, len(structure_lines)):
             structure_lines[i] = structure_lines[i] + ' 1 1 1'
 
         # add newline characters to the end of each of the structure lines
         for i in range(len(structure_lines)):
             structure_lines[i] = structure_lines[i] + '\n'
-
-        # make the gulp input from the structure, header and potential
         gulp_input = self.header + structure_lines + self.potential
 
-        # print gulp input to a file for user's reference
+        # print gulp input to a file
         gin_path = job_dir_path + '/' + str(organism.id) + '.gin'
         with open(gin_path, 'w') as gin_file:
             for line in gulp_input:
                 gin_file.write(line)
 
+        # run 'calllgulp' script as a subprocess to run GULP
         print('Starting GULP calculation on organism {} '.format(organism.id))
-
-        # run the gulp calculation by running a 'callgulp' script as a
-        # subprocess. If errors are thrown, print them to the gulp output file
         try:
             gulp_output = subprocess.check_output(['callgulp', gin_path],
                                                   stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
-            # print the output of the bad gulp calc to a file for the user's
-            # reference
+            # write the output of a bad GULP call to for the user's reference
             with open(job_dir_path + '/' + str(organism.id) + '.gout',
                       'w') as gout_file:
                 gout_file.write(e.output)
@@ -718,13 +625,13 @@ class GulpEnergyCalculator(object):
             dictionary[key] = None
             return
 
-        # print gulp output to a file for user's reference
+        # write the GULP output
         with open(job_dir_path + '/' + str(organism.id) + '.gout',
                   'w') as gout_file:
             gout_file.write(gulp_output)
 
         # check if not converged (part of this is copied from pymatgen)
-        conv_err_string = "Conditions for a minimum have not been satisfied"
+        conv_err_string = 'Conditions for a minimum have not been satisfied'
         gradient_norm = self.get_grad_norm(gulp_output)
         if conv_err_string in gulp_output and gradient_norm > 0.1:
             print('The GULP calculation on organism {} did not '
@@ -734,8 +641,7 @@ class GulpEnergyCalculator(object):
 
         # parse the relaxed structure from the gulp output
         try:
-            # TODO: will have to change this line if pymatgen fixes the gulp
-            # parser
+            # TODO: change this line if pymatgen fixes the gulp parser
             relaxed_structure = self.get_relaxed_structure(gulp_output)
         except:
             print('Error reading structure of organism {} from GULP '
@@ -752,31 +658,23 @@ class GulpEnergyCalculator(object):
             dictionary[key] = None
             return
 
-        # parse the number of atoms used by gulp from the gulp output
-        # (sometimes gulp takes a supercell)
+        # sometimes gulp takes a supercell
         num_atoms = self.get_num_atoms(gulp_output)
 
         # for convenience/testing...
-        relaxed_structure.to('poscar', job_dir_path + '/' + str(organism.id) +
-                             '.vasp')
+        # relaxed_structure.to('poscar', job_dir_path + '/' +
+        #    str(organism.id) + '.vasp')
 
-        # assign the relaxed structure and energy to the organism, and compute
-        # the epa
         organism.structure = relaxed_structure
         organism.epa = total_energy/num_atoms
         organism.total_energy = organism.epa*organism.structure.num_sites
-
-        # print out the energy per atom of the organism
         print('Setting energy of organism {} to {} eV/atom '.format(
             organism.id, organism.epa))
-
-        # store the relaxed organism in the specified dictionary with the
-        # specified key
         dictionary[key] = organism
 
     def get_grad_norm(self, gout):
         """
-        Parses the final gradient norm from the Gulp output
+        Parses the final gradient norm from the Gulp output.
 
         Args:
             gout: the Gulp output, as a string
@@ -785,13 +683,12 @@ class GulpEnergyCalculator(object):
         output_lines = gout.split('\n')
         for line in output_lines:
             if 'Final Gnorm,' in line:
-                # the gradient norm is the fourth element in the line
                 line_parts = line.split()
                 return float(line_parts[3])
 
     def get_energy(self, gout):
         """
-        Parses the final energy from the Gulp output
+        Parses the final energy from the Gulp output.
 
         Args:
             gout: the Gulp output, as a string
@@ -800,7 +697,6 @@ class GulpEnergyCalculator(object):
         output_lines = gout.split('\n')
         for line in output_lines:
             if 'Final energy' in line:
-                # the energy is the fourth element in the line
                 return float(line.split()[3])
 
     def get_num_atoms(self, gout):
@@ -814,14 +710,13 @@ class GulpEnergyCalculator(object):
         output_lines = gout.split('\n')
         for line in output_lines:
             if 'Total number atoms' in line:
-                # the number is the last element in the list
                 line_parts = line.split()
                 return int(line_parts[-1])
 
-    # this method is copied from GulpIO.get_relaxed_structure
-    # I modified it slightly to get it to work
+    # This method is copied from GulpIO.get_relaxed_structure, and I modified
+    # it slightly to get it to work.
     # TODO: if pymatgen fixes this method, then I can delete this.
-    # Alternatively, I could submit a pull request with my fix
+    # Alternatively, could submit a pull request with my fix
     def get_relaxed_structure(self, gout):
         # Find the structure lines
         structure_lines = []
@@ -864,7 +759,7 @@ class GulpEnergyCalculator(object):
         while i < no_lines:
             line = output_lines[i]
             if "Final fractional coordinates of atoms" in line or \
-                    "Final asymmetric unit coordinates" in line:
+                    "Final asymmetric unit coordinates" in line:  # Ben's add
                 # read the site coordinates in the following lines
                 i += 6
                 line = output_lines[i]

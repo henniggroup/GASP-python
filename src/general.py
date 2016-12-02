@@ -132,19 +132,22 @@ class Organism(object):
                     self.structure.lattice.matrix[0][1],
                     self.structure.lattice.matrix[0][0]))
         self.structure = rotation.apply_transformation(self.structure)
+
         # rotate about the y-axis to make a parallel to the x-axis
         rotation = RotationTransformation(
                 [0, 1, 0], (180/np.pi)*np.arctan2(
                     self.structure.lattice.matrix[0][2],
                     self.structure.lattice.matrix[0][0]))
         self.structure = rotation.apply_transformation(self.structure)
+
         # rotate about the x-axis to make b lie in the x-y plane
         rotation = RotationTransformation(
                 [1, 0, 0], 180 - (180/np.pi)*np.arctan2(
                     self.structure.lattice.matrix[1][2],
                     self.structure.lattice.matrix[1][1]))
         self.structure = rotation.apply_transformation(self.structure)
-        # rake sure they are all pointing in positive directions
+
+        # make sure they are all pointing in positive directions
         if self.structure.lattice.matrix[0][0] < 0:
             # rotate about y-axis to make a positive
             rotation = RotationTransformation([0, 1, 0], 180)
@@ -186,12 +189,14 @@ class Organism(object):
                     self.structure.lattice.matrix[2][1],
                     self.structure.lattice.matrix[2][0]))
         self.structure = rotation.apply_transformation(self.structure)
+
         # rotate about the y-axis to make c parallel to the z-axis
         rotation = RotationTransformation(
             [0, 1, 0], 180 - (180/np.pi)*np.arctan2(
                 self.structure.lattice.matrix[2][0],
                 self.structure.lattice.matrix[2][2]))
         self.structure = rotation.apply_transformation(self.structure)
+
         # make sure c is pointing along the positive z-axis
         if self.structure.lattice.matrix[2][2] < 0:
             # rotate 180 degrees about the x-axis
@@ -208,8 +213,6 @@ class Organism(object):
 
         # get the bounding box of the atoms, in fractional coordinates
         bounding_box = self.get_bounding_box(cart_coords=False)
-
-        # the translation vector, in fractional coordinates
         translation_vector = []
 
         # determine the needed shift along each lattice vector
@@ -235,29 +238,28 @@ class Organism(object):
         the standard reduction algorithm only changes the a and b lattice
         vectors.
 
-        TODO: pymatgen's Niggli cell reduction algorithm sometimes moves the
-        atoms' relative positions a little (I've seen up to 0.5 A...).
+        Note: pymatgen's Niggli cell reduction algorithm sometimes moves the
+            atoms' relative positions a little (I've seen up to 0.5 A...).
         """
 
-        # rotate into principal directions
         self.rotate_to_principal_directions()
-        # get the species and their Cartesian coordinates
         species = self.structure.species
         cartesian_coords = self.structure.cart_coords
+
         # get the non-zero components of the a and b lattice vectors, and the
         # vertical component of the c lattice vector
         ax = self.structure.lattice.matrix[0][0]
         bx = self.structure.lattice.matrix[1][0]
         by = self.structure.lattice.matrix[1][1]
         cz = self.structure.lattice.matrix[2][2]
+
         # make a new lattice with a ton of vertical vacuum (add 100 Angstroms)
         padded_lattice = Lattice([[ax, 0.0, 0.0], [bx, by, 0.0],
                                   [0.0, 0.0, cz + 100]])
-        # make a new structure with the padded lattice and Cartesian coords
         padded_structure = Structure(padded_lattice, species, cartesian_coords,
                                      coords_are_cartesian=True)
-        # do cell reduction on the padded structure
         reduced_structure = padded_structure.get_reduced_structure()
+
         # unpad the reduced structure
         rspecies = reduced_structure.species
         rcartesian_coords = reduced_structure.cart_coords
@@ -267,14 +269,13 @@ class Organism(object):
         rby = reduced_structure.lattice.matrix[1][1]
         unpadded_lattice = Lattice([[rax, ray, 0.0], [rbx, rby, 0.0],
                                     [0.0, 0.0, cz]])
-        # set the organism's structure to the unpadded one
         self.structure = Structure(unpadded_lattice, rspecies,
                                    rcartesian_coords,
                                    coords_are_cartesian=True)
-        # make sure the atoms are located inside the cell
-        self.translate_atoms_into_cell()
+
         # slightly shift the atoms vertically so they lie in the (vertical)
         # center of the cell
+        self.translate_atoms_into_cell()
         frac_bounds = self.get_bounding_box(cart_coords=False)
         z_center = frac_bounds[2][0] + (frac_bounds[2][1] -
                                         frac_bounds[2][0])/2
@@ -291,15 +292,13 @@ class Organism(object):
         Args:
             frac_coords: whether to give the result in Cartesian or fractional
                 coordinates
-
-        TODO: maybe there's a cleaner way to do this...
         """
 
-        # get coordinates of the atoms in the structure
         if cart_coords:
             coords = self.structure.cart_coords
         else:
             coords = self.structure.frac_coords
+
         # find the largest and smallest coordinates in each dimension
         minx = np.inf
         maxx = -np.inf
@@ -320,8 +319,7 @@ class Organism(object):
                 minz = coord[2]
             if coord[2] > maxz:
                 maxz = coord[2]
-        bounds = [[minx, maxx], [miny, maxy], [minz, maxz]]
-        return bounds
+        return [[minx, maxx], [miny, maxy], [minz, maxz]]
 
 
 class InitialPopulation():
@@ -350,18 +348,13 @@ class InitialPopulation():
             organism_to_add: the organism to add to the pool
         """
 
-        # sort the sites of the organism to add
         organism_to_add.structure.sort()
-
-        # write the organism we're adding to a poscar file
         organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' +
                                      str(organism_to_add.id))
-
         print('Adding organism {} to the initial population'.format(
             organism_to_add.id))
 
-        # print out the composition and total energy (needed for making phase
-        # diagram plots and tracking number of atoms in cell)
+        # for making phase diagram plots and tracking number of atoms in cell
         print('Organism {} has composition {} and total energy {}'.format(
             organism_to_add.id,
             organism_to_add.composition.formula.replace(' ', ''),
@@ -375,38 +368,27 @@ class InitialPopulation():
 
         Precondition: the old_org is a current member of the initial population
 
-        TODO: instead of finding the old organism in the initial population by
-        searching for the right id, it might better to eventually implement
-        a __eq__(self, other) method in the Organism class to determine when
-        two organisms are the same...
-
         Args:
             old_org: the organism in the initial population to replace
             new_org: the new organism to replace the old one
         """
 
-        # sort the sites of the new organism
         new_org.structure.sort()
-
-        # write the new organism to a poscar file
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' +
                              str(new_org.id))
-
         print('Replacing organism {} with organism {} in the initial '
               'population'.format(old_org.id, new_org.id))
-        # print out the composition and total energy (needed for making phase
-        # diagram plots and tracking number of atoms in cell)
+
+        # for making phase diagram plots and tracking number of atoms in cell
         print('Organism {} has composition {} and total energy {}'.format(
             new_org.id, new_org.composition.formula.replace(' ', ''),
             new_org.total_energy))
 
-        # find the organism in self.initial_population with the same id as
-        # old_org
+        # remove the redundant organism and add the new one
         for org in self.initial_population:
             if org.id == old_org.id:
                 self.initial_population.remove(org)
                 org.is_active = False
-        # add the new organism to the initial population
         self.initial_population.append(new_org)
         new_org.is_active = True
 
@@ -430,10 +412,8 @@ class InitialPopulation():
         population.
         """
 
-        # sort the organisms in order of increasing epa
         sorted_list = copy.deepcopy(self.initial_population)
         sorted_list.sort(key=lambda x: x.epa, reverse=False)
-        # print out the best one
         print('Organism {} is the best and has value {} eV/atom'.format(
             sorted_list[0].id, sorted_list[0].epa))
 
@@ -449,7 +429,7 @@ class InitialPopulation():
         # endpoints of the composition space
         if self.has_endpoints(composition_space) and \
                 self.has_non_endpoint(composition_space):
-            # TODO: below here is copied from pool.print_convex_hull_area
+
             # compute and print the area or volume of the convex hull
             pdentries = []
             for organism in self.initial_population:
@@ -457,9 +437,9 @@ class InitialPopulation():
                                          organism.total_energy))
             compound_pd = CompoundPhaseDiagram(pdentries,
                                                composition_space.endpoints)
+
             # get the data for the convex hull
             qhull_data = compound_pd.qhull_data
-
             # for some reason, the last point is positive, so remove it
             hull_data = np.delete(qhull_data, -1, 0)
 
@@ -471,7 +451,6 @@ class InitialPopulation():
                 convex_hull = ConvexHull(hull_data)
             except:
                 return
-            # compute the volume or area
             if len(composition_space.endpoints) == 2:
                 print('Area of the convex hull: {} '.format(convex_hull.area))
             else:
@@ -496,11 +475,8 @@ class InitialPopulation():
                 if endpoint.almost_equals(
                         organism.composition.reduced_composition):
                     has_endpoint = True
-            # if one of the endpoints is missing from the initial population,
-            # then the answer is False
             if not has_endpoint:
                 return False
-        # if we're here, then the initial population has all the endpoints
         return True
 
     def has_non_endpoint(self, composition_space):
@@ -521,12 +497,8 @@ class InitialPopulation():
                 if endpoint.almost_equals(
                         organism.composition.reduced_composition):
                     not_endpoint = False
-            # if this organism is not equal to any of the endpoints, then the
-            # answer is True
             if not_endpoint:
                 return True
-        # if we made it this far, then there is not an organism that is not at
-        # one of the endpoints
         return False
 
 
@@ -588,11 +560,11 @@ class Pool(object):
             else:
                 self.num_promoted = pool_params['num_promoted']
 
-        # list to hold the best few organisms in the pool
+        # the best few organisms in the pool
         self.promotion_set = []
-        # deque containing the rest of the organisms in the pool
+        # the rest of the organisms in the pool
         self.queue = deque()
-        # list to hold the parameters for the selection distribution
+        # the parameters for the selection distribution
         self.selection = []
         # the number of organisms added to the pool (excluding the initial
         # population)
@@ -615,18 +587,12 @@ class Pool(object):
         """
 
         print('Populating the pool with the initial population...')
-
-        # get the list of organisms in the initial population
         organisms_list = initial_population.initial_population
 
         # populate the promotion set and queue
         if composition_space.objective_function == 'epa':
-            # set the values of the initial population organisms to their epa's
             for organism in organisms_list:
                 organism.value = organism.epa
-
-            # sort the list of initial population organisms in order of
-            # increasing value
             organisms_list.sort(key=lambda x: x.value, reverse=False)
 
             # assign them to either the promotion set or the queue
@@ -637,9 +603,6 @@ class Pool(object):
                     self.queue.appendleft(organisms_list[i])
 
         elif composition_space.objective_function == 'pd':
-            # Set the values of the initial population organisms to their
-            # distances from the convex hull, and get the resulting compound
-            # phase diagram object.
             try:
                 self.compute_pd_values(organisms_list, composition_space)
             except:
@@ -660,17 +623,12 @@ class Pool(object):
                 else:
                     self.queue.appendleft(organism)
 
-        # compute the fitnesses of the organisms in the initial population
+        # compute the fitnesses and selection probabilities of the organisms in
+        # the initial population
         self.compute_fitnesses()
-
-        # compute the selection probabilities of all the organisms in the
-        # initial population
         self.compute_selection_probs()
 
-        # sort the organisms in order of decreasing fitness
         organisms_list.sort(key=lambda x: x.fitness, reverse=True)
-
-        # print out some info on the organisms in the initial population
         print('Summary of the initial population: ')
         for organism in organisms_list:
             print('Organism {} has value {} and fitness {} and selection '
@@ -699,55 +657,34 @@ class Pool(object):
         """
 
         print('Adding organism {} to the pool '.format(organism_to_add.id))
-        # print out the composition and total energy (needed for making phase
-        # diagram plots and tracking number of atoms in cell)
+
+        # for making phase diagram plots and tracking number of atoms in cell
         print('Organism {} has composition {} and total energy {} '.format(
             organism_to_add.id,
             organism_to_add.composition.formula.replace(' ', ''),
             organism_to_add.total_energy))
 
-        # increment the number of adds to the pool
         self.num_adds = self.num_adds + 1
-
-        # sort the sites of the organism to add
         organism_to_add.structure.sort()
-
-        # write the organism we're adding to a poscar file
         organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' +
                                      str(organism_to_add.id))
-
-        # the organism that we're adding to the pool is now active
         organism_to_add.is_active = True
 
         if composition_space.objective_function == 'epa':
-            # set the value of the new organism to its epa
             organism_to_add.value = organism_to_add.epa
-            # check if the new organism's value is better than the worst one
-            # in the promotion set
             worst_organism = self.get_worst_in_promotion_set()
             if organism_to_add.value < worst_organism.value:
-                # add the new organism to the promotion set
                 self.promotion_set.append(organism_to_add)
-                # move the worst organism from the promotion set to the back
-                # (left end) of the queue
                 self.promotion_set.remove(worst_organism)
                 self.queue.appendleft(worst_organism)
             else:
-                # append the new organism to the back (left end) of the queue
                 self.queue.appendleft(organism_to_add)
 
         elif composition_space.objective_function == 'pd':
-            # set the value of the new organism and update the values of all
-            # the organisms in the pool
             organisms_list = self.to_list()
             organisms_list.append(organism_to_add)
             self.compute_pd_values(organisms_list, composition_space)
-
-            # check if any of the organisms in the promotion set are no longer
-            # on the convex hull
             self.check_promotion_set_pd()
-
-            # add the new organism to the promotion set or the queue
             if organism_to_add.value == 0.0:
                 self.promotion_set.append(organism_to_add)
             else:
@@ -769,30 +706,32 @@ class Pool(object):
         """
         For pd searches, checks whether promotion set and queue memberships are
         correct (all organisms with value 0 in promotion set, all organisms
-        with value > 0 in queue), and moves organisms from promotion set to the
-        back (left end) of the queue if needed.
+        with value > 0 in queue), and moves organisms from the promotion set to
+        the queue (and vice versa) if needed.
 
         Precondition: a pd search is being done, and all organisms in the pool
             have up-to-date values (set by calling compute_pd_values)
         """
 
-        # get a list of organisms in the promotion set that are no longer on
-        # the convex hull
+        # get organisms in the promotion set that are no longer on the convex
+        # hull
         organisms_to_demote = []
         for organism in self.promotion_set:
-            if organism.value > 0.0:
+            if organism.value > 0.000000001:
                 organisms_to_demote.append(organism)
-        # move all the organism that are no longer on the convex hull from the
+
+        # move all organism that are no longer on the convex hull from the
         # promotion set to the queue
         for organism_to_demote in organisms_to_demote:
             self.promotion_set.remove(organism_to_demote)
             self.queue.appendleft(organism_to_demote)
 
-        # get a list of organisms in the queue that are now on the convex hull
+        # get organisms in the queue that are now on the convex hull
         organisms_to_promote = []
         for organism in self.queue:
             if organism.value < 0.000000001:
                 organisms_to_promote.append(organism)
+
         # move all the organisms on the convex hull to the promotion set
         for organism_to_promote in organisms_to_promote:
             self.queue.remove(organism_to_promote)
@@ -813,21 +752,17 @@ class Pool(object):
 
         print('Replacing organism {} with organism {} in the pool '.format(
             old_org.id, new_org.id))
-        # print out the composition and total energy (needed for making phase
-        # diagram plots and tracking number of atoms in cell)
+
+        # for making phase diagram plots and tracking number of atoms in cell
         print('Organism {} has composition {} and total energy {} '.format(
             new_org.id, new_org.composition.formula.replace(' ', ''),
             new_org.total_energy))
 
-        # sort the sites of the new organism
         new_org.structure.sort()
-
-        # write the new organism to a poscar file
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' +
                              str(new_org.id))
 
-        # compute the value of the new organism, and also of all the organisms
-        # in the pool in pd search
+        # set new objective function value
         if composition_space.objective_function == 'epa':
             new_org.value = new_org.epa
         elif composition_space.objective_function == 'pd':
@@ -835,31 +770,25 @@ class Pool(object):
             organisms_list.append(new_org)
             self.compute_pd_values(organisms_list, composition_space)
 
+        # add new organism and remove old one
         if old_org in self.promotion_set:
             self.promotion_set.remove(old_org)
             self.promotion_set.append(new_org)
         elif old_org in self.queue:
-            # cast the queue to a list to do the replacement
             queue_list = list(self.queue)
-            # insert the new organism next to the old organism in the list
             queue_list.insert(queue_list.index(old_org), new_org)
-            # remove the old organism from the list
             queue_list.remove(old_org)
-            # cast it back to a deque
             self.queue = deque(queue_list)
-
-        # update is_active flags on both organisms
         old_org.is_active = False
         new_org.is_active = True
 
-        # for pd searches, make sure promotion set and queue memberships are
-        # correct in light of the new organism
+        # for pd searches, check promotion set and queue memberships
         if composition_space.objective_function == 'pd':
             self.check_promotion_set_pd()
 
     def compute_pd_values(self, organisms_list, composition_space):
         """
-        Constructs a convex hull from the provided organisms, and sets the
+        Constructs a convex hull from the provided organisms and sets the
         organisms' values to their distances from the convex hull.
 
         Returns the compound phase diagram object computed from the organisms
@@ -906,7 +835,6 @@ class Pool(object):
         for organism in organisms_list:
             organism.value = values[organism.id]
 
-        # return the compound phase diagram
         return compound_pd
 
     def compute_fitnesses(self):
@@ -919,9 +847,8 @@ class Pool(object):
         Precondition: the organisms in the pool all have up-to-date values
         """
 
-        # get the best organisms to act as parents
+        # get the best organisms that can be parents
         if self.selection.num_parents < self.size:
-            # get the best selection.num_parents + 1 organisms
             best_organisms = self.get_n_best_organisms(
                 self.selection.num_parents + 1)
         else:
@@ -936,7 +863,7 @@ class Pool(object):
             organism.fitness = (organism.value - worst_value)/(best_value -
                                                                worst_value)
 
-        # assign organisms not in this subset fitnesses of zero
+        # assign fitnesses of zero to organisms not in this subset
         for organism in self.to_list():
             if organism not in best_organisms:
                 organism.fitness = 0.0
@@ -1007,13 +934,8 @@ class Pool(object):
             n: the number of best organisms to get
         """
 
-        # get a list of all the organisms in the pool
         pool_list = self.to_list()
-
-        # sort it in order of decreasing value
         pool_list.sort(key=lambda x: x.value, reverse=True)
-
-        # get a sublist consisting of the last n elements of pool_list
         return pool_list[len(pool_list) - n:]
 
     def select_organisms(self, n, random):
@@ -1032,15 +954,12 @@ class Pool(object):
             selection probabilities.
         """
 
-        # list to hold the selected organisms
         selected_orgs = []
         pool_list = self.to_list()
 
         # keep going until we've selected enough
         while True:
             rand = random.random()
-            # find the organism in the pool with the corresponding selection
-            # probability
             for organism in pool_list:
                 if rand >= organism.selection_loc and rand < (
                         organism.selection_loc + organism.selection_prob):
@@ -1059,13 +978,8 @@ class Pool(object):
             composition_space: the CompositionSpace object
         """
 
-        # get a list of all the organisms in the pool
         pool_list = self.to_list()
-
-        # sort it in order of decreasing fitness
         pool_list.sort(key=lambda x: x.value, reverse=False)
-
-        # print out the value and fitness of each organism
         print('Summary of the pool:')
         for organism in pool_list:
             print('Organism {} has value {} and fitness {} and selection '
@@ -1092,13 +1006,8 @@ class Pool(object):
         Prints out the id and value of the best organism in the pool
         """
 
-        # get a list of the organisms in the pool
         pool_list = self.to_list()
-
-        # sort it in order of decreasing fitness
         pool_list.sort(key=lambda x: x.fitness, reverse=True)
-
-        # print out the best one
         print('Organism {} is the best and has value {} eV/atom '.format(
             pool_list[0].id, pool_list[0].value))
 
@@ -1121,9 +1030,12 @@ class Pool(object):
         qhull_data = compound_pd.qhull_data
         # for some reason, the last point is positive, so remove it
         hull_data = np.delete(qhull_data, -1, 0)
+
         # make a ConvexHull object from the hull data
-        convex_hull = ConvexHull(hull_data)
-        # compute the volume or area
+        try:
+            convex_hull = ConvexHull(hull_data)
+        except:
+            return
         if len(composition_space.endpoints) == 2:
             print('Area of the convex hull: {} '.format(convex_hull.area))
         else:
@@ -1173,17 +1085,13 @@ class OffspringGenerator(object):
             while num_tries < max_num_tries:
                 offspring = variation.do_variation(pool, random, geometry,
                                                    id_generator)
-                offspring = developer.develop(offspring, composition_space,
-                                              constraints, geometry, pool)
-                # don't need to worry about replacement, since we're only
-                # dealing with unrelaxed organisms here
-                if (offspring is not None) and (
-                        redundancy_guard.check_redundancy(
+                if developer.develop(
+                        offspring, composition_space, constraints, geometry,
+                        pool) and (redundancy_guard.check_redundancy(
                             offspring, whole_pop) is None):
                     return offspring
                 else:
                     num_tries = num_tries + 1
-
             tried_variations.append(variation)
 
             # if we've tried all the variations without success, then cycle
@@ -1288,7 +1196,7 @@ class CompositionSpace(object):
 
         self.endpoints = endpoints
 
-        # for now, let's have the objective live here
+        # objective function lives here
         self.objective_function = self.infer_objective_function()
 
     def infer_objective_function(self):
@@ -1299,18 +1207,13 @@ class CompositionSpace(object):
         Returns either "epa" or "pd".
         """
 
-        # if only one composition, then it must be an epa search
         if len(self.endpoints) == 1:
             return "epa"
-        # otherwise, compare all the compositions and see if any of them are
-        # different
         else:
             for point in self.endpoints:
                 for next_point in self.endpoints:
                     if not point.almost_equals(next_point, 0.0, 0.0):
                         return "pd"
-        # should only get here if there are multiple identical compositions in
-        # end_points (which would be weird)
         return "epa"
 
     def get_all_elements(self):
@@ -1325,7 +1228,7 @@ class CompositionSpace(object):
         for point in self.endpoints:
             elements = elements + point.elements
 
-        # remove duplicates from the list of elements
+        # remove duplicates
         elements = list(set(elements))
         return elements
 
@@ -1338,15 +1241,10 @@ class CompositionSpace(object):
         Does not include self-pairs (e.g., "Cu Cu")
         """
 
-        # get all the Element objects
         elements = self.get_all_elements()
-        # if only one type of element, then no pairs, so return an empty list
         if len(elements) == 1:
             return []
-
-        # list to hold the pairs of symbols
         pairs = []
-        # get all the possible distinct pairs
         for i in range(0, len(elements) - 1):
             for j in range(i + 1, len(elements)):
                 pairs.append(str(elements[i].symbol + " " +
@@ -1365,15 +1263,11 @@ class CompositionSpace(object):
         Does not include self-pairs (e.g., "Cu Cu")
         """
 
-        # start with the list of all possible pairs
         all_pairs = self.get_all_pairs()
-
-        # get the subset of pairs that are allowed
         allowed_pairs = []
         for pair in all_pairs:
             element1 = Element(pair.split()[0])
             element2 = Element(pair.split()[1])
-            # compute the electronegativity difference
             diff = abs(element1.X - element2.X)
             if diff <= 1.1:
                 allowed_pairs.append(pair)
@@ -1409,7 +1303,6 @@ class StoppingCriteria(object):
 
         self.default_value_achieved = None
         self.default_found_structure = None
-
         # whether or not the stopping criteria are satisfied
         self.are_satisfied = False
         # to keep track of how many energy calculations have been done
@@ -1420,15 +1313,12 @@ class StoppingCriteria(object):
             self.num_energy_calcs = self.default_num_energy_calcs
             self.value_achieved = self.default_value_achieved
             self.found_structure = self.default_found_structure
-        # check each flag to see if it's been included, and if so, whether it
-        # has been set to default or left blank
+        # check each flag to see if it's been included
         else:
             # value achieved
             if 'value_achieved' in stopping_parameters:
                 if stopping_parameters['value_achieved'] in (None, 'default'):
                     self.value_achieved = self.default_value_achieved
-                # checking objective function values only makes sense for
-                # fixed-composition searches
                 elif composition_space.objective_function == 'epa':
                     self.value_achieved = stopping_parameters['value_achieved']
             else:
@@ -1439,7 +1329,6 @@ class StoppingCriteria(object):
                 if stopping_parameters['found_structure'] in (None, 'default'):
                     self.found_structure = self.default_found_structure
                 else:
-                    # read the structure from the file
                     self.path_to_structure_file = stopping_parameters[
                         'found_structure']
                     self.found_structure = Structure.from_file(
@@ -1447,11 +1336,10 @@ class StoppingCriteria(object):
             else:
                 self.found_structure = self.default_found_structure
 
-            # num energy calcs
+            # number energy calculations
             if 'num_energy_calcs' in stopping_parameters:
                 if stopping_parameters['num_energy_calcs'] in (None,
                                                                'default'):
-                    # only use default if other two methods haven't been given
                     if self.value_achieved is None and \
                             self.found_structure is None:
                         self.num_energy_calcs = self.default_num_energy_calcs
@@ -1460,7 +1348,6 @@ class StoppingCriteria(object):
                 else:
                     self.num_energy_calcs = stopping_parameters[
                         'num_energy_calcs']
-            # only use default if other two methods haven't been specified
             elif self.value_achieved is None and self.found_structure is None:
                 self.num_energy_calcs = self.default_num_energy_calcs
             else:

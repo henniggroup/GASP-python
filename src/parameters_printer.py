@@ -118,8 +118,6 @@ def print_parameters(objects_dict):
         # write the variations info
         parameters_file.write('Variations: \n')
         for variation in variations:
-            # don't print out info for variations with zero fraction since
-            # they aren't being used
             if variation.fraction == 0:
                 pass
             else:
@@ -182,14 +180,14 @@ def print_parameters(objects_dict):
                         parameters_file.write('            - ' + pair + '\n')
         parameters_file.write('\n')
 
-        # write the development
+        # write the development info
         parameters_file.write('Development: \n')
         parameters_file.write('    niggli: ' + str(developer.niggli) + '\n')
         parameters_file.write('    scale_density: ' +
                               str(developer.scale_density) + '\n')
         parameters_file.write('\n')
 
-        # write the constraints
+        # write the constraints info
         parameters_file.write('Constraints: \n')
         parameters_file.write('    min_num_atoms: ' +
                               str(constraints.min_num_atoms) + '\n')
@@ -211,7 +209,7 @@ def print_parameters(objects_dict):
                                   '\n')
         parameters_file.write('\n')
 
-        # write the redundancy guard
+        # write the redundancy guard info
         parameters_file.write('RedundancyGuard: \n')
         parameters_file.write('    lattice_length_tol: ' +
                               str(redundancy_guard.lattice_length_tol) + '\n')
@@ -227,7 +225,7 @@ def print_parameters(objects_dict):
                               str(redundancy_guard.epa_diff) + '\n')
         parameters_file.write('\n')
 
-        # write the geometry
+        # write the geometry info
         parameters_file.write('Geometry: \n')
         parameters_file.write('    shape: ' + geometry.shape + '\n')
         parameters_file.write('    max_size: ' + str(geometry.max_size) + '\n')
