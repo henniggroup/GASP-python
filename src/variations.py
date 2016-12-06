@@ -43,7 +43,8 @@ class Mating(object):
 
     def __init__(self, mating_params):
         """
-        Creates a Mating operator
+        Makes a Mating operator, and sets default parameter values if
+        necessary.
 
         Args:
             mating_params: The parameters for doing the mating operation, as a
@@ -131,16 +132,17 @@ class Mating(object):
         """
         Performs the mating operation.
 
-        Returns the resulting offspring as an Organism.
+        Returns the resulting offspring Organism.
 
         Args:
             pool: the Pool of Organisms
 
-            random: Python's built in PRNG
+            random: copy of Python's built in PRNG
 
-            geometry: the Geometry object
+            geometry: the Geometry of the search
 
-            id_generator: the IDGenerator
+            id_generator: the IDGenerator used to assign id numbers to all
+                organisms
 
         Description:
 
@@ -148,7 +150,7 @@ class Mating(object):
             parent organisms.
 
                 1. Selects two organisms from the pool to act as parents, and
-                    makes copies of them.
+                    makes copies of their structures.
 
                 2. Optionally doubles one of the parents. This occurs with
                     probability self.doubling_prob, and if it happens, the
@@ -168,9 +170,9 @@ class Mating(object):
                 6. In each parent, optionally shift the atoms (in fractional
                     space, with probability self.shift_prob) by an amount drawn
                     from a uniform distribution along the direction of the
-                    lattice vector to cut. For non-bulk geometries, shift only
-                    occurs if the lattice vector to cut is along a periodic
-                    direction.
+                    lattice vector to cut. For non-bulk geometries, the shift
+                    only occurs if the lattice vector to cut is along a
+                    periodic direction.
 
                 7. Copy the sites from the first parent organism with
                     fractional coordinate less than the randomly chosen cut
@@ -186,28 +188,28 @@ class Mating(object):
 
         # select two parent organisms from the pool and make copies of them
         parent_orgs = pool.select_organisms(2, random)
-        parent_1 = copy.deepcopy(parent_orgs[0])
-        parent_2 = copy.deepcopy(parent_orgs[1])
+        structure_1 = copy.deepcopy(parent_orgs[0].structure)
+        structure_2 = copy.deepcopy(parent_orgs[1].structure)
 
         # optionally double one of the parents
         if random.random() < self.doubling_prob:
-            vol_1 = parent_1.structure.lattice.volume
-            vol_2 = parent_2.structure.lattice.volume
+            vol_1 = structure_1.lattice.volume
+            vol_2 = structure_2.lattice.volume
             if vol_1 < vol_2:
-                self.double_parent(parent_1, geometry, random)
+                self.double_parent(structure_1, geometry, random)
             else:
-                self.double_parent(parent_2, geometry, random)
+                self.double_parent(structure_2, geometry, random)
 
         # grow the smaller parent if specified
         if self.grow_parents:
-            vol_1 = parent_1.structure.lattice.volume
-            vol_2 = parent_2.structure.lattice.volume
+            vol_1 = structure_1.lattice.volume
+            vol_2 = structure_2.lattice.volume
             if vol_1 < vol_2:
                 volume_ratio = vol_2/vol_1
-                parent_to_grow = parent_1
+                parent_to_grow = structure_1
             else:
                 volume_ratio = vol_1/vol_2
-                parent_to_grow = parent_2
+                parent_to_grow = structure_2
             num_doubles = self.get_num_doubles(volume_ratio)
             for _ in range(num_doubles):
                 self.double_parent(parent_to_grow, geometry, random)
@@ -234,18 +236,18 @@ class Mating(object):
 
             # possibly shift the atoms in each parent along the cut vector
             if random.random() < self.shift_prob:
-                shifted_parent_1 = self.do_random_shift(
-                    parent_1, cut_vector_index, geometry, random)
+                self.do_random_shift(structure_1, cut_vector_index, geometry,
+                                     random)
             if random.random() < self.shift_prob:
-                shifted_parent_2 = self.do_random_shift(
-                    parent_2, cut_vector_index, geometry, random)
+                self.do_random_shift(structure_2, cut_vector_index, geometry,
+                                     random)
 
             # get the site contributions of each parent
-            for site in shifted_parent_1.structure.sites:
+            for site in structure_1.sites:
                 if site.frac_coords[cut_vector_index] < cut_location:
                     species_from_parent_1.append(site.species_and_occu)
                     frac_coords_from_parent_1.append(site.frac_coords)
-            for site in shifted_parent_2.structure.sites:
+            for site in structure_2.sites:
                 if site.frac_coords[cut_vector_index] > cut_location:
                     species_from_parent_2.append(site.species_and_occu)
                     frac_coords_from_parent_2.append(site.frac_coords)
@@ -256,12 +258,10 @@ class Mating(object):
             frac_coords_from_parent_2
 
         # compute the lattice vectors of the offspring
-        offspring_lengths = 0.5*(np.array(
-            shifted_parent_1.structure.lattice.abc) + np.array(
-                shifted_parent_2.structure.lattice.abc))
-        offspring_angles = 0.5*(np.array(
-            shifted_parent_1.structure.lattice.angles) + np.array(
-                shifted_parent_2.structure.lattice.angles))
+        offspring_lengths = 0.5*(np.array(structure_1.lattice.abc) +
+                                 np.array(structure_2.lattice.abc))
+        offspring_angles = 0.5*(np.array(structure_1.lattice.angles) +
+                                np.array(structure_2.lattice.angles))
         offspring_lattice = Lattice.from_lengths_and_angles(offspring_lengths,
                                                             offspring_angles)
 
@@ -305,76 +305,70 @@ class Mating(object):
         else:
             return 7
 
-    def double_parent(self, organism, geometry, random):
+    def double_parent(self, structure, geometry, random):
         """
-        Takes a supercell of the organism. For bulk geometries, the supercell
-        is taken in the direction of the organism's shortest lattice vector.
-        For non-bulk geometries, the supercell is taken in the direction of a
+        Modifies a structure by taking a supercell. For bulk geometries, the
+        supercell is taken in the direction of the shortest lattice vector. For
+        non-bulk geometries, the supercell is taken in the direction of a
         randomly chosen lattice vector.
 
-        Modifies the structure of the organism.
-
         Args:
-            organism: the Organism to take the supercell of
+            structure: the Structure to take the supercell of
 
-            geometry: a Geometry object
+            geometry: the Geometry of the search
+
+            random: a copy of Python's PRNG
         """
 
         if geometry.shape == 'bulk':
-            lattice_lengths = organism.structure.lattice.abc
+            lattice_lengths = structure.lattice.abc
             smallest_vector = min(lattice_lengths)
             doubling_index = lattice_lengths.index(smallest_vector)
         else:
             doubling_index = random.choice([0, 1, 2])
         scaling_factors = [1, 1, 1]
         scaling_factors[doubling_index] = 2
-        organism.structure.make_supercell(scaling_factors)
+        structure.make_supercell(scaling_factors)
 
-    def do_random_shift(self, organism, lattice_vector_index, geometry,
+    def do_random_shift(self, structure, lattice_vector_index, geometry,
                         random):
         """
-        Makes a copy of the organism, and shifts all the atoms in the copy by a
-        random amount (drawn from uniform distribution) along the lattice
-        vector specified by the given index. After shifting the atoms by the
-        random amount along the specified lattice vector, checks if any atoms
-        lie outside the cell. If so, they are replaced with their periodic
-        images inside the cell.
+        Modifies a structure by shifting the atoms along one of the lattice
+        vectors. Makes sure all the atoms lie inside the cell after the shift
+        by replacing them with their periodic images if necessary.
 
         Note: this method checks the geometry, and will not do the shift if the
         specified lattice vector is not in a periodic direction because that
-        could destroy some of the local structure of a non-bulk structure.
+        could destroy some of the local structure.
 
         Args:
-            organism: the Organism whose Structure to change by shifting the
-                atoms
+            structure: the Structure to shift
 
             lattice_vector_index: the index (0, 1 or 2) of the lattice vector
                 along which to shift the atoms
 
-            geometry: the Geometry object
+            geometry: the Geometry of the search
 
-            random: Python's built in PRNG
+            random: copy of Python's built in PRNG
         """
 
         if geometry.shape == 'cluster':
-            return organism
+            pass
         elif geometry.shape == 'wire' and lattice_vector_index != 2:
-            return organism
+            pass
         elif geometry.shape == 'sheet' and lattice_vector_index == 2:
-            return organism
+            pass
         else:
             # do the shift
-            shifted_org = copy.deepcopy(organism)
-            shift_vector = random.random(
-                )*shifted_org.structure.lattice.matrix[lattice_vector_index]
-            site_indices = [i for i in range(len(shifted_org.structure.sites))]
-            shifted_org.structure.translate_sites(site_indices, shift_vector,
-                                                  frac_coords=False,
-                                                  to_unit_cell=False)
+            shift_vector = random.random()*structure.lattice.matrix[
+                lattice_vector_index]
+            site_indices = [i for i in range(len(structure.sites))]
+            structure.translate_sites(site_indices, shift_vector,
+                                      frac_coords=False, to_unit_cell=False)
 
             # translate the sites back into the cell if needed
             translation_vectors = {}
-            for site in shifted_org.structure.sites:
+            for site in structure.sites:
                 translation_vector = []
                 for coord in site.frac_coords:
                     if coord < 0.0:
@@ -384,14 +378,10 @@ class Mating(object):
                     else:
                         translation_vector.append(0.0)
                 translation_vectors[
-                    shifted_org.structure.sites.index(
-                        site)] = translation_vector
+                    structure.sites.index(site)] = translation_vector
             for key in translation_vectors:
-                shifted_org.structure.translate_sites(key,
-                                                      translation_vectors[key],
-                                                      frac_coords=True,
-                                                      to_unit_cell=False)
-            return shifted_org
+                structure.translate_sites(key, translation_vectors[key],
+                                          frac_coords=True, to_unit_cell=False)
 
     def merge_sites(self, structure):
         """
@@ -462,7 +452,8 @@ class StructureMut(object):
 
     def __init__(self, structure_mut_params):
         """
-        Creates a Mutation operator.
+        Makes a Mutation operator, and sets default parameter values if
+        necessary.
 
         Args:
             structure_mut_params: The parameters for doing the mutation
@@ -540,18 +531,19 @@ class StructureMut(object):
 
     def do_variation(self, pool, random, geometry, id_generator):
         """
-        Performs the structural mutation operation.
+        Performs the structure mutation operation.
 
         Returns the resulting offspring as an Organism.
 
          Args:
             pool: the Pool of Organisms
 
-            random: Python's built in PRNG
+            random: a copy of Python's built in PRNG
 
-            geometry: the Geometry object
+            geometry: the Geometry of the search
 
-            id_generator: the IDGenerator
+            id_generator: the IDGenerator used to assign id numbers to all
+                organisms
 
         Description:
 
@@ -559,7 +551,7 @@ class StructureMut(object):
             and lattice vectors of the parent structure.
 
                 1. Selects a parent organism from the pool and makes a copy of
-                    it
+                    its structure.
 
                 2. Perturbs the atomic coordinates of each site with
                     probability self.frac_atoms_perturbed. The perturbation of
@@ -569,22 +561,51 @@ class StructureMut(object):
                     atomic coordinate perturbation is constrained to not exceed
                     self.max_atomic_coord_perturbation.
 
-                3. The lattice vectors are perturbed by taking the product of
-                    each lattice vector with a strain matrix. The strain matrix
-                    is defined as
+                3. Perturbs the lattice vectors by taking the product of each
+                    lattice vector with a strain matrix. The strain matrix is
 
                         I + E
 
                     where I is the 3x3 identity matrix and E is a 3x3
                     perturbation matrix whose elements are distinct and drawn
                     from a Gaussian with mean zero and standard deviation
-                    self.sigma_strain_matrix_element and are constrained to lie
-                    between -1 and 1
+                    self.sigma_strain_matrix_element and constrained to lie
+                    between -1 and 1.
         """
 
         # select a parent organism from the pool and make a copy of it
         parent_org = pool.select_organisms(1, random)
         structure = copy.deepcopy(parent_org[0].structure)
+
+        # perturb the site coordinates
+        self.perturb_atomic_coords(structure, random)
+
+        # perturb the lattice vectors
+        self.perturb_lattice_vectors(structure, random)
+
+        # create a new organism from the perturbed structure
+        offspring = Organism(structure, id_generator, self.name)
+        offspring.translate_atoms_into_cell()
+        print('Creating offspring organism {} from parent organism {} with '
+              'the structure mutation variation '.format(offspring.id,
+                                                         parent_org[0].id))
+        return offspring
+
+    def perturb_atomic_coords(self, structure, random):
+        """
+        Modifies a structure by perturbing the coordinates of its sites. The
+        probability that each site is perturbed is self.frac_atoms_perturbed,
+        and the perturbations along each Cartesian coordinate are drawn from a
+        Gaussian with mean zero and standard deviation
+        self.sigma_atomic_coord_perturbation. The magnitude of each atomic
+        coordinate perturbation is constrained to not exceed
+        self.max_atomic_coord_perturbation.
+
+        Args:
+            structure: the Structure whose site coordinates are perturbed
+
+            random: a copy of Python's built in PRNG
+        """
 
         # for each site in the structure, possibly randomly perturb it
         for site in structure.sites:
@@ -610,6 +631,24 @@ class StructureMut(object):
                     structure.sites.index(site), perturbation_vector,
                     frac_coords=False, to_unit_cell=False)
 
+    def perturb_lattice_vectors(self, structure, random):
+        """
+        Modifies a structure by perturbing its lattice vectors. Each lattice
+        vector is  multiplied by a strain matrix:
+
+                        I + E
+
+        where I is the 3x3 identity matrix and E is a 3x3 perturbation matrix
+        whose elements are distinct and drawn from a Gaussian with mean zero
+        and standard deviation self.sigma_strain_matrix_element and constrained
+        to lie between -1 and 1.
+
+        Args:
+            structure: the Structure whose site coordinates are perturbed
+
+            random: a copy of Python's built in PRNG
+        """
+
         # compute the random non-identity components of the nine elements of
         # the strain matrix, and make sure they're in [-1, 1]
         epsilons = []
@@ -632,14 +671,6 @@ class StructureMut(object):
         new_lattice = Lattice([new_a, new_b, new_c])
         structure.modify_lattice(new_lattice)
 
-        # create a new organism from the structure
-        offspring = Organism(structure, id_generator, self.name)
-        offspring.translate_atoms_into_cell()
-        print('Creating offspring organism {} from parent organism {} with '
-              'the structure mutation variation '.format(offspring.id,
-                                                         parent_org[0].id))
-        return offspring
-
 
 class NumStoichsMut(object):
     """
@@ -649,7 +680,8 @@ class NumStoichsMut(object):
 
     def __init__(self, num_stoichs_mut_params):
         """
-        Creates a NumStoichsMut operator
+        Makes a NumStoichsMut operator, and sets default parameter values if
+        necessary.
 
         Args:
             num_stoichs_mut_params: The parameters for doing the NumStoichsMut
@@ -699,18 +731,19 @@ class NumStoichsMut(object):
 
     def do_variation(self, pool, random, geometry, id_generator):
         """
-        Performs the number of stoichiometries mutation operation
+        Performs the number of stoichiometries mutation operation.
 
         Returns the resulting offspring as an Organism.
 
         Args:
             pool: the Pool of Organisms
 
-            random: Python's built in PRNG
+            random: a copy of Python's built in PRNG
 
-            geometry: the Geometry object
+            geometry: the Geometry of the search
 
-            id_generator: the IDGenerator
+            id_generator: the IDGenerator used to assign id numbers to all
+                organisms
 
         Description:
 
@@ -718,18 +751,18 @@ class NumStoichsMut(object):
             of stoichiometries' worth of atoms to or from the parent structure.
 
                 1. Selects a parent organism from the pool and makes a copy of
-                    it
+                    its structure.
 
                 2. Computes the number of stoichiometries to add or remove by
                     drawing from a Gaussian with mean self.mu_num_adds and
                     standard deviation self.sigma_num_adds and rounding the
-                    result to the nearest integer
+                    result to the nearest integer.
 
                 3. Computes the number of atoms of each type to add or remove,
-                    and does the additions or removals
+                    and does the additions or removals.
 
                 4. If self.scale_volume is True, scales the new structure to
-                    have the same volume per atom as the parent
+                    have the same volume per atom as the parent.
         """
 
         # select a parent organism from the pool and make a copy
@@ -809,13 +842,14 @@ class Permutation(object):
 
     def __init__(self, permutation_params, composition_space):
         """
-        Creates a Permutation operator.
+        Makes a Permutation operator, and sets default parameter values if
+        necessary.
 
         Args:
             permutation_params: The parameters for doing the permutation
                 operation, as a dictionary
 
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
 
         Precondition: the 'fraction' parameter in permutation_params is not
             optional, and it is assumed that permutation_params contains this
@@ -875,11 +909,12 @@ class Permutation(object):
         Args:
             pool: the Pool of Organisms
 
-            random: Python's built in PRNG
+            random: a copy of Python's built in PRNG
 
-            geometry: the Geometry object
+            geometry: the Geometry of the search
 
-            id_generator: the IDGenerator
+            id_generator: the IDGenerator used to assign id numbers to all
+                organisms
 
         Description:
 
@@ -887,19 +922,19 @@ class Permutation(object):
             the sites in the parent structure.
 
                 1. Selects a parent organism from the pool that is able to have
-                    at least one of the allowed swaps done on it
+                    at least one of the allowed swaps done on it.
 
                 2. Computes the number of swaps to try to do by drawing from a
                     Gaussian with mean self.mu_num_swaps and standard
                     deviation self.sigma_num_swaps and rounding to the nearest
-                    integer
+                    integer.
 
                 3. Tries to do the computed number of allowed swaps by randomly
                     electing an allowed pair to swap and then randomly
                     selecting sites in the structure with elements of the
                     allowed pair. This is repeated until either the computed
                     number of swaps have been done or no more swaps are
-                    possible with the parent structure
+                    possible with the parent structure.
         """
 
         # select a parent organism from the pool and make a copy of it

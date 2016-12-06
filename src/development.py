@@ -42,16 +42,15 @@ class Constraints(object):
     Represents the general constraints imposed on structures considered by the
     algorithm.
     '''
+
     def __init__(self, constraints_parameters, composition_space):
         '''
-        Sets the general constraints imposed on structures. Assigns default
-        values if needed.
+        Makes a Constraints, and sets default parameter values if necessary.
 
         Args:
             constraints_parameters: a dictionary of parameters
 
-            composition_space: a CompositionSpace object describing the
-                composition space to be searched
+            composition_space: the CompositionSpace of the search
         '''
 
         # default values
@@ -150,7 +149,7 @@ class Constraints(object):
         to default values.
 
         Args:
-            composition_space: the composition space object
+            composition_space: the CompositionSpace of the search
         '''
 
         self.min_num_atoms = self.default_min_num_atoms
@@ -166,7 +165,7 @@ class Constraints(object):
         Sets all the per-species mids to default values based on atomic radii.
 
         Args:
-            composition_space: the composition space object
+            composition_space: the CompositionSpace of the search
         '''
 
         elements = composition_space.get_all_elements()
@@ -185,7 +184,7 @@ class Constraints(object):
         values.
 
         Args:
-            composition_space: a CompositionSpace object
+            composition_space: the CompositionSpace of the search
         '''
 
         # find all the missing pairs
@@ -220,13 +219,14 @@ class Constraints(object):
 
 class Developer(object):
     '''
-    A developer object is used to develop an organism before evaluating its
+    A Developer object is used to develop an organism before evaluating its
     energy or adding it to the pool or initial population. Doesn't do
     redundancy checking.
     '''
+
     def __init__(self, developer_parameters, geometry):
         '''
-        Creates a Developer object.
+        Makes a Developer, and sets default parameter values if necessary.
 
         Args:
             niggli: a boolean indicating whether or not to do Niggli cell
@@ -235,7 +235,7 @@ class Developer(object):
             scale_density: a boolean indicating whether or not to scale the
                 density
 
-            geometry: a Geometry object
+            geometry: the Geometry of the search
         '''
 
         # defaults
@@ -276,16 +276,60 @@ class Developer(object):
         Returns a boolean indicating whether the organism survived development.
 
         Args:
-            organism: the organism to develop
+            organism: the Organism to develop
 
-            composition_space: a CompositionSpace object
+            composition_space: the CompositionSpace of the search
 
-            constraints: a Constraints object
+            constraints: the Constraints of the search
 
-            geometry: a Geometry object
+            geometry: the Geometry of the search
 
-            pool: the Pool object
+            pool: the Pool
         '''
+
+        # check the constraints on the number of atoms
+        if not self.satisfies_num_atoms_constraints(organism, constraints):
+            return False
+
+        # check if the organism is is the composition space
+        if not self.is_in_composition_space(organism, composition_space, pool):
+            return False
+
+        # optionally do Niggli cell reduction
+        if self.niggli:
+            if not self.niggli_reduction(organism, geometry):
+                return False
+
+        # optionally scale the volume per atom if the organism is unrelaxed
+        if self.scale_density and len(
+                pool.promotion_set) > 0 and organism.epa is None:
+            if not self.scale_volume(organism, composition_space, pool):
+                return False
+
+        # check the lattice length and angle constraints
+        if not self.satisfies_lattice_constraints(organism, constraints):
+            return False
+
+        # check the per-species minimum interatomic distance constraints
+        if not self.satisfies_mids_constraints(organism, constraints):
+            return False
+
+        # check any geometry-specific constraints
+        if not self.satisfies_geometry_constraints(organism, geometry):
+            return False
+
+        return True
+
+    def satisfies_num_atoms_constraints(self, organism, constraints):
+        """
+        Returns a boolean indicating whether the organism satisfies the
+        constraints on the number of atoms.
+
+        Args:
+            organism: the Organism to check
+
+            constraints: the Constraints of the search
+        """
 
         # check max num atoms constraint
         if len(organism.structure.sites) > constraints.max_num_atoms:
@@ -298,171 +342,284 @@ class Developer(object):
             print("Organism {} failed min number of atoms constraint ".format(
                 organism.id))
             return False
+        return True
 
-        # check if the organism is is the composition space
-        if composition_space.objective_function == "epa":
-            reduced_composition = composition_space.endpoints[
-                0].reduced_composition
-            org_reduced_composition = organism.composition.reduced_composition
-            if not reduced_composition.almost_equals(org_reduced_composition):
-                print("Organism {} has incorrect composition ".format(
-                    organism.id))
-                return False
+    def is_in_composition_space(self, organism, composition_space, pool):
+        """
+        Returns a boolean indicating whether the organism is in the composition
+        space.
+
+        Args:
+            organism: the Organism to check
+
+            composition_space: the CompositionSpace of the search
+
+            pool: the Pool
+        """
+
+        # for epa searches
+        if composition_space.objective_function == 'epa':
+            return self.is_in_composition_space_epa(organism,
+                                                    composition_space)
+        # for pd searches
         elif composition_space.objective_function == "pd":
-            # cast the endpoints to PDEntries (just make up some energies)
-            pdentries = []
-            for endpoint in composition_space.endpoints:
-                pdentries.append(PDEntry(endpoint, -10))
-            pdentries.append(PDEntry(organism.composition, -10))
+            return self.is_in_composition_space_pd(organism, composition_space,
+                                                   pool)
 
-            # make a CompoundPhaseDiagram and use it to check if the organism
-            # is in the composition space from how many entries it returns
-            composition_checker = CompoundPhaseDiagram(
-                pdentries, composition_space.endpoints)
-            if len(composition_checker.transform_entries(
+    def is_in_composition_space_epa(self, organism, composition_space):
+        """
+        Returns a boolean indicating whether the organism has the required
+        composition (for fixed-compsition searches).
+
+        Args:
+            organism: the Organism to check
+
+            composition_space: the CompositionSpace of the search
+        """
+
+        reduced_composition = composition_space.endpoints[
+            0].reduced_composition
+        org_reduced_composition = organism.composition.reduced_composition
+        if not reduced_composition.almost_equals(org_reduced_composition):
+            print("Organism {} has incorrect composition ".format(organism.id))
+            return False
+        return True
+
+    def is_in_composition_space_pd(self, organism, composition_space, pool):
+        """
+        Returns a boolean indicating whether the organism is in the composition
+        space. If the initial population is finished, then returns False for
+        organisms with endpoint compositions.
+
+        Args:
+            organism: the Organism to check
+
+            composition_space: the CompositionSpace of the search
+
+            pool: the Pool
+        """
+
+        # cast the endpoints to PDEntries (just make up some energies)
+        pdentries = []
+        for endpoint in composition_space.endpoints:
+            pdentries.append(PDEntry(endpoint, -10))
+        pdentries.append(PDEntry(organism.composition, -10))
+
+        # make a CompoundPhaseDiagram and use it to check if the organism
+        # is in the composition space from how many entries it returns
+        composition_checker = CompoundPhaseDiagram(
+            pdentries, composition_space.endpoints)
+        if len(composition_checker.transform_entries(
                     pdentries, composition_space.endpoints)[0]) == len(
                         composition_space.endpoints):
-                print("Organism {} lies outside the composition space ".format(
-                    organism.id))
+            print("Organism {} lies outside the composition space ".format(
+                organism.id))
+            return False
+
+        # check the endpoints if we're not making the initial population
+        elif len(pool.to_list()) > 0:
+            for endpoint in composition_space.endpoints:
+                if endpoint.almost_equals(
+                        organism.composition.reduced_composition):
+                    print('Organism {} is at a composition endpoint '.format(
+                        organism.id))
+                    return False
+        return True
+
+    def niggli_reduction(self, organism, geometry):
+        """
+        Returns a boolean indicating whether Niggli cell reduction did not
+        fail.
+
+        Args:
+            organism: the Organism whose structure to Niggli reduce
+
+            geometry: the Geometry of the search
+        """
+
+        if geometry.shape == 'bulk':
+            try:  # sometimes pymatgen's reduction routine fails
+                organism.structure = \
+                    organism.structure.get_reduced_structure()
+                organism.rotate_to_principal_directions()
+            except:
+                print('Niggli cell reduction failed on organism {} during '
+                      'development '.format(organism.id))
                 return False
-
-            # check the endpoints if we're not making the initial population
-            elif len(pool.to_list()) > 0:
-                for endpoint in composition_space.endpoints:
-                    if endpoint.almost_equals(
-                            organism.composition.reduced_composition):
-                        print('Organism {} is at a composition '
-                              'endpoint '.format(organism.id))
-                        return False
-
-        # optionally do Niggli cell reduction
-        if self.niggli:
-            if geometry.shape == 'bulk':
-                try:  # sometimes pymatgen's reduction routine fails
-                    organism.structure = \
-                        organism.structure.get_reduced_structure()
-                    organism.rotate_to_principal_directions()
-                except:
-                    print('Niggli cell reduction failed on organism {} during '
-                          'development '.format(organism.id))
-                    return False
-            elif geometry.shape == 'sheet':
-                try:
-                    organism.reduce_sheet_cell()
-                    organism.rotate_to_principal_directions()
-                except:
-                    print('2D Niggli cell reduction failed on organism {} '
-                          'during development '.format(organism.id))
-                    return False
+        elif geometry.shape == 'sheet':
+            try:
+                organism.reduce_sheet_cell()
+                organism.rotate_to_principal_directions()
+            except:
+                print('2D Niggli cell reduction failed on organism {} '
+                      'during development '.format(organism.id))
+                return False
             # TODO: call special cell reduction for other geometries here if
             # needed (doesn't makes sense for wires or clusters)
+        return True
 
-        # optionally scale the volume per atom of unrelaxed structures
-        if self.scale_density and len(
-                pool.promotion_set) > 0 and organism.epa is None:
+    def scale_volume(self, organism, composition_space, pool):
+        """
+        Returns a boolean indicating whether volume scaling did not fail.
 
-            # scale to the average of the volumes per atom of the organisms in
-            # the promotion set, and increase by 10%
-            if composition_space.objective_function == 'epa':
-                vpa_sum = 0
-                for org in pool.promotion_set:
-                    vpa_sum += org.structure.volume/len(org.structure.sites)
-                vpa_mean = 1.1*(vpa_sum/len(pool.promotion_set))
-                num_atoms = len(organism.structure.sites)
-                new_vol = vpa_mean*num_atoms
-                # this is to suppress the warnings produced if the
-                # scale_lattice method fails
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore')
-                    organism.structure.scale_lattice(new_vol)
-                    if str(organism.structure.lattice.a) == 'nan' or \
-                            organism.structure.lattice.a > 100:
-                        print('Volume scaling failed on organism {} during '
-                              'development '.format(organism.id))
-                        return False
+        Args:
+            organism: the Organism whose volume to scale
 
-            # scale to the weighted average of the volumes per atom of the
-            # organisms on the convex hull that this one would decompose to
-            elif composition_space.objective_function == 'pd':
-                # make CompoundPhaseDiagram and PDAnalyzer objects
-                pdentries = []
-                for org in pool.promotion_set:
-                    pdentries.append(PDEntry(org.composition,
-                                             org.total_energy))
-                compound_pd = CompoundPhaseDiagram(pdentries,
-                                                   composition_space.endpoints)
-                pdanalyzer = PDAnalyzer(compound_pd)
+            composition_space: the CompositionSpace of the search
 
-                # transform the organism's composition
-                transformed_entry = compound_pd.transform_entries(
-                    [PDEntry(organism.composition, 10)],
-                    composition_space.endpoints)
+            pool: the Pool
+        """
 
-                # get the transformed species and amounts
-                transformed_list = str(transformed_entry[0][0]).split()
-                del transformed_list[0]
-                popped = ''
-                while popped != 'with':
-                    popped = transformed_list.pop()
+        if composition_space.objective_function == 'epa':
+            return self.scale_volume_epa(organism, pool)
+        elif composition_space.objective_function == 'pd':
+            return self.scale_volume_pd(organism, composition_space, pool)
 
-                # separate the dummy species symbols from the amounts
-                symbols = []
-                amounts = []
-                for entry in transformed_list:
-                    split_entry = entry.split('0+')
-                    symbols.append(split_entry[0])
-                    amounts.append(float(split_entry[1]))
+    def scale_volume_epa(self, organism, pool):
+        """
+        Returns a boolean indicating whether volume scaling did not fail.
 
-                # make a dictionary mapping dummy species to amounts
-                dummy_species_amounts = {}
-                for i in range(len(symbols)):
-                    dummy_species_amounts[DummySpecie(
-                        symbol=symbols[i])] = amounts[i]
+        Args:
+            organism: the Organism whose volume to scale
 
-                # make Composition object with dummy species, get decomposition
-                dummy_comp = Composition(dummy_species_amounts)
-                decomp = pdanalyzer.get_decomposition(dummy_comp)
+            pool: the Pool
 
-                # get original compositions and amounts from the decomposition
-                fractions = []
-                comps = []
-                for item in decomp:
-                    fractions.append(decomp[item])
-                    first_split = str(item).split(',')
-                    second_split = first_split[0].split()
-                    while second_split[0] != 'composition':
-                        del second_split[0]
-                    del second_split[0]
-                    # build the composition string
-                    comp_string = ''
-                    for symbol in second_split:
-                        comp_string += str(symbol)
-                    comps.append(Composition(comp_string))
+        Description:
+            Scales the volume per atom of the organism to the average volume
+            per atom of the organisms in the promotion set, plus 10%.
+        """
 
-                # get weighted average volume per atom of the organisms in the
-                # decomposition
-                vpa_mean = 0
-                for i in range(len(comps)):
-                    for org in pool.promotion_set:
-                        if (comps[i].reduced_composition).almost_equals(
-                                org.composition.reduced_composition):
-                            vpa_mean += (org.structure.volume/len(
-                                org.structure.sites))*fractions[i]
+        # compute the voluem to scale to
+        vpa_sum = 0
+        for org in pool.promotion_set:
+            vpa_sum += org.structure.volume/len(org.structure.sites)
+        vpa_mean = 1.1*(vpa_sum/len(pool.promotion_set))
+        num_atoms = len(organism.structure.sites)
+        new_vol = vpa_mean*num_atoms
+        # this is to suppress the warnings produced if the
+        # scale_lattice method fails
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            organism.structure.scale_lattice(new_vol)
+            if str(organism.structure.lattice.a) == 'nan' or \
+                    organism.structure.lattice.a > 100:
+                print('Volume scaling failed on organism {} during '
+                      'development '.format(organism.id))
+                return False
+        return True
 
-                # compute the new volume and scale to it
-                vpa_mean = 1.1*vpa_mean
-                num_atoms = len(organism.structure.sites)
-                new_vol = vpa_mean*num_atoms
-                # this is to suppress the warnings produced if the
-                # scale_lattice method fails
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore')
-                    organism.structure.scale_lattice(new_vol)
-                    if str(organism.structure.lattice.a) == 'nan' or \
-                            organism.structure.lattice.a > 100:
-                        print('Volume scaling failed on organism {} during '
-                              'development '.format(organism.id))
-                        return False
+    def scale_volume_pd(self, organism, composition_space, pool):
+        """
+        Returns a boolean indicating whether volume scaling did not fail.
+
+        Args:
+            organism: the Organism whose volume to scale
+
+            composition_space: the CompositionSpace of the search
+
+            pool: the Pool
+
+        Description:
+
+            1. Computes the decomposition of the organism - that is, which
+                structures on the convex hull (and their relative amounts) that
+                the organism would decompose to, based on its composition.
+
+            2. Computes the weighted average volume per atom of the structures
+                in the composition.
+
+            3. Scales the volume per atom of the organism to the computed
+                value, plus 10%.
+        """
+
+        # make CompoundPhaseDiagram and PDAnalyzer objects
+        pdentries = []
+        for org in pool.promotion_set:
+            pdentries.append(PDEntry(org.composition, org.total_energy))
+        compound_pd = CompoundPhaseDiagram(pdentries,
+                                           composition_space.endpoints)
+        pdanalyzer = PDAnalyzer(compound_pd)
+
+        # transform the organism's composition
+        transformed_entry = compound_pd.transform_entries(
+            [PDEntry(organism.composition, 10)], composition_space.endpoints)
+
+        # get the transformed species and amounts
+        transformed_list = str(transformed_entry[0][0]).split()
+        del transformed_list[0]
+        popped = ''
+        while popped != 'with':
+            popped = transformed_list.pop()
+
+        # separate the dummy species symbols from the amounts
+        symbols = []
+        amounts = []
+        for entry in transformed_list:
+            split_entry = entry.split('0+')
+            symbols.append(split_entry[0])
+            amounts.append(float(split_entry[1]))
+
+        # make a dictionary mapping dummy species to amounts
+        dummy_species_amounts = {}
+        for i in range(len(symbols)):
+            dummy_species_amounts[DummySpecie(symbol=symbols[i])] = amounts[i]
+
+        # make Composition object with dummy species, get decomposition
+        dummy_comp = Composition(dummy_species_amounts)
+        decomp = pdanalyzer.get_decomposition(dummy_comp)
+
+        # get original compositions and amounts from the decomposition
+        fractions = []
+        comps = []
+        for item in decomp:
+            fractions.append(decomp[item])
+            first_split = str(item).split(',')
+            second_split = first_split[0].split()
+            while second_split[0] != 'composition':
+                del second_split[0]
+            del second_split[0]
+            # build the composition string
+            comp_string = ''
+            for symbol in second_split:
+                comp_string += str(symbol)
+            comps.append(Composition(comp_string))
+
+        # get weighted average volume per atom of the organisms in the
+        # decomposition
+        vpa_mean = 0
+        for i in range(len(comps)):
+            for org in pool.promotion_set:
+                if (comps[i].reduced_composition).almost_equals(
+                        org.composition.reduced_composition):
+                    vpa_mean += (org.structure.volume/len(
+                        org.structure.sites))*fractions[i]
+
+        # compute the new volume and scale to it
+        vpa_mean = 1.1*vpa_mean
+        num_atoms = len(organism.structure.sites)
+        new_vol = vpa_mean*num_atoms
+        # this is to suppress the warnings produced if the
+        # scale_lattice method fails
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            organism.structure.scale_lattice(new_vol)
+            if str(organism.structure.lattice.a) == 'nan' or \
+                    organism.structure.lattice.a > 100:
+                print('Volume scaling failed on organism {} during '
+                      'development '.format(organism.id))
+                return False
+        return True
+
+    def satisfies_lattice_constraints(self, organism, constraints):
+        """
+        Returns a boolean indicating whether the organism satisfies the
+        constraints on the lattice vector lengths and angles.
+
+        Args:
+            organism: the Organism to check
+
+            constraints: the Constraints of the search
+        """
 
         # check the max and min lattice length constraints
         lengths = organism.structure.lattice.abc
@@ -487,6 +644,18 @@ class Developer(object):
                 print('Organism {} failed min lattice angle '
                       'constraint '.format(organism.id))
                 return False
+        return True
+
+    def satisfies_mids_constraints(self, organism, constraints):
+        """
+        Returns a boolean indicating whether the organism satisfies the
+        per-species minimum interatomic distance constraints.
+
+        Args:
+            organism: the Organism to check
+
+            constraints: the Constraints of the search
+        """
 
         # check the per-species minimum interatomic distance constraints
         species_symbols = organism.structure.symbol_set
@@ -510,6 +679,18 @@ class Developer(object):
                               'interatomic distance constraint '.format(
                                   organism.id))
                         return False
+        return True
+
+    def satisfies_geometry_constraints(self, organism, geometry):
+        """
+        Returns a boolean indicating whether the organism satisfies the
+        constraints associated with the geometry (max and min size, etc.).
+
+        Args:
+            organism: the Organism to check
+
+            geometry: the Geometry of the search
+        """
 
         # check the max size constraint (can only fail for non-bulk geometries)
         if geometry.get_size(organism) > geometry.max_size:
@@ -522,18 +703,19 @@ class Developer(object):
             print("Organism {} failed min size constraint ".format(
                 organism.id))
             return False
-
         return True
 
 
 class RedundancyGuard(object):
     '''
-    A redundancy guard.
+    A RedundancyGuard object is used to check if an Organism is redundant with
+    other organisms already seen by the alrogithm.
     '''
 
     def __init__(self, redundancy_parameters):
         '''
-        Creates a redundancy guard.
+        Makes a RedundancyGuard, and sets default parameter values if
+        necessary.
 
         TODO: pymatgen's structure matcher assumes periodic boundary
             conditions, but this doesn't make sense for all geometries...
@@ -629,7 +811,7 @@ class RedundancyGuard(object):
 
     def set_all_to_defaults(self):
         '''
-        Sets all the redundancy parameters to default values
+        Sets all the redundancy parameters to default values.
         '''
 
         self.lattice_length_tol = self.default_lattice_length_tol
@@ -647,9 +829,9 @@ class RedundancyGuard(object):
         no redundancy.
 
         Args:
-            new_organism: the organism to check for redundancy
+            new_organism: the Organism to check for redundancy
 
-            orgs_list: the list containing all organisms to check against
+            orgs_list: the list containing all Organisms to check against
         '''
 
         # if new_organism isn't relaxed, then just check structures
@@ -694,11 +876,12 @@ class Geometry(object):
 
     def __init__(self, geometry_parameters):
         '''
-        Creates a geometry object
+        Makes a Geometry, and sets default parameter values if necessary.
 
         Args:
             geometry_parameters: a dictionary of parameters
         '''
+
         # default values
         self.default_shape = 'bulk'
         self.default_max_size = np.inf
@@ -752,10 +935,10 @@ class Geometry(object):
 
     def pad(self, organism):
         '''
-        Makes an organism's structure conform to the required shape. For sheet,
-        wire and cluster geometries, this means adding vacuum padding to the
-        cell. For bulk, the structure is unchanged. Used to pad a structure
-        prior to an energy calculation. Changes the structure of an organism.
+        Modifies the structure of an organism to make it conform to the
+        required shape. For sheet, wire and cluster geometries, this means
+        adding vacuum padding to the cell. For bulk, the structure is
+        unchanged. Used to pad a structure prior to an energy calculation.
 
         Args:
             organism: the Organism to pad
@@ -771,12 +954,12 @@ class Geometry(object):
 
     def pad_sheet(self, organism):
         '''
-        Adds vertical vacuum padding to a sheet, and makes the c-lattice vector
-        normal to the plane of the sheet. The atoms are shifted to the center
-        of the padded sheet. Changes an organism's structure.
+        Modifies the structure of an organism by adding vertical vacuum padding
+        and making the c-lattice vector normal to the plane of the sheet. The
+        atoms are shifted to the center of the padded sheet.
 
         Args:
-            organism: an Organism object
+            organism: the Organism to pad
         '''
 
         # make the padded structure
@@ -810,14 +993,14 @@ class Geometry(object):
 
     def pad_wire(self, organism):
         '''
-        Makes c lattice vector parallel to z-axis, and adds vacuum padding
-        around a wire in the x and y directions by replacing a and b lattice
-        vectors with padded vectors along the x and y axes, respectively. The
-        atoms are shifted to the center of the padded cell. Changes the
-        structure of an organism.
+        Modifies the structure of an organism by making the c lattice vector
+        parallel to z-axis, and adds vacuum padding around the structure in the
+        x and y directions by replacing a and b lattice vectors with padded
+        vectors along the x and y axes, respectively. The atoms are shifted to
+        the center of the padded cell.
 
         Args:
-            organism: the organism to pad
+            organism: the Organism to pad
         '''
 
         # make the padded structure
@@ -854,11 +1037,12 @@ class Geometry(object):
 
     def pad_cluster(self, organism):
         '''
-        Adds vacuum padding around a cluster. Changes the structure of an
-        organism.
+        Modifies the structure of an organism by replacing the three lattice
+        vectors with ones along the three Cartesian directions and adding
+        vacuum padding to each one.
 
         Args:
-            organism: the organism to pad
+            organism: the Organism to pad
         '''
 
         # make the padded structure
@@ -899,14 +1083,14 @@ class Geometry(object):
 
     def unpad(self, organism, constraints):
         '''
-        Removes vacuum padding to return an organism's structure to a form used
-        by the variations. Does nothing if shape is bulk. Changes the structure
-        of an organism.
+        Modifies the structure of an organism by removing vacuum padding, which
+        returns an organism's structure to a form used by the variations. Does
+        nothing if shape is bulk.
 
         Args:
             organism: the Organism to unpad
 
-            constraints: a Constraints object
+            constraints: the Constraints of the search
         '''
 
         # call the appropriate unpadding algorithm
@@ -919,15 +1103,15 @@ class Geometry(object):
 
     def unpad_sheet(self, organism, constraints):
         '''
-        Removes vertical vacuum padding from a sheet, leaving only enough to
-        satisfy the per-species MID constraints, and makes the c-lattice vector
-        normal to the plane of the sheet (if it isn't already). Changes the
-        structure of an organism.
+        Modifies the structure of an organism by removing vertical vacuum
+        padding, leaving only enough to satisfy the per-species MID
+        constraints, and makes the c-lattice vector normal to the plane of the
+        sheet (if it isn't already).
 
         Args:
             organism: the Organism to unpad
 
-            constraints: a Constraints object
+            constraints: the Constraints of the search
         '''
 
         # make the unpadded structure
@@ -960,13 +1144,16 @@ class Geometry(object):
 
     def unpad_wire(self, organism, constraints):
         '''
-        Removes vacuum padding around a wire. Changes the structure of an
-        organism.
+        Modifies the structure of an organism by removing horizontal vacuum
+        padding around a wire, leaving only enough to satisfy the per-species
+        MID constraints, and makes the three lattice vectors lie along the
+        three Cartesian directions.
+
 
         Args:
             organism: the Organism to unpad
 
-            constraints: a Constraints object
+            constraints: the Constraints of the search
         '''
 
         # make the unpadded structure
@@ -1006,13 +1193,15 @@ class Geometry(object):
 
     def unpad_cluster(self, organism, constraints):
         '''
-        Removes vacuum padding around a cluster, leaving only enough to satisfy
-        the per-species MID constraints. Changes the structure of an organism.
+        Modifies the structure of an organism by removing vacuum padding in
+        every direction, leaving only enough to satisfy the per-species MID
+        constraints, and makes the three lattice vectors lie along the three
+        Cartesian directions.
 
         Args:
             organism: the Organism to unpad
 
-            constraints: a Constraints object
+            constraints: the Constraints of the search
         '''
 
         # make the unpadded structure
@@ -1077,8 +1266,9 @@ class Geometry(object):
         Returns the layer thickness of a sheet structure, which is the maximum
         vertical distance between atoms in the cell.
 
-        Assumes that the organism has already been rotated into the principal
-        directions, and that plane of the sheet is parallel to the a-b facet.
+        Precondition: the organism has already been put into sheet format (c
+            lattice vector parallel to the z-axis and a and b lattice vectors
+            in the x-y plane)
         '''
 
         cart_bounds = organism.get_bounding_box(cart_coords=True)
@@ -1090,11 +1280,10 @@ class Geometry(object):
         Returns the diameter of a wire structure, defined as the maximum
         distance between atoms projected to the x-y plane.
 
-        Assumes that the organism has already been put into wire format
-        (c lattice vector is parallel to z-axis), and that all sites are
-        located inside the cell (i.e., have fractional coordinates between 0
-        and 1). Generally called after Geometry.unpad_wire has already been
-        called on the organism.
+        Precondition: the organism has already been put into wire format (c
+            lattice vector is parallel to z-axis and a and b lattice vectors in
+            the x-y plane), and all sites are located inside the cell (i.e.,
+            have fractional coordinates between 0 and 1).
         '''
 
         max_distance = 0
@@ -1118,10 +1307,10 @@ class Geometry(object):
         Returns the diameter of a cluster structure, defined as the maximum
         distance between atoms in the cell.
 
-        Assumes that all sites are located inside the cell (i.e., have
-        fractional coordinates between 0 and 1). Generally called after
-        Geometry.unpad_cluster has already been called on the organism.
+        Precondition: all sites are located inside the cell (i.e., have
+            fractional coordinates between 0 and 1)
         '''
+
         max_distance = 0
         for site_i in organism.structure.sites:
             # make Site versions of each PeriodicSite so that the computed

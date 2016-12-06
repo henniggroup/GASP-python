@@ -255,7 +255,7 @@ while not stopping_criteria.are_satisfied:
             relaxed_organisms[thread_index] = None
 
             # take care of relaxed offspring organism
-            if relaxed_organism is not None:
+            if relaxed_offspring is not None:
                 geometry.unpad(relaxed_offspring, constraints)
                 if developer.develop(relaxed_offspring, composition_space,
                                      constraints, geometry, pool):

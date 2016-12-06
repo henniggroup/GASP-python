@@ -44,7 +44,6 @@ import os
 import copy
 import math
 import numpy as np
-from _pyio import __metaclass__
 from collections import deque
 from scipy.spatial.qhull import ConvexHull
 
@@ -52,13 +51,11 @@ from scipy.spatial.qhull import ConvexHull
 class IDGenerator(object):
     """
     Generates successive integer ID numbers, starting from 1.
-
-    This class is a singleton.
     """
 
     def __init__(self):
         """
-        Creates an id generator.
+        Makes an IDGenerator.
         """
 
         self.id = 0
@@ -74,22 +71,23 @@ class IDGenerator(object):
 
 class Organism(object):
     """
-    An organism
+    An organism, consisting primarily of a structure and an energy, as well as
+    several derived quantities.
     """
 
     def __init__(self, structure, id_generator, maker):
         """
-        Creates an organism
+        Makes an Organism.
 
         Args:
-            structure: The structure of this organism, as a
+            structure: the structure of this organism, as a
                 pymatgen.core.structure.Structure
 
-            id_generator: the instance of IDGenerator used to assign id numbers
-                to all organisms
+            id_generator: the IDGenerator used to assign id numbers to all
+                organisms
 
             maker: the name of algorithm that made the organism, as a string.
-                Either a creator or a variation.
+                Either a creator or a variation
         """
 
         self.structure = structure
@@ -111,7 +109,7 @@ class Organism(object):
         self.made_by = maker
 
     # This keeps the id (sort of) immutable by causing an exception to be
-    # raised if the user tries to the set the id with org.id = some_id.
+    # raised if the id is attempted to be set with org.id = some_id.
     @property
     def id(self):
         return self._id
@@ -119,8 +117,9 @@ class Organism(object):
     def rotate_to_principal_directions(self):
         """
         Rotates the organism's structure into the principal directions. That
-        is, a is parallel to the Cartesian x-axis, b lies in the Cartesian x-y
-        plane and the z-component of c is positive.
+        is, lattice vector a is parallel to the Cartesian x-axis, lattice
+        vector b lies in the Cartesian x-y plane and the z-component of lattice
+        vector c is positive.
 
         Note: this method doesn't change the fractional coordinates of the
         sites. However, the Cartesian coordinates may be changed.
@@ -176,8 +175,8 @@ class Organism(object):
 
     def rotate_c_parallel_to_z(self):
         """
-        Rotates the organism's structure such that the c lattice vector is
-        parallel to the z axis.
+        Rotates the organism's structure such that lattice vector c is
+        parallel to the Cartesian z-axis.
 
         Note: this method doesn't change the fractional coordinates of the
         sites. However, the Cartesian coordinates may be changed.
@@ -208,7 +207,9 @@ class Organism(object):
         Translates all the atoms into the cell, so that their fractional
         coordinates are between 0 and 1.
 
-        Precondition: all the atoms can fit inside the structure's lattice
+        Precondition: all the atoms can fit inside the structure's lattice,
+            and there is at least 0.001 of (fractional) extra space along
+            each lattice vector.
         """
 
         # get the bounding box of the atoms, in fractional coordinates
@@ -219,7 +220,7 @@ class Organism(object):
         for i in range(3):
             if bounding_box[i][0] < 0.0:
                 translation_vector.append(-1*(bounding_box[i][0]) + 0.001)
-            elif bounding_box[i][1] > 1.0:
+            elif bounding_box[i][1] >= 1.0:
                 translation_vector.append(-1*(bounding_box[i][1] + 0.001) +
                                           1.0)
             else:
@@ -232,14 +233,12 @@ class Organism(object):
 
     def reduce_sheet_cell(self):
         """
-        Applies Niggli cell reduction to a sheet structure.
-
-        The idea is to make c vertical and add lots of vertical vacuum so that
-        the standard reduction algorithm only changes the a and b lattice
-        vectors.
+        Applies Niggli cell reduction to a sheet structure. The idea is to make
+        lattice vector c vertical and add lots of vertical vacuum so that the
+        standard reduction algorithm only changes the a and b lattice vectors.
 
         Note: pymatgen's Niggli cell reduction algorithm sometimes moves the
-            atoms' relative positions a little (I've seen up to 0.5 A...).
+            atoms' relative positions a little (I've seen up to 0.5 A...)
         """
 
         self.rotate_to_principal_directions()
@@ -287,10 +286,17 @@ class Organism(object):
     def get_bounding_box(self, cart_coords=True):
         """
         Returns the smallest and largest coordinates in each dimension of all
-        the sites in the organism's structure.
+        the sites in the organism's structure, as a list of three lists:
+
+            [[min, max], [min, max], [min, max]]
+
+        where the first inner list contains data for the Cartesian x-coordinate
+        or lattice vector a, the second inner list contains data for the
+        Cartesian y-coordinate or lattice vector b, and the third inner list
+        contains data for the Cartesian z-coordinate or lattice vector c.
 
         Args:
-            frac_coords: whether to give the result in Cartesian or fractional
+            cart_coords: whether to give the result in Cartesian or fractional
                 coordinates
         """
 
@@ -324,12 +330,12 @@ class Organism(object):
 
 class InitialPopulation():
     """
-    The initial population of organisms
+    The initial population of organisms.
     """
 
     def __init__(self, run_dir_name):
         """
-        Creates an initial population
+        Makes an InitialPopulation.
 
         Args:
             run_dir_name: the name (not path) of the garun directory where the
@@ -341,11 +347,10 @@ class InitialPopulation():
 
     def add_organism(self, organism_to_add, composition_space):
         """
-        Adds a relaxed organism to the initial population and updates
-        whole_pop.
+        Adds a relaxed organism to the initial population.
 
         Args:
-            organism_to_add: the organism to add to the pool
+            organism_to_add: the Organism to add to the initial population
         """
 
         organism_to_add.structure.sort()
@@ -366,11 +371,12 @@ class InitialPopulation():
         """
         Replaces an organism in the initial population with a new organism.
 
-        Precondition: the old_org is a current member of the initial population
+        Precondition: old_org is a current member of the initial population
 
         Args:
-            old_org: the organism in the initial population to replace
-            new_org: the new organism to replace the old one
+            old_org: the Organism in the initial population to replace
+
+            new_org: the new Organism to replace the old one
         """
 
         new_org.structure.sort()
@@ -398,7 +404,7 @@ class InitialPopulation():
         of the convex hull (for pd search).
 
         Args:
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         if composition_space.objective_function == 'epa':
@@ -422,7 +428,7 @@ class InitialPopulation():
         Computes and prints the area/volume of the current best convex hull.
 
         Args:
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         # check if the initial population contains organisms at all the
@@ -466,7 +472,7 @@ class InitialPopulation():
         the endpoints.
 
         Args:
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         for endpoint in composition_space.endpoints:
@@ -488,7 +494,7 @@ class InitialPopulation():
         at one of the endpoints.
 
         Args:
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         for organism in self.initial_population:
@@ -512,12 +518,12 @@ class Pool(object):
     """
     def __init__(self, pool_params, composition_space, run_dir_name):
         """
-        Creates a pool of organisms
+        Makes a Pool, and sets default parameter values if necessary.
 
         Args:
             pool_params: the parameters of the pool, as a dictionary
 
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
 
             run_dir_name: the name (not path) of the garun directory
         """
@@ -577,10 +583,10 @@ class Pool(object):
         Adds the organisms of the initial population to the pool.
 
         Args:
-            initial_population: an InitialPopulation object containing the
-                relaxed organisms of the initial population
+            initial_population: the InitialPopulation containing the relaxed
+                organisms of the initial population
 
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
 
         Precondition: the pool is empty (no organisms have been previously
             added to it)
@@ -640,20 +646,21 @@ class Pool(object):
         """
         Adds a new organism to the pool.
 
-        For epa, if the new organism better than one of the organisms currently
-        in the promotion set, then it is added to the promotion set, and the
-        worst organism in the promotion set is moved to the back of the queue.
-        Otherwise, the new organism is just appended to the back of the queue.
+        For fixed-composition searches, if the new organism is better than one
+        of the organisms currently in the promotion set, then it is added to
+        the promotion set, and the worst organism in the promotion set is moved
+        to the back of the queue. Otherwise, the new organism is just appended
+        to the back of the queue.
 
-        For pd, if the new organism is on the convex hull, then it is added to
-        the promotion set and any organisms in the promotion set that are no
-        longer on the convex hull are moved the queue. Otherwise, the new
-        organism is added to the back of the queue.
+        For phase diagram searches, if the new organism is on the convex hull,
+        then it is added to the promotion set and any organisms in the
+        promotion set that are no longer on the convex hull are moved the
+        queue. Otherwise, the new organism is added to the back of the queue.
 
         Args:
             organism: the Organism to add to the pool
 
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         print('Adding organism {} to the pool '.format(organism_to_add.id))
@@ -704,13 +711,14 @@ class Pool(object):
 
     def check_promotion_set_pd(self):
         """
-        For pd searches, checks whether promotion set and queue memberships are
-        correct (all organisms with value 0 in promotion set, all organisms
-        with value > 0 in queue), and moves organisms from the promotion set to
-        the queue (and vice versa) if needed.
+        For phase diagram searches, checks whether promotion set and queue
+        memberships are correct (all organisms with value 0 in promotion set,
+        all organisms with value > 0 in queue), and moves organisms from the
+        promotion set to the queue (and vice versa) if needed.
 
-        Precondition: a pd search is being done, and all organisms in the pool
-            have up-to-date values (set by calling compute_pd_values)
+        Precondition: a phase diagram search is being done, and all organisms
+            in the pool have up-to-date values (set by calling
+            compute_pd_values)
         """
 
         # get organisms in the promotion set that are no longer on the convex
@@ -742,12 +750,12 @@ class Pool(object):
         Replaces an organism in the pool with a new organism. The new organism
         has the same location in the pool as the old one.
 
-        Precondition: the old_org is a member of the current pool.
+        Precondition: old_org is a member of the current pool.
 
         Args:
-            old_org: the organism in the pool to replace
+            old_org: the Organism in the pool to replace
 
-            new_org: the new organism to replace the old one
+            new_org: the new Organism to replace the old one
         """
 
         print('Replacing organism {} with organism {} in the pool '.format(
@@ -791,13 +799,13 @@ class Pool(object):
         Constructs a convex hull from the provided organisms and sets the
         organisms' values to their distances from the convex hull.
 
-        Returns the compound phase diagram object computed from the organisms
+        Returns the CompoundPhaseDiagram object computed from the organisms
         in organisms_list.
 
         Args:
             organisms_list: a list of Organisms whose values we need to compute
 
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         # create a PDEntry object for each organism in the list of organisms
@@ -855,8 +863,8 @@ class Pool(object):
             best_organisms = self.get_n_best_organisms(self.size)
 
         # get the best and worst values in this subset of organisms
-        best_value = best_organisms[-1].value
-        worst_value = best_organisms[0].value
+        best_value = best_organisms[0].value
+        worst_value = best_organisms[-1].value
 
         # compute the fitnesses of the organisms in this subset
         for organism in best_organisms:
@@ -926,7 +934,7 @@ class Pool(object):
     def get_n_best_organisms(self, n):
         """
         Returns a list containing the n best organisms in the pool, sorted in
-        order of decreasing value.
+        order of increasing value.
 
         Precondition: all the organisms in the pool have up-to-date values
 
@@ -935,8 +943,8 @@ class Pool(object):
         """
 
         pool_list = self.to_list()
-        pool_list.sort(key=lambda x: x.value, reverse=True)
-        return pool_list[len(pool_list) - n:]
+        pool_list.sort(key=lambda x: x.value)
+        return pool_list[:n]
 
     def select_organisms(self, n, random):
         """
@@ -948,7 +956,7 @@ class Pool(object):
         Args:
             n: how many organisms to select from the pool
 
-            random: Python's built in PRNG
+            random: a copy of Python's built in PRNG
 
         Precondition: all the organisms in the pool have been assigned
             selection probabilities.
@@ -975,7 +983,7 @@ class Pool(object):
         Prints out a summary of the organisms in the pool.
 
         Args:
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         pool_list = self.to_list()
@@ -989,11 +997,11 @@ class Pool(object):
 
     def print_progress(self, composition_space):
         """
-        Prints out either the best organism (for epa search) or the area/volume
-        of the convex hull (for pd search).
+        Prints out either the best organism (for fixed-composition search) or
+        the area/volume of the convex hull (for phase diagram search).
 
         Args:
-            composition_space: the CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         if composition_space.objective_function == 'epa':
@@ -1003,7 +1011,7 @@ class Pool(object):
 
     def print_best_org(self):
         """
-        Prints out the id and value of the best organism in the pool
+        Prints out the id and value of the best organism in the pool.
         """
 
         pool_list = self.to_list()
@@ -1056,9 +1064,6 @@ class OffspringGenerator(object):
     live.
     """
 
-    def __init__(self):
-        pass
-
     def make_offspring_organism(self, random, pool, variations, geometry,
                                 id_generator, whole_pop, developer,
                                 redundancy_guard, composition_space,
@@ -1068,10 +1073,44 @@ class OffspringGenerator(object):
         generated with one of the variations.
 
         Args:
-            TODO: seems like a ridiculous number of arguments...
+            random: a copy of Python's PRNG
 
-        TODO: outline of how this method works
+            pool: the Pool
+
+            variations: list of all the Variations used in this search
+
+            geometry: the Geometry of the search
+
+            id_generator: the IDGenerator used to assign id numbers to all
+                organisms
+
+            whole_pop: list containing copies of the organisms to check for
+                redundancy
+
+            developer: the Developer of the search
+
+            redundancy_guard: the RedundancyGuard of the search
+
+            composition_space: the CompositionSpace of the search
+
+            constraints: the Constraints of the search
+
+        Description:
+
+            1. Randomly selects one of the Variations (based on the fraction
+                values of the Variations) with which to make an offspring
+                Organism.
+
+            2. Tries to generate a developed, non-redundant, unrelaxed
+                offspring Organism with the selected Variation.
+
+            3. If no success after 1000 attempts, randomly selects a different
+                Variation and tries to make an offspring with that one.
+
+            4. If no success after trying all the Variations, cycles through
+                them again.
         """
+
         # holds the variations that have been tried
         tried_variations = []
         # the maximum number of times to try making a valid offspring with a
@@ -1105,14 +1144,12 @@ class OffspringGenerator(object):
         probabilities.
 
         Args:
-            random:
+            random: a copy of Python's PRNG
 
             tried_variations: list of Variations that have already been
                 unsuccessfully tried
 
             variations: list of all the Variations used in this search
-
-        TODO: description
         """
 
         while True:
@@ -1138,7 +1175,8 @@ class SelectionProbDist(object):
 
     def __init__(self, selection_params, pool_size):
         """
-        Creates a selection probability distribution
+        Makes a SelectionProbDist, and sets default parameter values if
+        necessary.
 
         Args:
             selection_params: the parameters defining the distribution, as a
@@ -1183,11 +1221,11 @@ class CompositionSpace(object):
 
     def __init__(self, endpoints):
         """
-        Creates a CompositionSpace object, which is list of
+        Makes a CompositionSpace, which is list of
         pymatgen.core.composition.Composition objects.
 
         Args:
-            endpoints: the list of compositions, as strings
+            endpoints: the list of compositions, as strings (e.g. ["Al2O3"])
         """
 
         for i in range(len(endpoints)):
@@ -1236,9 +1274,8 @@ class CompositionSpace(object):
         """
         Returns all possible pairs of elements in the composition space, as
         list of strings, where each string contains the symbols of two
-        elements, separated by a space.
-
-        Does not include self-pairs (e.g., "Cu Cu")
+        elements, separated by a space. Does not include self-pairs
+        (e.g., "Cu Cu").
         """
 
         elements = self.get_all_elements()
@@ -1258,9 +1295,8 @@ class CompositionSpace(object):
         whose electronegativities differ by 1.1 or less can be swapped.
 
         Returns a list of strings, where each string contains the symbols of
-        two elements, separated by a space.
-
-        Does not include self-pairs (e.g., "Cu Cu")
+        two elements, separated by a space. Does not include self-pairs
+        (e.g., "Cu Cu").
         """
 
         all_pairs = self.get_all_pairs()
@@ -1281,10 +1317,13 @@ class StoppingCriteria(object):
 
     def __init__(self, stopping_parameters, composition_space):
         """
+        Makes a StoppingCriteria, and sets default paramter values if
+        necessary.
+
         Args:
             stopping_parameters: a dictionary of parameters
 
-            composition_space: a CompositionSpace object
+            composition_space: the CompositionSpace of the search
         """
 
         # set the defaults
@@ -1313,7 +1352,7 @@ class StoppingCriteria(object):
             self.num_energy_calcs = self.default_num_energy_calcs
             self.value_achieved = self.default_value_achieved
             self.found_structure = self.default_found_structure
-        # check each flag to see if it's been included
+        # check each keyword to see if it's been included
         else:
             # value achieved
             if 'value_achieved' in stopping_parameters:
@@ -1370,7 +1409,7 @@ class StoppingCriteria(object):
         if the relaxed organism satisfies them, and updates are_satisfied.
 
         Args:
-            organism: a relaxed organism whose value has been computed
+            organism: a relaxed Organism whose value has been computed
         """
 
         if self.value_achieved is not None:
