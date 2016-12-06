@@ -14,7 +14,7 @@ used by the genetic algorithm during the search.
 
 import general
 import variations
-import energy_code_interfaces
+import energy_calculators
 import organism_creators
 import development
 
@@ -402,7 +402,7 @@ def make_gulp_energy_calculator(parameters, geometry):
                 print('Quitting...')
                 quit()
 
-        return energy_code_interfaces.GulpEnergyCalculator(
+        return energy_calculators.GulpEnergyCalculator(
             header_file_path, potential_file_path, geometry)
 
 
@@ -444,7 +444,7 @@ def make_lammps_energy_calculator(parameters, geometry):
                 print('Quitting...')
                 quit()
 
-        return energy_code_interfaces.LammpsEnergyCalculator(
+        return energy_calculators.LammpsEnergyCalculator(
                 input_script_path, geometry)
 
 
@@ -548,7 +548,7 @@ def make_vasp_energy_calculator(parameters, composition_space, geometry):
                     print('Quitting...')
                     quit()
 
-        return energy_code_interfaces.VaspEnergyCalculator(
+        return energy_calculators.VaspEnergyCalculator(
                 incar_path, kpoints_path, potcar_paths, geometry)
 
 

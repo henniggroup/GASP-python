@@ -186,7 +186,7 @@ class Mating(object):
                     atomic radius of the element.
         """
 
-        # select two parent organisms from the pool and make copies of them
+        # select two parent organisms from the pool and get their structures
         parent_orgs = pool.select_organisms(2, random)
         structure_1 = copy.deepcopy(parent_orgs[0].structure)
         structure_2 = copy.deepcopy(parent_orgs[1].structure)
@@ -573,7 +573,7 @@ class StructureMut(object):
                     between -1 and 1.
         """
 
-        # select a parent organism from the pool and make a copy of it
+        # select a parent organism from the pool and get its structure
         parent_org = pool.select_organisms(1, random)
         structure = copy.deepcopy(parent_org[0].structure)
 
@@ -765,7 +765,7 @@ class NumStoichsMut(object):
                     have the same volume per atom as the parent.
         """
 
-        # select a parent organism from the pool and make a copy
+        # select a parent organism from the pool and get its structure
         parent_org = pool.select_organisms(1, random)
         structure = copy.deepcopy(parent_org[0].structure)
         parent_num_atoms = len(structure.sites)
@@ -937,7 +937,7 @@ class Permutation(object):
                     possible with the parent structure.
         """
 
-        # select a parent organism from the pool and make a copy of it
+        # select a parent organism from the pool and get its structure
         parent_org = pool.select_organisms(1, random)
         structure = copy.deepcopy(parent_org[0].structure)
 
