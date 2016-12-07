@@ -5,7 +5,7 @@
 from __future__ import division, unicode_literals, print_function
 
 """
-Main module:
+Run module:
 
 This module is run to do a genetic algorithm structure search.
 

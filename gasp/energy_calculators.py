@@ -6,7 +6,7 @@ from __future__ import division, unicode_literals, print_function
 
 
 """
-Energy Code Interfaces module:
+Energy Calculators module:
 
 This module contains the classes used to compute the energies of structures
 with external energy codes.
