@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copywrite (c) Henniggroup.
+# Copyright (c) Henniggroup.
 # Distributed under the terms of the MIT License.
 
 from __future__ import division, unicode_literals, print_function
@@ -12,11 +12,11 @@ used by the genetic algorithm during the search.
 
 """
 
-import general
-import variations
-import energy_calculators
-import organism_creators
-import development
+from gasp import general
+from gasp import variations
+from gasp import energy_calculators
+from gasp import organism_creators
+from gasp import development
 
 from pymatgen.core.structure import Structure
 
