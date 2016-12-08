@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copywrite (c) Henniggroup.
+# Copyright(c) Henniggroup.
 # Distributed under the terms of the MIT License.
 
 from __future__ import division, unicode_literals, print_function
