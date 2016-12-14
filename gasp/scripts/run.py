@@ -62,18 +62,24 @@ def main():
     # print the search parameters to a file in the run directory
     parameters_printer.print_parameters(objects_dict)
 
+    # make the data writer
+    data_writer = general.DataWriter(garun_dir + '/run_data',
+                                     composition_space)
+
     whole_pop = []
     num_finished_calcs = 0
     threads = []
     initial_population = general.InitialPopulation(run_dir_name)
 
-    # To temporarily hold relaxed organisms. The key to each relaxed organism is
-    # the index of the Thread in the list threads that did the energy calculation.
+    # To temporarily hold relaxed organisms. The key to each relaxed organism
+    # is the index of the Thread in the list threads that did the energy
+    # calculation.
     relaxed_organisms = {}
 
     # populate the initial population
     for creator in organism_creators:
-        print('Making {} organisms with {}'.format(creator.number, creator.name))
+        print('Making {} organisms with {}'.format(creator.number,
+                                                   creator.name))
         while not creator.is_finished:
 
             # start initial batch of energy calculations
@@ -91,8 +97,8 @@ def main():
                         redundant_organism = redundancy_guard.check_redundancy(
                             new_organism, whole_pop)
                         if redundant_organism is None:  # no redundancy
-                            # add a copy to whole_pop so the organisms in whole_pop
-                            # don't change upon relaxation
+                            # add a copy to whole_pop so the organisms in
+                            # whole_pop don't change upon relaxation
                             whole_pop.append(copy.deepcopy(new_organism))
                             stopping_criteria.update_calc_counter()
                             geometry.pad(new_organism)
@@ -117,33 +123,43 @@ def main():
                         if relaxed_organism is not None:
                             geometry.unpad(relaxed_organism, constraints)
                             if developer.develop(relaxed_organism,
-                                                 composition_space, constraints,
-                                                 geometry, pool):
+                                                 composition_space,
+                                                 constraints, geometry, pool):
                                 redundant_organism = \
                                     redundancy_guard.check_redundancy(
                                         relaxed_organism, whole_pop)
-                                if redundant_organism is not None:  # redundancy
+                                if redundant_organism is not None:  # redundant
                                     if redundant_organism.is_active and \
                                             redundant_organism.epa > \
                                             relaxed_organism.epa:
                                         initial_population.replace_organism(
-                                            redundant_organism, relaxed_organism,
+                                            redundant_organism,
+                                            relaxed_organism,
                                             composition_space)
-                                        initial_population.print_progress(
-                                            composition_space)
-                                        print('Number of energy calculations so '
-                                              'far: {} '.format(
+                                        progress = \
+                                            initial_population.get_progress(
+                                                composition_space)
+                                        data_writer.write_data(
+                                            relaxed_organism,
+                                            num_finished_calcs, progress)
+                                        print('Number of energy calculations '
+                                              'so far: {} '.format(
                                                   num_finished_calcs))
-                                else:  # no redundancy
+                                else:  # not redundant
                                     stopping_criteria.check_organism(
                                         relaxed_organism)
                                     initial_population.add_organism(
                                         relaxed_organism, composition_space)
                                     whole_pop.append(relaxed_organism)
-                                    initial_population.print_progress(
-                                        composition_space)
-                                    print('Number of energy calculations so far: '
-                                          '{} '.format(num_finished_calcs))
+                                    progress = \
+                                        initial_population.get_progress(
+                                            composition_space)
+                                    data_writer.write_data(
+                                        relaxed_organism, num_finished_calcs,
+                                        progress)
+                                    print('Number of energy calculations so '
+                                          'far: {} '.format(
+                                              num_finished_calcs))
                                     if creator.is_successes_based and \
                                             relaxed_organism.made_by == \
                                             creator.name:
@@ -155,33 +171,36 @@ def main():
                             new_organism = creator.create_organism(
                                 id_generator, composition_space,
                                 constraints, random)
-                            while new_organism is None and not creator.is_finished:
+                            while new_organism is None and not \
+                                    creator.is_finished:
                                 new_organism = creator.create_organism(
-                                    id_generator, composition_space, constraints,
-                                    random)
+                                    id_generator, composition_space,
+                                    constraints, random)
                             if new_organism is not None:
                                 geometry.unpad(new_organism, constraints)
                                 if developer.develop(new_organism,
                                                      composition_space,
-                                                     constraints, geometry, pool):
+                                                     constraints, geometry,
+                                                     pool):
                                     redundant_organism = \
                                         redundancy_guard.check_redundancy(
                                             new_organism, whole_pop)
-                                    if redundant_organism is None:  # no redundancy
+                                    if redundant_organism is None:  # not redundant
                                         whole_pop.append(
                                             copy.deepcopy(new_organism))
                                         stopping_criteria.update_calc_counter()
                                         geometry.pad(new_organism)
                                         thread = threading.Thread(
                                             target=energy_calculator.do_energy_calculation,
-                                            args=(new_organism, relaxed_organisms,
+                                            args=(new_organism,
+                                                  relaxed_organisms,
                                                   thread_index))
                                         thread.start()
                                         threads[thread_index] = thread
                                         started_new_calc = True
 
-    # process all the calculations that were still running when the last creator
-    # finished
+    # process all the calculations that were still running when the last
+    # creator finished
     num_to_get = num_calcs_at_once  # how many threads we have left to handle
     handled_indices = []  # the indices of the threads we've already handled
     while num_to_get > 0:
@@ -201,14 +220,18 @@ def main():
                                          constraints, geometry, pool):
                         redundant_organism = redundancy_guard.check_redundancy(
                             relaxed_organism, whole_pop)
-                        if redundant_organism is not None:  # redundancy
+                        if redundant_organism is not None:  # redundant
                             if redundant_organism.is_active and \
-                                    redundant_organism.epa > relaxed_organism.epa:
+                                    redundant_organism.epa > \
+                                    relaxed_organism.epa:
                                 initial_population.replace_organism(
                                     redundant_organism, relaxed_organism,
                                     composition_space)
-                                initial_population.print_progress(
+                                progress = initial_population.get_progress(
                                     composition_space)
+                                data_writer.write_data(relaxed_organism,
+                                                       num_finished_calcs,
+                                                       progress)
                                 print('Number of energy calculations so far: '
                                       '{} '.format(num_finished_calcs))
                         else:  # no redundancy
@@ -216,26 +239,28 @@ def main():
                             initial_population.add_organism(relaxed_organism,
                                                             composition_space)
                             whole_pop.append(relaxed_organism)
-                            initial_population.print_progress(composition_space)
+                            initial_population.print_progress(
+                                composition_space)
                             print('Number of energy calculations so far: '
                                   '{} '.format(num_finished_calcs))
 
     # populate the pool with the initial population
     pool.add_initial_population(initial_population, composition_space)
 
-    # To temporarily hold relaxed organisms. The key to each relaxed organism is
-    # the index of the Thread in the list threads that did the energy calculation.
+    # To temporarily hold relaxed organisms. The key to each relaxed organism
+    # is the index of the Thread in the list threads that did the energy
+    # calculation.
     relaxed_organisms = {}
 
     offspring_generator = general.OffspringGenerator()
     threads = []
 
-    # create the initial batch of offspring organisms and submit them for energy
-    # calculations
+    # create the initial batch of offspring organisms and submit them for
+    # energy calculations
     for _ in range(num_calcs_at_once):
         unrelaxed_offspring = offspring_generator.make_offspring_organism(
-            random, pool, variations, geometry, id_generator, whole_pop, developer,
-            redundancy_guard, composition_space, constraints)
+            random, pool, variations, geometry, id_generator, whole_pop,
+            developer, redundancy_guard, composition_space, constraints)
         whole_pop.append(copy.deepcopy(unrelaxed_offspring))
         geometry.pad(unrelaxed_offspring)
         stopping_criteria.update_calc_counter()
@@ -260,10 +285,10 @@ def main():
                     geometry.unpad(relaxed_offspring, constraints)
                     if developer.develop(relaxed_offspring, composition_space,
                                          constraints, geometry, pool):
-                        # check for redundancy with the organisms in the pool first
+                        # check for redundancy with the the pool first
                         redundant_organism = redundancy_guard.check_redundancy(
                             relaxed_offspring, pool.to_list())
-                        if redundant_organism is not None:  # redundancy
+                        if redundant_organism is not None:  # redundant
                             if redundant_organism.epa > relaxed_offspring.epa:
                                 pool.replace_organism(redundant_organism,
                                                       relaxed_offspring,
@@ -271,24 +296,30 @@ def main():
                                 pool.compute_fitnesses()
                                 pool.compute_selection_probs()
                                 pool.print_summary(composition_space)
-                                pool.print_progress(composition_space)
+                                progress = pool.get_progress(composition_space)
+                                data_writer.write_data(relaxed_offspring,
+                                                       num_finished_calcs,
+                                                       progress)
                                 print('Number of energy calculations so far: '
                                       '{} '.format(num_finished_calcs))
-                        # check for redundancy with all the organisms in whole_pop
+                        # check for redundancy with all the organisms
                         else:
-                            redundant_organism = redundancy_guard.check_redundancy(
-                                relaxed_offspring, whole_pop)
-                        if redundant_organism is None:  # no redundancy
+                            redundant_organism = \
+                                redundancy_guard.check_redundancy(
+                                    relaxed_offspring, whole_pop)
+                        if redundant_organism is None:  # not redundant
                             stopping_criteria.check_organism(relaxed_offspring)
-                            pool.add_organism(relaxed_offspring, composition_space)
+                            pool.add_organism(relaxed_offspring,
+                                              composition_space)
                             whole_pop.append(relaxed_offspring)
 
-                            # check if we've added enough new offspring organisms
-                            # to the pool that we can remove the initial population
-                            # organisms from the front (right end) of the queue.
+                            # check if we've added enough new offspring
+                            # organisms to the pool that we can remove the
+                            # initial population organisms from the front
+                            # (right end) of the queue.
                             if pool.num_adds == pool.size:
-                                print('Removing the initial population from the '
-                                      'pool ')
+                                print('Removing the initial population from '
+                                      'the pool ')
                                 for _ in range(len(
                                         initial_population.initial_population)):
                                     removed_org = pool.queue.pop()
@@ -296,19 +327,23 @@ def main():
                                     print('Removing organism {} from the '
                                           'pool '.format(removed_org.id))
 
-                            # if the initial population organisms have already been
-                            # removed from the pool's queue, then just need to pop
-                            # one organism from the front (right end) of the queue.
+                            # if the initial population organisms have already
+                            # been removed from the pool's queue, then just
+                            # need to pop one organism from the front (right
+                            # end) of the queue.
                             elif pool.num_adds > pool.size:
                                 removed_org = pool.queue.pop()
                                 removed_org.is_active = False
-                                print('Removing organism {} from the pool '.format(
-                                    removed_org.id))
+                                print('Removing organism {} from the '
+                                      'pool '.format(removed_org.id))
 
                             pool.compute_fitnesses()
                             pool.compute_selection_probs()
                             pool.print_summary(composition_space)
-                            pool.print_progress(composition_space)
+                            progress = pool.get_progress(composition_space)
+                            data_writer.write_data(relaxed_offspring,
+                                                   num_finished_calcs,
+                                                   progress)
                             print('Number of energy calculations so far: '
                                   '{} '.format(num_finished_calcs))
 
@@ -329,8 +364,8 @@ def main():
                     thread.start()
                     threads[thread_index] = thread
 
-    # process all the calculations that were still running when the last creator
-    # finished
+    # process all the calculations that were still running when the last
+    # creator finished
     num_to_get = num_calcs_at_once  # how many threads we have left to handle
     handled_indices = []  # the indices of the threads we've already handled
     while num_to_get > 0:
@@ -348,10 +383,10 @@ def main():
                     geometry.unpad(relaxed_offspring, constraints)
                     if developer.develop(relaxed_offspring, composition_space,
                                          constraints, geometry, pool):
-                        # check for redundancy with the organisms in the pool first
+                        # check for redundancy with the pool first
                         redundant_organism = redundancy_guard.check_redundancy(
                             relaxed_offspring, pool.to_list())
-                        if redundant_organism is not None:  # redundancy
+                        if redundant_organism is not None:  # redundant
                             if redundant_organism.epa > relaxed_offspring.epa:
                                 pool.replace_organism(redundant_organism,
                                                       relaxed_offspring,
@@ -359,15 +394,20 @@ def main():
                                 pool.compute_fitnesses()
                                 pool.compute_selection_probs()
                                 pool.print_summary(composition_space)
-                                pool.print_progress(composition_space)
+                                progress = pool.get_progress(composition_space)
+                                data_writer.write_data(relaxed_offspring,
+                                                       num_finished_calcs,
+                                                       progress)
                                 print('Number of energy calculations so far: '
                                       '{} '.format(num_finished_calcs))
-                        # check for redundancy with all the organisms in whole_pop
+                        # check for redundancy with all the organisms
                         else:
-                            redundant_organism = redundancy_guard.check_redundancy(
-                                relaxed_offspring, whole_pop)
-                        if redundant_organism is None:  # no redundancy
-                            pool.add_organism(relaxed_offspring, composition_space)
+                            redundant_organism = \
+                                redundancy_guard.check_redundancy(
+                                    relaxed_offspring, whole_pop)
+                        if redundant_organism is None:  # not redundant
+                            pool.add_organism(relaxed_offspring,
+                                              composition_space)
                             whole_pop.append(relaxed_offspring)
                             removed_org = pool.queue.pop()
                             removed_org.is_active = False
@@ -376,7 +416,10 @@ def main():
                             pool.compute_fitnesses()
                             pool.compute_selection_probs()
                             pool.print_summary(composition_space)
-                            pool.print_progress(composition_space)
+                            progress = pool.get_progress(composition_space)
+                            data_writer.write_data(relaxed_offspring,
+                                                   num_finished_calcs,
+                                                   progress)
                             print('Number of energy calculations so far: '
                                   '{} '.format(num_finished_calcs))
 

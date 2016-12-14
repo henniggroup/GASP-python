@@ -358,12 +358,6 @@ class InitialPopulation():
                                      str(organism_to_add.id))
         print('Adding organism {} to the initial population'.format(
             organism_to_add.id))
-
-        # for making phase diagram plots and tracking number of atoms in cell
-        print('Organism {} has composition {} and total energy {}'.format(
-            organism_to_add.id,
-            organism_to_add.composition.formula.replace(' ', ''),
-            organism_to_add.total_energy))
         self.initial_population.append(organism_to_add)
         organism_to_add.is_active = True
 
@@ -385,11 +379,6 @@ class InitialPopulation():
         print('Replacing organism {} with organism {} in the initial '
               'population'.format(old_org.id, new_org.id))
 
-        # for making phase diagram plots and tracking number of atoms in cell
-        print('Organism {} has composition {} and total energy {}'.format(
-            new_org.id, new_org.composition.formula.replace(' ', ''),
-            new_org.total_energy))
-
         # remove the redundant organism and add the new one
         for org in self.initial_population:
             if org.id == old_org.id:
@@ -398,34 +387,33 @@ class InitialPopulation():
         self.initial_population.append(new_org)
         new_org.is_active = True
 
-    def print_progress(self, composition_space):
+    def get_progress(self, composition_space):
         """
-        Prints out either the best organism (for epa search) or the area/volume
-        of the convex hull (for pd search).
+        Returns either the best energy per atom (for fixed-composition
+        search) or the area/volume of the convex hull (for phase diagram
+        search).
 
         Args:
             composition_space: the CompositionSpace of the search
         """
 
         if composition_space.objective_function == 'epa':
-            self.print_best_org()
+            return self.get_best_epa()
         elif composition_space.objective_function == 'pd':
-            self.print_convex_hull_area(composition_space)
+            return self.get_convex_hull_area(composition_space)
 
-    def print_best_org(self):
+    def get_best_epa(self):
         """
-        Prints out the value and number of the best organism in the initial
-        population.
+        Returns the epa of the best organism in the initial population.
         """
 
         sorted_list = copy.deepcopy(self.initial_population)
         sorted_list.sort(key=lambda x: x.epa, reverse=False)
-        print('Organism {} is the best and has value {} eV/atom'.format(
-            sorted_list[0].id, sorted_list[0].epa))
+        return sorted_list[0].epa
 
-    def print_convex_hull_area(self, composition_space):
+    def get_convex_hull_area(self, composition_space):
         """
-        Computes and prints the area/volume of the current best convex hull.
+        Returns the area/volume of the current convex hull.
 
         Args:
             composition_space: the CompositionSpace of the search
@@ -456,12 +444,11 @@ class InitialPopulation():
             try:
                 convex_hull = ConvexHull(hull_data)
             except:
-                return
+                return None
             if len(composition_space.endpoints) == 2:
-                print('Area of the convex hull: {} '.format(convex_hull.area))
+                return convex_hull.area
             else:
-                print('Volume of the convex hull: {} '.format(
-                    convex_hull.volume))
+                return convex_hull.volume
 
     def has_endpoints(self, composition_space):
         """
@@ -665,12 +652,6 @@ class Pool(object):
 
         print('Adding organism {} to the pool '.format(organism_to_add.id))
 
-        # for making phase diagram plots and tracking number of atoms in cell
-        print('Organism {} has composition {} and total energy {} '.format(
-            organism_to_add.id,
-            organism_to_add.composition.formula.replace(' ', ''),
-            organism_to_add.total_energy))
-
         self.num_adds = self.num_adds + 1
         organism_to_add.structure.sort()
         organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' +
@@ -760,11 +741,6 @@ class Pool(object):
 
         print('Replacing organism {} with organism {} in the pool '.format(
             old_org.id, new_org.id))
-
-        # for making phase diagram plots and tracking number of atoms in cell
-        print('Organism {} has composition {} and total energy {} '.format(
-            new_org.id, new_org.composition.formula.replace(' ', ''),
-            new_org.total_energy))
 
         new_org.structure.sort()
         new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' +
@@ -995,31 +971,31 @@ class Pool(object):
                                            organism.fitness,
                                            organism.selection_prob))
 
-    def print_progress(self, composition_space):
+    def get_progress(self, composition_space):
         """
-        Prints out either the best organism (for fixed-composition search) or
-        the area/volume of the convex hull (for phase diagram search).
+        Returns either the best energy per atom (for fixed-composition
+        search) or the area/volume of the convex hull (for phase diagram
+        search).
 
         Args:
             composition_space: the CompositionSpace of the search
         """
 
         if composition_space.objective_function == 'epa':
-            self.print_best_org()
+            return self.get_best_epa()
         elif composition_space.objective_function == 'pd':
-            self.print_convex_hull_area(composition_space)
+            return self.get_convex_hull_area(composition_space)
 
-    def print_best_org(self):
+    def get_best_epa(self):
         """
         Prints out the id and value of the best organism in the pool.
         """
 
         pool_list = self.to_list()
         pool_list.sort(key=lambda x: x.fitness, reverse=True)
-        print('Organism {} is the best and has value {} eV/atom '.format(
-            pool_list[0].id, pool_list[0].value))
+        return pool_list[0].epa
 
-    def print_convex_hull_area(self, composition_space):
+    def get_convex_hull_area(self, composition_space):
         """
         Prints out the area or volume of the convex hull defined by the
         organisms in the promotion set.
@@ -1043,11 +1019,11 @@ class Pool(object):
         try:
             convex_hull = ConvexHull(hull_data)
         except:
-            return
+            return None
         if len(composition_space.endpoints) == 2:
-            print('Area of the convex hull: {} '.format(convex_hull.area))
+            return convex_hull.area
         else:
-            print('Volume of the convex hull: {} '.format(convex_hull.volume))
+            return convex_hull.volume
 
     def to_list(self):
         """
@@ -1317,7 +1293,7 @@ class StoppingCriteria(object):
 
     def __init__(self, stopping_parameters, composition_space):
         """
-        Makes a StoppingCriteria, and sets default paramter values if
+        Makes a StoppingCriteria, and sets default parameter values if
         necessary.
 
         Args:
@@ -1418,3 +1394,49 @@ class StoppingCriteria(object):
         if self.found_structure is not None:
             if self.found_structure.matches(organism.structure):
                 self.are_satisfied = True
+
+
+class DataWriter(object):
+    """
+    For writing useful data to a file in the course of a search.
+    """
+
+    def __init__(self, file_path, composition_space):
+        """
+        Makes a DataWriter.
+
+        Args:
+            file_path: the path to the file where the data is to be written
+
+            composition_space: the CompositionSpace of the search
+        """
+
+        self.file_path = file_path
+        with open(self.file_path, 'a') as data_file:
+            data_file.write('Number of composition space endpoints: '
+                            '{}\n\n'.format(len(composition_space.endpoints)))
+            data_file.write('id\t composition\t total energy\t epa\t\t '
+                            'num calcs\t best value\n\n')
+
+    def write_data(self, organism, num_calcs, progress):
+        """
+        Writes data to self.file_path in the format:
+
+            id    composition    total energy    epa    num calcs    best value
+
+        Args:
+            organism: the Organism whose data to write
+
+            num_calcs: the number of calculations finished so far,
+                including failures
+
+            progress: for fixed-composition searches, the best epa seen by the
+                algorithm so far. For phase diagram searches, the area/volume
+                of the convex hull, or None if no convex hull could be
+                constructed.
+        """
+
+        with open(self.file_path, 'a') as data_file:
+            data_file.write('{}\t {}\t\t {}\t {}\t {}\t\t {}\n'.format(
+                organism.id, organism.composition.formula.replace(' ', ''),
+                organism.total_energy, organism.epa, num_calcs, progress))

@@ -489,7 +489,7 @@ class Developer(object):
             per atom of the organisms in the promotion set, plus 10%.
         """
 
-        # compute the voluem to scale to
+        # compute the volume to scale to
         vpa_sum = 0
         for org in pool.promotion_set:
             vpa_sum += org.structure.volume/len(org.structure.sites)
