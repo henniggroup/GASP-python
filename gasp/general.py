@@ -852,33 +852,20 @@ class Pool(object):
             if organism not in best_organisms:
                 organism.fitness = 0.0
 
-    def get_best_in_pool(self):
+    def get_n_best_organisms(self, n):
         """
-        Returns the organism in the pool with the best (smallest) objective
-        function value.
+        Returns a list containing the n best organisms in the pool, sorted in
+        order of increasing value.
+
+        Precondition: all the organisms in the pool have up-to-date values
+
+        Args:
+            n: the number of best organisms to get
         """
 
-        # only need to look in the promotion set because that's where the best
-        # ones live
-        best_organism = self.promotion_set[0]
-        for organism in self.promotion_set:
-            if organism.value < best_organism.value:
-                best_organism = organism
-        return best_organism
-
-    def get_worst_in_pool(self):
-        """
-        Returns the organism in the pool with the worst (largest) objective
-        function value.
-        """
-
-        # only need to look in the queue because that's where the worst ones
-        # live
-        worst_organism = self.queue[0]
-        for organism in self.queue:
-            if organism.value > worst_organism.value:
-                worst_organism = organism
-        return worst_organism
+        pool_list = self.to_list()
+        pool_list.sort(key=lambda x: x.value, reverse=False)
+        return pool_list[:n]
 
     def compute_selection_probs(self):
         """
@@ -906,21 +893,6 @@ class Pool(object):
                                                self.selection.power)/denom
             organism.selection_loc = selection_loc
             selection_loc = selection_loc + organism.selection_prob
-
-    def get_n_best_organisms(self, n):
-        """
-        Returns a list containing the n best organisms in the pool, sorted in
-        order of increasing value.
-
-        Precondition: all the organisms in the pool have up-to-date values
-
-        Args:
-            n: the number of best organisms to get
-        """
-
-        pool_list = self.to_list()
-        pool_list.sort(key=lambda x: x.value)
-        return pool_list[:n]
 
     def select_organisms(self, n, random):
         """

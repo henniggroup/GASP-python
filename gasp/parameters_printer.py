@@ -136,7 +136,7 @@ def print_parameters(objects_dict):
                     parameters_file.write('        grow_parents: ' +
                                           str(variation.grow_parents) + '\n')
                     parameters_file.write('        merge_cutoff: ' +
-                                          str(variation.merge_sites) + '\n')
+                                          str(variation.merge_cutoff) + '\n')
 
                 elif variation.name == 'structure mutation':
                     parameters_file.write('    StructureMut: \n')

@@ -299,7 +299,7 @@ Specifies the number of structures in the pool. Defaults to 20, 25, 75 and 150 f
 
   * **num_promoted**
 
-Specifies how many of the best structures are promoted. Defaults to 3 for fixed composition searches. For phase diagram searches, all the structures on the current convex hull are promoted (**num_promoted** is ignored). 
+Specifies how many of the best structures are promoted. Defaults to 3 for fixed composition searches. For phase diagram searches, all the structures on the current convex hull are promoted (**num_promoted** is ignored). If this keyword is used, it must be passed an integer greater than zero (at least one organism must be promoted).
 
 [Go back to Contents](#contents)
 

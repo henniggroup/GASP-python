@@ -164,8 +164,17 @@ def make_objects(parameters):
     if 'Pool' not in parameters:
         pool = general.Pool(None, composition_space, run_dir_name)
     else:
-        pool = general.Pool(parameters['Pool'], composition_space,
-                            run_dir_name)
+        if 'num_promoted' in parameters['Pool']:
+            if parameters['Pool']['num_promoted'] < 1:
+                print('At least one organism must be promoted in the Pool.')
+                print('Quitting...')
+                quit()
+            else:
+                pool = general.Pool(parameters['Pool'], composition_space,
+                                    run_dir_name)
+        else:
+            pool = general.Pool(parameters['Pool'], composition_space,
+                                run_dir_name)
 
     if 'Selection' not in parameters:
         selection = general.SelectionProbDist(None, pool.size)
