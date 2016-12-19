@@ -9,6 +9,8 @@ Run module:
 
 This module is run to do a genetic algorithm structure search.
 
+Usage: python run.py /path/to/gasp/input/file
+
 """
 
 from gasp import general

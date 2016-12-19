@@ -1385,8 +1385,11 @@ class DataWriter(object):
 
         self.file_path = file_path
         with open(self.file_path, 'a') as data_file:
-            data_file.write('Number of composition space endpoints: '
-                            '{}\n\n'.format(len(composition_space.endpoints)))
+            data_file.write('Composition space endpoints: ')
+            for endpoint in composition_space.endpoints:
+                data_file.write(' {}'.format(
+                    endpoint.reduced_formula.replace(' ', '')))
+            data_file.write('\n\n')
             data_file.write('id\t composition\t total energy\t epa\t\t '
                             'num calcs\t best value\n\n')
 
