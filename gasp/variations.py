@@ -702,7 +702,7 @@ class NumStoichsMut(object):
         # the standard deviation of the number of stoichiometries to add
         self.default_sigma_num_adds = 1
         # whether to scale the volume of the offspring to equal that of the
-        # parent
+        # parent (only done when atoms are added to the cell)
         self.default_scale_volume = True
 
         # the average number of stoichiometries to add
@@ -721,7 +721,7 @@ class NumStoichsMut(object):
         else:
             self.sigma_num_adds = num_stoichs_mut_params['sigma_num_adds']
 
-        # whether to scale the volume of the offspring
+        # whether to scale the volume of the offspring after adding atoms
         if 'scale_volume' not in num_stoichs_mut_params:
             self.scale_volume = self.default_scale_volume
         elif num_stoichs_mut_params['scale_volume'] in (None, 'default'):
@@ -814,8 +814,8 @@ class NumStoichsMut(object):
                             structure.sites.index(random_site))
                 structure.remove_sites(site_indices_to_remove)
 
-        # optionally scale the volume after atoms have been added or removed
-        if self.scale_volume:
+        # optionally scale the volume after atoms have been added
+        if self.scale_volume and num_add > 0:
             # this is to suppress the warnings produced if the scale_lattice
             # method fails
             with warnings.catch_warnings():
