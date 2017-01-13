@@ -43,8 +43,13 @@ def print_parameters(objects_dict):
     # make the file where the parameters will be printed
     with open(os.getcwd() + '/ga_parameters', 'w') as parameters_file:
 
-        # write the directory where the search will be done
-        parameters_file.write('search output directory: ' + run_dir_name +
+        # write the title of the run
+        run_title = run_dir_name
+        if run_dir_name == 'garun':
+            run_title = 'default'
+        else:
+            run_title = run_title[6:]
+        parameters_file.write('RunTitle: ' + run_title +
                               '\n')
         parameters_file.write('\n')
 
