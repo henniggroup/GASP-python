@@ -1,32 +1,34 @@
 ## <a id="contents"></a>Contents
 
-1. [Input File](#inputfile)
+1. [Input](#input)
 
-   * [CompositionSpace](#compositionspace)
+   * [Main input file](#maininputfile)
 
-   * [EnergyCode](#energycode)
+       * [CompositionSpace](#compositionspace)
 
-   * [InitialPopulation](#initialpopulation)
+       * [EnergyCode](#energycode)
 
-   * [NumCalcsAtOnce](#numcalcsatonce)
+       * [InitialPopulation](#initialpopulation)
 
-   * [RunTitle](#runtitle)
+       * [NumCalcsAtOnce](#numcalcsatonce)
 
-   * [Pool](#pool)
+       * [RunTitle](#runtitle)
 
-   * [Selection](#selection)
+       * [Pool](#pool)
 
-   * [Variations](#variations)
+       * [Selection](#selection)
 
-   * [Development](#development)
+       * [Variations](#variations)
 
-   * [Constraints](#constraints)
+       * [Development](#development)
 
-   * [RedundancyGuard](#redundancyguard)
+       * [Constraints](#constraints)
 
-   * [Geometry](#geometry)
+       * [RedundancyGuard](#redundancyguard)
 
-   * [StoppingCriteria](#stoppingcriteria)
+       * [Geometry](#geometry)
+
+       * [StoppingCriteria](#stoppingcriteria)
 
 2. [Output](#output)
 
@@ -34,7 +36,7 @@
 
    * [Output to screen](#screenoutput)
 
-   * [Visualizing outout](#visualizingoutput)
+   * [Visualizing output](#visualizingoutput)
 
 3. [Energy Code Interfaces](#energycodeinterfaces)
 
@@ -57,12 +59,25 @@
 
 <br>
 
+## <a id="input"></a>Input
 
-## <a id="inputfile"></a>Input File
+The genetic algorithm can be run from the UNIX command line by typing something like
 
-The input file read by GASP contains the parameters for the structure search. It must be in [YAML](https://en.wikipedia.org/wiki/YAML) format and end with '.yaml'. 
+```
+python run.py input_file.yaml
+```
 
-Note: YAML does not allow tabs, and if the input file contains tabs, an error will arise when the algorithm tries to read it. If your input file contains tabs, here (TODO) is a Python script that you can use to replace each tab with four spaces. 
+where 'run.py' is located [here](../gasp/script/run.py) and 'input_file.yaml' is the main input file read by GASP that contains the parameters for the structure search. It must be in [YAML](https://en.wikipedia.org/wiki/YAML) format and end with '.yaml'. 
+
+Note: YAML does not allow tabs, and if the input file contains tabs, an error will arise when the algorithm tries to read it. [Here](../gasp/script/replace_tabs.py) is a Python script that takes a file as an argument and replaces each tab with four spaces. 
+
+Comments can be placed in the input file on lines that start with '#'. 
+
+Several example input files can be found [here](../examples).
+
+In addition to the main input file, other files may be necessary for the genetic algorithm to run, depending on the input options. For example, the [interfaces to external energy codes](#energycodeinterfaces) require files that specify potentials, and the initial population may be read from disk.
+
+### <a id="maininputfile"></a>Main input file
 
 Below are all the keywords and parameters that may be given in the input file. Most of them are optional, and the non-optional ones are noted as such. For the optional parameters, default values are used if they are not specified in the input file. Placeholders for parameter values are given in angle brackets. 
 
@@ -70,7 +85,7 @@ Below are all the keywords and parameters that may be given in the input file. M
 <br>
 
 
-### <a id="compositionspace"></a>CompositionSpace (not optional)
+#### <a id="compositionspace"></a>CompositionSpace (not optional)
 
 ~~~~
 CompositionSpace:
@@ -106,7 +121,7 @@ If multiple endpoints are given, the algorithm will not search for structures wi
 <br>
 
 
-### <a id="energycode"></a>EnergyCode (not optional)
+#### <a id="energycode"></a>EnergyCode (not optional)
 
 ~~~~
 EnergyCode:
@@ -179,7 +194,7 @@ See [here](#vasp) for a more detailed description of how to use VASP with GASP.
 <br>
 
 
-### <a id="initialpopulation"></a>InitialPopulation (not optional for phase diagram searches)
+#### <a id="initialpopulation"></a>InitialPopulation (not optional for phase diagram searches)
 
 ~~~~
 InitialPopulation:
@@ -220,7 +235,7 @@ InitialPopulation:
         volume: from_atomic_radii
 ~~~~
 
-To provide a sufficient initial sampling of the solution space, we recommend that the number of structures in the initial population exceed the number of structures in the pool (see the [Pool](#pool) keyword). This is achieved by the default values for fixed composition searches: the pool contains 20 structures and the initial population contains 28 structures - a 40% increase. For phase diagram searches, the initial population must be specified in the input file. The default pool size for a binary phase diagram search is 25 structures, so to achieve a 40% increase, the initial population should contain 35 structures. This is easily done by specifying that the initial population contain 33 random structures in addition to the two reference structures at the endpoint compositions. For this case, the InitialPopulation block would look like this:
+To provide a sufficient initial sampling of the solution space, we recommend that the number of structures in the initial population exceed the number of structures in the pool (see the [Pool](#pool) keyword). This is achieved by the default values for fixed composition searches: the pool contains 20 structures and the initial population contains 28 structures - a 40% increase. For phase diagram searches, the initial population must be specified in the input file. The default pool size for a binary phase diagram search is 25 structures, so to achieve a 40% increase, the initial population should contain 35 structures. This is easily done by specifying that the initial population contain 33 random structures in addition to the two reference structures at the endpoint compositions. For this case, the **InitialPopulation** block would look like this:
 
 ~~~~
 InitialPopulation:
@@ -263,7 +278,7 @@ InitialPopulation:
 <br>
 
 
-### <a id="numcalcsatonce"></a>NumCalcsAtOnce
+#### <a id="numcalcsatonce"></a>NumCalcsAtOnce
 
 ~~~~
 NumCalcsAtOnce: <integer>
@@ -277,7 +292,7 @@ Specifies how many energy calculations the algorithm should run at a time. Optio
 <br>
 
 
-### <a id="runtitle"></a>RunTitle 
+#### <a id="runtitle"></a>RunTitle 
 
 ~~~~
 RunTitle: <string>
@@ -291,7 +306,7 @@ Specifies the name of the search. Optional, and if not specified, the algorithm 
 <br>
 
 
-### <a id="pool"></a>Pool
+#### <a id="pool"></a>Pool
 
 ~~~~
 Pool:
@@ -315,7 +330,7 @@ Specifies how many of the best structures are promoted. Defaults to 3 for fixed 
 <br>
 
 
-### <a id="selection"></a>Selection
+#### <a id="selection"></a>Selection
 
 ~~~~
 Selection:
@@ -341,7 +356,7 @@ See TODO for a description of how selection probabilities are computed.
 <br>
 
 
-### <a id="variations"></a>Variations
+#### <a id="variations"></a>Variations
 
 ~~~~
 Variations:
@@ -357,7 +372,7 @@ Variations:
 
 The **Variations** keyword specifies the variations the algorithm uses to create offspring structures from parents. The entire block is optional. 
 
-#### <a id="mating"></a>Mating
+####<a id="mating"></a>Mating
 
 ~~~~
 Variations:
@@ -546,7 +561,7 @@ Variations:
 <br>
 
 
-### <a id="development"></a>Development
+#### <a id="development"></a>Development
 
 ~~~~
 Development:
@@ -578,7 +593,7 @@ When searching for non-bulk structures (see the [Geometry](#geometry) keyword), 
 <br>
 
 
-### <a id="constraints"></a>Constraints
+#### <a id="constraints"></a>Constraints
 
 ~~~~
 Constraints:
@@ -646,7 +661,7 @@ Constraints:
 <br>
 
 
-### <a id="redundancyguard"></a>RedundancyGuard
+#### <a id="redundancyguard"></a>RedundancyGuard
 
 ~~~~
 RedundancyGuard:
@@ -702,7 +717,7 @@ RedundancyGuard:
 <br>
 
 
-### <a id="geometry"></a>Geometry
+#### <a id="geometry"></a>Geometry
 
 ~~~~
 Geometry:
@@ -748,7 +763,7 @@ See [here](#nonbulk) for details on searching for non-bulk structures, including
 <br>
 
 
-### <a id="stoppingcriteria"></a>StoppingCriteria
+#### <a id="stoppingcriteria"></a>StoppingCriteria
 
 ~~~~
 StoppingCriteria:
@@ -805,7 +820,7 @@ Much important information about the progress of the algorithm is written to scr
 
 ### <a id="visualizingoutput"></a>Visualizing output
 
-The POSCAR files of individual structures can be viewed using software such as [Vesta](http://jp-minerals.org/vesta/en/).
+The POSCAR files of individual structures can be viewed with software such as [Vesta](http://jp-minerals.org/vesta/en/).
 
 The progress of the algorithm can be visualized by plotting the best value seen by the algorithm so far (either the lowest energy per atom for fixed composition searches or the largest area/volume of the convex hull for phase diagram searches) against the number of completed energy calculations. A Python script to create such a plot using the [matplotlib](http://matplotlib.org) plotting library is located [here](../gasp/scripts/plot_progress.py). It takes the 'run_data' file as an argument (see [Output to disk](#diskoutput)). 
 
