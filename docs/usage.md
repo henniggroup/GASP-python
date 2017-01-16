@@ -67,9 +67,9 @@ The genetic algorithm can be run from the UNIX command line by typing something 
 python run.py input_file.yaml
 ```
 
-where 'run.py' is located [here](../gasp/script/run.py) and 'input_file.yaml' is the main input file read by GASP that contains the parameters for the structure search. It must be in [YAML](https://en.wikipedia.org/wiki/YAML) format and end with '.yaml'. 
+where 'run.py' is located [here](../gasp/scripts/run.py) and 'input_file.yaml' is the main input file read by GASP that contains the parameters for the structure search. It must be in [YAML](https://en.wikipedia.org/wiki/YAML) format and end with '.yaml'. 
 
-Note: YAML does not allow tabs, and if the input file contains tabs, an error will arise when the algorithm tries to read it. [Here](../gasp/script/replace_tabs.py) is a Python script that takes a file as an argument and replaces each tab with four spaces. 
+Note: YAML does not allow tabs, and if the input file contains tabs, an error will arise when the algorithm tries to read it. [Here](../gasp/scripts/replace_tabs.py) is a Python script that takes a file as an argument and replaces each tab with four spaces. 
 
 Comments can be placed in the input file on lines that start with '#'. 
 
