@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import glob
 
 from setuptools import setup, find_packages
 
@@ -10,7 +11,7 @@ if __name__ == "__main__":
     setup(
         name='GASP',
         version='0.1',
-        description='',
+        description='Genetic algorithm for structure and phase prediction',
         long_description=open(os.path.join(module_dir, 'README.rst')).read(),
         url='https://github.com/henniggroup/GASP-python',
         author='Benjamin Revard',
@@ -30,6 +31,7 @@ if __name__ == "__main__":
                      'Topic :: Scientific/Engineering'],
         test_suite='nose.collector',
         tests_require=['nose'],
+        scripts=glob.glob(os.path.join(module_dir, "gasp/scripts", "*")),
         entry_points={
             'console_scripts': ['run_gasp = gasp.scripts.run:main']
         }   
