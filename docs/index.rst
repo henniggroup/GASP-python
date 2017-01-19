@@ -13,7 +13,6 @@ Contents:
 
    gasp
 
-
 Indices and tables
 ==================
 
