@@ -30,6 +30,7 @@ def main():
     if len(sys.argv) < 2:
         print('No input file given.')
         print('Quitting...')
+        quit()
     else:
         input_file = os.path.abspath(sys.argv[1])
 
@@ -39,6 +40,7 @@ def main():
     except:
         print('Error reading input file.')
         print('Quitting...')
+        quit()
 
     # make the objects needed by the algorithm
     objects_dict = objects_maker.make_objects(parameters)
