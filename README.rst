@@ -59,21 +59,20 @@ pymatgen recommends using the gcc compiler. To do so, type::
 
     export CC=gcc 
 
-Install numpy, scipy and matplotlib with pip::
+Install numpy, scipy, matplotlib and pymatgen with pip::
 
     pip install numpy
     pip install scipy
     pip install matplotlib
-
-Install pymatgen::
-
     pip install pymatgen
 
-For Mac, an additional step is needed in order to use the scripts included with GASP for making plots. These scripts depend on the matplotlib library, which requires a framework build of Python to run properly on Mac OS X. However, the version of Python that comes with conda is a regular build. To install a framework build in your conda environment, type::
+For Mac, an additional step is needed in order to use the scripts included with GASP for making plots. These scripts depend on the matplotlib_ library, which requires a framework build of Python to run properly on Mac OS X. However, a regular Python build comes with conda by default. To install a framework build in your conda environment, type::
 
     conda install python.app  
 
 See the 'Visualizing output' section of the the `usage file`_ for more information on making plots.
+
+.. _matplotlib: http://matplotlib.org/index.html 
 
 
 4. Install GASP-python
