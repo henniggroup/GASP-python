@@ -31,7 +31,7 @@ if __name__ == "__main__":
                      'Topic :: Scientific/Engineering'],
         test_suite='nose.collector',
         tests_require=['nose'],
-        scripts=glob.glob(os.path.join(module_dir, "gasp/scripts", "*")),
+        scripts=glob.glob(os.path.join(module_dir, "gasp", "scripts", "*")),
         entry_points={
             'console_scripts': ['run_gasp = gasp.scripts.run:main']
         }   

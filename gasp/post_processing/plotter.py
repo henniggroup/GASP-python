@@ -98,6 +98,7 @@ class Plotter(object):
         plt.tick_params(which='major', length=8)
         plt.tick_params(which='minor', length=4)
         plt.xlim(xmin=0)
+        plt.tight_layout()
         return plt
 
     def plot_progress(self):
@@ -141,6 +142,7 @@ class Plotter(object):
         plt.tick_params(which='minor', length=4)
         plt.xlim(xmin=0)
         plt.ylim(ymin=0)
+        plt.tight_layout()
         return plt
 
     def plot_system_size(self):

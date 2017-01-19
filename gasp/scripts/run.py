@@ -27,7 +27,12 @@ import os
 
 def main():
     # get dictionaries from the input file (in yaml format)
-    input_file = os.path.abspath(sys.argv[1])
+    if len(sys.argv) < 2:
+        print('No input file given.')
+        print('Quitting...')
+    else:
+        input_file = os.path.abspath(sys.argv[1])
+
     try:
         with open(input_file, 'r') as f:
             parameters = yaml.load(f)
