@@ -54,7 +54,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'gasp'
-copyright = '2017, author'
+copyright = '2017, Benjamin Revard, Richard G. Hennig'
 author = 'Benjamin Revard, Richard G. Hennig'
 
 # The version info for the project you're documenting, acts as replacement for

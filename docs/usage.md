@@ -71,9 +71,13 @@ run.py input_file.yaml
 
 where 'input_file.yaml' is the main input file read by GASP that contains the parameters for the structure search. It must be in [YAML](https://en.wikipedia.org/wiki/YAML) format and end with '.yaml'. 
 
-Note: YAML does not allow tabs, and if the input file contains tabs, an error will arise when the algorithm tries to read it. [Here](../gasp/scripts/replace_tabs.py) is a Python script that takes a file as an argument and replaces each tab with four spaces. 
+Note: YAML does not allow tabs, and if the input file contains tabs, an error will arise when the algorithm tries to read it. GASP comes with a script that takes a file as an argument and replaces each tab with four spaces. To use it on an input file, type:
 
-Comments can be placed in the input file on lines that start with '#'. 
+```
+replace_tabs.py input_file.yaml
+``` 
+
+Comments may be placed in the input file on lines that start with '#'. 
 
 Several example input files can be found [here](../examples).
 
