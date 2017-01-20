@@ -205,6 +205,17 @@ def make_organism_creators(parameters, composition_space):
         return make_default_organism_creator(composition_space)
     # make the specified creators
     else:
+        # check that at least one valid option is used
+        # TODO: if other organism creators are used, check them here as well
+        if 'random' not in parameters['InitialPopulation'] and 'from_files' \
+                not in parameters['InitialPopulation']:
+            print('At least one valid option for making structures for the '
+                  'initial population must be provided.')
+            print('Please use the "random" and/or "from_files" keywords in '
+                  'the InitialPopulation block.')
+            print('Quitting...')
+            quit()
+
         initial_organism_creators = []
 
         # the random organism creator
