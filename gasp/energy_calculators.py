@@ -19,8 +19,9 @@ with external energy codes.
 
 """
 
+from gasp.general import Cell
+
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.structure import Structure
 from pymatgen.core.periodic_table import Element
 from pymatgen.io.vasp.outputs import Vasprun
 from pymatgen.io.lammps.data import LammpsData
@@ -87,13 +88,13 @@ class VaspEnergyCalculator(object):
         shutil.copy(self.incar_file, job_dir_path)
         shutil.copy(self.kpoints_file, job_dir_path)
 
-        # sort the structure of the organism and write to POSCAR file
-        organism.structure.sort()
-        organism.structure.to(fmt='poscar', filename=job_dir_path + '/POSCAR')
+        # sort the organism's cell and write to POSCAR file
+        organism.cell.sort()
+        organism.cell.to(fmt='poscar', filename=job_dir_path + '/POSCAR')
 
         # get a list of the element symbols in the sorted order
         symbols = []
-        for site in organism.structure.sites:
+        for site in organism.cell.sites:
             symbols.append(site.specie.symbol)
         symbols = list(set(symbols))
 
@@ -118,7 +119,7 @@ class VaspEnergyCalculator(object):
 
         # parse the relaxed structure from the CONTCAR file
         try:
-            relaxed_structure = Structure.from_file(job_dir_path + '/CONTCAR')
+            relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
         except:
             print('Error reading structure of organism {} from CONTCAR '
                   'file '.format(organism.id))
@@ -156,9 +157,9 @@ class VaspEnergyCalculator(object):
             dictionary[key] = None
             return
 
-        organism.structure = relaxed_structure
+        organism.cell = relaxed_cell
         organism.total_energy = total_energy
-        organism.epa = total_energy/organism.structure.num_sites
+        organism.epa = total_energy/organism.cell.num_sites
         print('Setting energy of organism {} to {} '
               'eV/atom '.format(organism.id, organism.epa))
         dictionary[key] = organism
@@ -213,11 +214,11 @@ class LammpsEnergyCalculator(object):
         script_name = os.path.basename(self.input_script)
         input_script_path = job_dir_path + '/' + str(script_name)
 
-        self.conform_to_lammps(organism)
+        self.conform_to_lammps(organism.cell)
         self.write_data_file(organism, job_dir_path)  # write in.data file
 
         # just for testing, write out the unrelaxed structure to a poscar file
-        # organism.structure.to(fmt='poscar', filename= job_dir_path +
+        # organism.cell.to(fmt='poscar', filename= job_dir_path +
         #    '/POSCAR.' + str(organism.id) + '_unrelaxed')
 
         # run 'calllammps' script as a subprocess to run LAMMPS
@@ -241,9 +242,9 @@ class LammpsEnergyCalculator(object):
             log_file.write(lammps_output)
 
         # parse the relaxed structure from the atom.dump file
-        symbols = organism.structure.symbol_set
+        symbols = organism.cell.symbol_set
         try:
-            relaxed_structure = self.get_relaxed_structure(
+            relaxed_cell = self.get_relaxed_cell(
                 job_dir_path + '/dump.atom', job_dir_path + '/in.data',
                 symbols)
         except:
@@ -261,17 +262,16 @@ class LammpsEnergyCalculator(object):
             dictionary[key] = None
             return
 
-        organism.structure = relaxed_structure
+        organism.cell = relaxed_cell
         organism.total_energy = total_energy
-        organism.epa = total_energy/organism.structure.num_sites
+        organism.epa = total_energy/organism.cell.num_sites
         print('Setting energy of organism {} to {} eV/atom '.format(
             organism.id, organism.epa))
         dictionary[key] = organism
 
-    def conform_to_lammps(self, organism):
+    def conform_to_lammps(self, cell):
         """
-        Modifies and organism's structure to satisfy the requirements of
-        lammps, which are:
+        Modifies a cell to satisfy the requirements of lammps, which are:
 
             1. the lattice vectors lie in the principal directions
 
@@ -287,22 +287,22 @@ class LammpsEnergyCalculator(object):
         by taking supercells along lattice vectors when needed.
 
         Args:
-            organism: the Organism whose structure to modify
+            cell: the Cell to modify
         """
 
-        organism.rotate_to_principal_directions()
-        lattice_coords = organism.structure.lattice.matrix
+        cell.rotate_to_principal_directions()
+        lattice_coords = cell.lattice.matrix
         ax = lattice_coords[0][0]
         bx = lattice_coords[1][0]
         cx = lattice_coords[2][0]
         by = lattice_coords[1][1]
         cy = lattice_coords[2][1]
         if ax < bx or ax < cx:
-            organism.structure.make_supercell([2, 1, 1])
-            self.conform_to_lammps(organism)
+            cell.make_supercell([2, 1, 1])
+            self.conform_to_lammps(cell)
         elif by < cy:
-            organism.structure.make_supercell([1, 2, 1])
-            self.conform_to_lammps(organism)
+            cell.make_supercell([1, 2, 1])
+            self.conform_to_lammps(cell)
 
     def write_data_file(self, organism, job_dir_path):
         """
@@ -317,7 +317,7 @@ class LammpsEnergyCalculator(object):
         """
 
         # get xhi, yhi and zhi from the lattice vectors
-        lattice_coords = organism.structure.lattice.matrix
+        lattice_coords = organism.cell.lattice.matrix
         xhi = lattice_coords[0][0]
         yhi = lattice_coords[1][1]
         zhi = lattice_coords[2][2]
@@ -329,7 +329,7 @@ class LammpsEnergyCalculator(object):
         yz = lattice_coords[2][1]
 
         # make a LammpsData object
-        ldata = LammpsData.from_structure(organism.structure, box_size,
+        ldata = LammpsData.from_structure(organism.cell, box_size,
                                           set_charge=True)
 
         # write the data to a file
@@ -358,7 +358,7 @@ class LammpsEnergyCalculator(object):
                 atoms_index = lines.index(line) + 2
 
         # remove the the molecule id's
-        for i in range(len(organism.structure.sites)):
+        for i in range(len(organism.cell.sites)):
             split_line = lines[atoms_index + i].split()
             del split_line[1]
             modified_line = ''
@@ -373,12 +373,11 @@ class LammpsEnergyCalculator(object):
             for line in lines:
                 f.write('%s' % line)
 
-    def get_relaxed_structure(self, atom_dump_path, data_in_path,
-                              element_symbols):
+    def get_relaxed_cell(self, atom_dump_path, data_in_path, element_symbols):
         """
-        Parses the relaxed structure from the dump.atom file.
+        Parses the relaxed cell from the dump.atom file.
 
-        Returns the relaxed structure as a Structure object.
+        Returns the relaxed cell as a Cell object.
 
         Args:
             atom_dump_path: the path (as a string) to the dump.atom file
@@ -464,8 +463,8 @@ class LammpsEnergyCalculator(object):
         for atom_type in types:
             relaxed_symbols.append(types_symbols[atom_type])
 
-        return Structure(relaxed_lattice, relaxed_symbols, relaxed_cart_coords,
-                         coords_are_cartesian=True)
+        return Cell(relaxed_lattice, relaxed_symbols, relaxed_cart_coords,
+                    coords_are_cartesian=True)
 
     def get_energy(self, lammps_log_path):
         """
@@ -595,7 +594,7 @@ class GulpEnergyCalculator(object):
         os.mkdir(job_dir_path)
 
         # just for testing, write out the unrelaxed structure to a poscar file
-        # organism.structure.to(fmt='poscar', filename= job_dir_path +
+        # organism.cell.to(fmt='poscar', filename= job_dir_path +
         #    '/POSCAR.' + str(organism.id) + '_unrelaxed')
 
         # write the GULP input file
@@ -626,6 +625,7 @@ class GulpEnergyCalculator(object):
         # check if not converged (part of this is copied from pymatgen)
         conv_err_string = 'Conditions for a minimum have not been satisfied'
         gradient_norm = self.get_grad_norm(gulp_output)
+        print(gradient_norm)
         if conv_err_string in gulp_output and gradient_norm > 0.1:
             print('The GULP calculation on organism {} did not '
                   'converge '.format(organism.id))
@@ -635,7 +635,7 @@ class GulpEnergyCalculator(object):
         # parse the relaxed structure from the gulp output
         try:
             # TODO: change this line if pymatgen fixes the gulp parser
-            relaxed_structure = self.get_relaxed_structure(gulp_output)
+            relaxed_cell = self.get_relaxed_cell(gulp_output)
         except:
             print('Error reading structure of organism {} from GULP '
                   'output '.format(organism.id))
@@ -654,9 +654,9 @@ class GulpEnergyCalculator(object):
         # sometimes gulp takes a supercell
         num_atoms = self.get_num_atoms(gulp_output)
 
-        organism.structure = relaxed_structure
+        organism.cell = relaxed_cell
         organism.epa = total_energy/num_atoms
-        organism.total_energy = organism.epa*organism.structure.num_sites
+        organism.total_energy = organism.epa*organism.cell.num_sites
         print('Setting energy of organism {} to {} eV/atom '.format(
             organism.id, organism.epa))
         dictionary[key] = organism
@@ -673,7 +673,7 @@ class GulpEnergyCalculator(object):
 
         # get the structure lines
         structure_lines = self.gulp_io.structure_lines(
-            organism.structure, anion_shell_flg=self.anions_shell,
+            organism.cell, anion_shell_flg=self.anions_shell,
             cation_shell_flg=self.cations_shell, symm_flg=False)
         structure_lines = structure_lines.split('\n')
         del structure_lines[-1]  # remove empty line that gets added
@@ -741,7 +741,7 @@ class GulpEnergyCalculator(object):
     # it slightly to get it to work.
     # TODO: if pymatgen fixes this method, then I can delete this.
     # Alternatively, could submit a pull request with my fix
-    def get_relaxed_structure(self, gout):
+    def get_relaxed_cell(self, gout):
         # Find the structure lines
         structure_lines = []
         cell_param_lines = []
@@ -824,4 +824,4 @@ class GulpEnergyCalculator(object):
             gamma = float(cell_param_lines[5].split()[1])
         latt = Lattice.from_parameters(a, b, c, alpha, beta, gamma)
 
-        return Structure(latt, sp, coords)
+        return Cell(latt, sp, coords)

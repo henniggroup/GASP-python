@@ -247,7 +247,7 @@ def print_parameters(objects_dict):
         if stopping_criteria.value_achieved is not None:
             parameters_file.write('    value_achieved: ' +
                                   str(stopping_criteria.value_achieved) + '\n')
-        if stopping_criteria.found_structure is not None:
+        if stopping_criteria.found_cell is not None:
             parameters_file.write('    found_structure: ' +
                                   stopping_criteria.path_to_structure_file +
                                   '\n')

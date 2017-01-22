@@ -17,10 +17,9 @@ population.
         files
 
 """
-from gasp.general import Organism
+from gasp.general import Organism, Cell
 
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.structure import Structure
 from pymatgen.core.composition import Composition
 
 from fractions import Fraction
@@ -121,16 +120,15 @@ class RandomOrganismCreator(object):
             random_coordinates.append([random.random(), random.random(),
                                        random.random()])
 
-        # make a random structure
-        random_structure = Structure(random_lattice, species,
-                                     random_coordinates)
+        # make a random cell
+        random_cell = Cell(random_lattice, species, random_coordinates)
 
         # optionally scale the volume of the random structure
-        if not self.scale_volume(random_structure):
+        if not self.scale_volume(random_cell):
             return None  # sometimes pymatgen's scaling algorithm crashes
 
         # make the random organism
-        random_org = Organism(random_structure, id_generator, self.name)
+        random_org = Organism(random_cell, id_generator, self.name)
         print('Random organism creator making organism {} '.format(
             random_org.id))
         return random_org
@@ -332,42 +330,40 @@ class RandomOrganismCreator(object):
                 species.append(specie)
         return species
 
-    def scale_volume(self, random_structure):
+    def scale_volume(self, random_cell):
         """
-        Scales the volume of the random structure according the value of
+        Scales the volume of the random cell according the value of
         self.volume.
 
         Returns a boolean indicating whether volume scaling was completed
         without errors.
 
         Args:
-            random_structure: the random Structure whose volume to possibly
-                scale
+            random_cell: the random Cell whose volume to possibly scale
         """
 
         if self.volume == 'from_atomic_radii':
-            return self.scale_volume_atomic_radii(random_structure)
+            return self.scale_volume_atomic_radii(random_cell)
         elif self.volume == 'random':  # no volume scaling
             return True
         else:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
-                random_structure.scale_lattice(self.volume*len(
-                    random_structure.sites))
-                if str(random_structure.lattice.a) == 'nan' or \
-                        random_structure.lattice.a > 100:
+                random_cell.scale_lattice(self.volume*len(
+                    random_cell.sites))
+                if str(random_cell.lattice.a) == 'nan' or \
+                        random_cell.lattice.a > 100:
                     return False
                 else:
                     return True
 
-    def scale_volume_atomic_radii(self, random_structure):
+    def scale_volume_atomic_radii(self, random_cell):
         """
-        Scales the volume of the random structure based on the radii of the
-        atoms in the structure.
+        Scales the volume of the random cell based on the radii of the
+        atoms in the cell.
 
         Args:
-            random_structure: the random Structure whose volume to possibly
-                scale
+            random_cell: the random Cell whose volume to possibly scale
 
         Description:
 
@@ -383,10 +379,10 @@ class RandomOrganismCreator(object):
 
         # sum atomic volumes (from atomic radii)
         total_atomic_volume = 0
-        for element in random_structure.composition:
+        for element in random_cell.composition:
             volume_per_atom = (4.0/3.0)*np.pi*np.power(element.atomic_radius,
                                                        3)
-            num_atoms = random_structure.composition[element]
+            num_atoms = random_cell.composition[element]
             total_atomic_volume += volume_per_atom*num_atoms
 
         # empirical scale factor
@@ -398,9 +394,9 @@ class RandomOrganismCreator(object):
         # scale_lattice method fails
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            random_structure.scale_lattice(scale_factor*total_atomic_volume)
-            if str(random_structure.lattice.a) == 'nan' or \
-                    random_structure.lattice.a > 100:
+            random_cell.scale_lattice(scale_factor*total_atomic_volume)
+            if str(random_cell.lattice.a) == 'nan' or \
+                    random_cell.lattice.a > 100:
                 return False
             else:
                 return True
@@ -470,10 +466,10 @@ class FileOrganismCreator(object):
         if self.files[self.num_made - 1].endswith('.cif') or self.files[
                 self.num_made - 1].startswith('POSCAR'):
             try:
-                new_struct = Structure.from_file(
+                new_cell = Cell.from_file(
                     str(self.path_to_folder) + "/" + str(
                         self.files[self.num_made - 1]))
-                new_org = Organism(new_struct, id_generator, self.name)
+                new_org = Organism(new_cell, id_generator, self.name)
                 print('Making organism {} from file: {} '.format(
                     new_org.id, self.files[self.num_made - 1]))
                 self.update_status()
@@ -489,27 +485,27 @@ class FileOrganismCreator(object):
             self.update_status()
             return None
 
-    def get_structures(self):
+    def get_cells(self):
         """
-        Creates structures from the files and puts them in a list.
+        Creates cells from the files and puts them in a list.
 
-        Returns the list of Structure objects.
+        Returns the list of Cell objects.
 
         Used for checking if all the composition space endpoint are included
         for phase diagram searches.
         """
 
-        file_structures = []
-        for structure_file in self.files:
-            if structure_file.endswith('.cif') or structure_file.startswith(
+        file_cells = []
+        for cell_file in self.files:
+            if cell_file.endswith('.cif') or cell_file.startswith(
                     'POSCAR'):
                 try:
-                    new_struct = Structure.from_file(
-                        str(self.path_to_folder) + "/" + str(structure_file))
-                    file_structures.append(new_struct)
+                    new_cell = Cell.from_file(
+                        str(self.path_to_folder) + "/" + str(cell_file))
+                    file_cells.append(new_cell)
                 except:
                     pass
-        return file_structures
+        return file_cells
 
     def update_status(self):
         """

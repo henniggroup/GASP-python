@@ -71,17 +71,16 @@ class IDGenerator(object):
 
 class Organism(object):
     """
-    An organism, consisting primarily of a structure and an energy, as well as
+    An organism, consisting primarily of a cell and an energy, as well as
     several derived quantities.
     """
 
-    def __init__(self, structure, id_generator, maker):
+    def __init__(self, cell, id_generator, maker):
         """
         Makes an Organism.
 
         Args:
-            structure: the structure of this organism, as a
-                pymatgen.core.structure.Structure
+            cell: the cell of this organism, as a Cell object
 
             id_generator: the IDGenerator used to assign id numbers to all
                 organisms
@@ -90,8 +89,8 @@ class Organism(object):
                 Either a creator or a variation
         """
 
-        self.structure = structure
-        self.composition = self.structure.composition
+        self.cell = cell
+        self.composition = self.cell.composition
         self.total_energy = None
         self.epa = None
         # objective function value
@@ -114,12 +113,19 @@ class Organism(object):
     def id(self):
         return self._id
 
+
+class Cell(Structure):
+    """
+    Represents a cell. Provides additional functionality to the
+    pymatgen.core.structure.Structure class.
+    """
+
     def rotate_to_principal_directions(self):
         """
-        Rotates the organism's structure into the principal directions. That
-        is, lattice vector a is parallel to the Cartesian x-axis, lattice
-        vector b lies in the Cartesian x-y plane and the z-component of lattice
-        vector c is positive.
+        Rotates the cell into the principal directions. That is, lattice vector
+        a is parallel to the Cartesian x-axis, lattice vector b lies in the
+        Cartesian x-y plane and the z-component of lattice vector c is
+        positive.
 
         Note: this method doesn't change the fractional coordinates of the
         sites. However, the Cartesian coordinates may be changed.
@@ -128,55 +134,53 @@ class Organism(object):
         # rotate about the z-axis to align a vertically with the x-axis
         rotation = RotationTransformation(
             [0, 0, 1], 180 - (180/np.pi)*np.arctan2(
-                    self.structure.lattice.matrix[0][1],
-                    self.structure.lattice.matrix[0][0]))
-        self.structure = rotation.apply_transformation(self.structure)
+                    self.lattice.matrix[0][1],
+                    self.lattice.matrix[0][0]))
+        new_structure = rotation.apply_transformation(self)
+        self.modify_lattice(new_structure.lattice)
 
         # rotate about the y-axis to make a parallel to the x-axis
         rotation = RotationTransformation(
                 [0, 1, 0], (180/np.pi)*np.arctan2(
-                    self.structure.lattice.matrix[0][2],
-                    self.structure.lattice.matrix[0][0]))
-        self.structure = rotation.apply_transformation(self.structure)
+                    self.lattice.matrix[0][2],
+                    self.lattice.matrix[0][0]))
+        new_structure = rotation.apply_transformation(self)
+        self.modify_lattice(new_structure.lattice)
 
         # rotate about the x-axis to make b lie in the x-y plane
         rotation = RotationTransformation(
                 [1, 0, 0], 180 - (180/np.pi)*np.arctan2(
-                    self.structure.lattice.matrix[1][2],
-                    self.structure.lattice.matrix[1][1]))
-        self.structure = rotation.apply_transformation(self.structure)
+                    self.lattice.matrix[1][2],
+                    self.lattice.matrix[1][1]))
+        new_structure = rotation.apply_transformation(self)
+        self.modify_lattice(new_structure.lattice)
 
         # make sure they are all pointing in positive directions
-        if self.structure.lattice.matrix[0][0] < 0:
+        if self.lattice.matrix[0][0] < 0:
             # rotate about y-axis to make a positive
             rotation = RotationTransformation([0, 1, 0], 180)
-            self.structure = rotation.apply_transformation(self.structure)
-        if self.structure.lattice.matrix[1][1] < 0:
+            new_structure = rotation.apply_transformation(self)
+            self.modify_lattice(new_structure.lattice)
+        if self.lattice.matrix[1][1] < 0:
             # rotate about x-axis to make b positive
             rotation = RotationTransformation([1, 0, 0], 180)
-            self.structure = rotation.apply_transformation(self.structure)
-        if self.structure.lattice.matrix[2][2] < 0:
+            new_structure = rotation.apply_transformation(self)
+            self.modify_lattice(new_structure.lattice)
+        if self.lattice.matrix[2][2] < 0:
             # mirror c across the x-y plane to make it positive
-            # the components of a
-            ax = self.structure.lattice.matrix[0][0]
-            ay = self.structure.lattice.matrix[0][1]
-            az = self.structure.lattice.matrix[0][2]
-            # the components of b
-            bx = self.structure.lattice.matrix[1][0]
-            by = self.structure.lattice.matrix[1][1]
-            bz = self.structure.lattice.matrix[1][2]
+            # a and b
+            a = self.lattice.matrix[0]
+            b = self.lattice.matrix[1]
             # the components of c
-            cx = self.structure.lattice.matrix[2][0]
-            cy = self.structure.lattice.matrix[2][1]
-            cz = -1*self.structure.lattice.matrix[2][2]
-
-            self.structure.modify_lattice(Lattice([[ax, ay, az], [bx, by, bz],
-                                                   [cx, cy, cz]]))
+            cx = self.lattice.matrix[2][0]
+            cy = self.lattice.matrix[2][1]
+            cz = -1*self.lattice.matrix[2][2]
+            self.modify_lattice(Lattice([a, b, [cx, cy, cz]]))
 
     def rotate_c_parallel_to_z(self):
         """
-        Rotates the organism's structure such that lattice vector c is
-        parallel to the Cartesian z-axis.
+        Rotates the cell such that lattice vector c is parallel to the
+        Cartesian z-axis.
 
         Note: this method doesn't change the fractional coordinates of the
         sites. However, the Cartesian coordinates may be changed.
@@ -185,22 +189,25 @@ class Organism(object):
         # rotate about the z-axis until c lies in the x-z plane
         rotation = RotationTransformation(
                 [0, 0, 1], 180 - (180/np.pi)*np.arctan2(
-                    self.structure.lattice.matrix[2][1],
-                    self.structure.lattice.matrix[2][0]))
-        self.structure = rotation.apply_transformation(self.structure)
+                    self.lattice.matrix[2][1],
+                    self.lattice.matrix[2][0]))
+        new_structure = rotation.apply_transformation(self)
+        self.modify_lattice(new_structure.lattice)
 
         # rotate about the y-axis to make c parallel to the z-axis
         rotation = RotationTransformation(
             [0, 1, 0], 180 - (180/np.pi)*np.arctan2(
-                self.structure.lattice.matrix[2][0],
-                self.structure.lattice.matrix[2][2]))
-        self.structure = rotation.apply_transformation(self.structure)
+                self.lattice.matrix[2][0],
+                self.lattice.matrix[2][2]))
+        new_structure = rotation.apply_transformation(self)
+        self.modify_lattice(new_structure.lattice)
 
         # make sure c is pointing along the positive z-axis
-        if self.structure.lattice.matrix[2][2] < 0:
+        if self.lattice.matrix[2][2] < 0:
             # rotate 180 degrees about the x-axis
             rotation = RotationTransformation([1, 0, 0], 180)
-            self.structure = rotation.apply_transformation(self.structure)
+            new_structure = rotation.apply_transformation(self)
+            self.modify_lattice(new_structure.lattice)
 
     def translate_atoms_into_cell(self):
         """
@@ -227,66 +234,69 @@ class Organism(object):
                 translation_vector.append(0.0)
 
         # do the shift
-        site_indices = [i for i in range(len(self.structure.sites))]
-        self.structure.translate_sites(site_indices, translation_vector,
-                                       frac_coords=True, to_unit_cell=False)
+        site_indices = [i for i in range(len(self.sites))]
+        self.translate_sites(site_indices, translation_vector,
+                             frac_coords=True, to_unit_cell=False)
 
-    def reduce_sheet_cell(self):
+    def reduce_cell(self):
         """
-        Applies Niggli cell reduction to a sheet structure. The idea is to make
-        lattice vector c vertical and add lots of vertical vacuum so that the
-        standard reduction algorithm only changes the a and b lattice vectors.
+        Applies Niggli cell reduction to cell.
+
+        Returns a boolean indicated whether cell reduction was successful.
 
         Note: pymatgen's Niggli cell reduction algorithm sometimes moves the
             atoms' relative positions a little (I've seen up to 0.5 A...)
         """
+        # get the reduced structure
+        try:  # sometimes pymatgen's reduction routine fails
+            reduced_structure = self.get_reduced_structure()
+        except:
+            return False
 
-        self.rotate_to_principal_directions()
-        species = self.structure.species
-        cartesian_coords = self.structure.cart_coords
-
-        # get the non-zero components of the a and b lattice vectors, and the
-        # vertical component of the c lattice vector
-        ax = self.structure.lattice.matrix[0][0]
-        bx = self.structure.lattice.matrix[1][0]
-        by = self.structure.lattice.matrix[1][1]
-        cz = self.structure.lattice.matrix[2][2]
-
-        # make a new lattice with a ton of vertical vacuum (add 100 Angstroms)
-        padded_lattice = Lattice([[ax, 0.0, 0.0], [bx, by, 0.0],
-                                  [0.0, 0.0, cz + 100]])
-        padded_structure = Structure(padded_lattice, species, cartesian_coords,
-                                     coords_are_cartesian=True)
-        reduced_structure = padded_structure.get_reduced_structure()
-
-        # unpad the reduced structure
-        rspecies = reduced_structure.species
+        # modify the cell to correspond to the reduced structure
         rcartesian_coords = reduced_structure.cart_coords
-        rax = reduced_structure.lattice.matrix[0][0]
-        ray = reduced_structure.lattice.matrix[0][1]
-        rbx = reduced_structure.lattice.matrix[1][0]
-        rby = reduced_structure.lattice.matrix[1][1]
-        unpadded_lattice = Lattice([[rax, ray, 0.0], [rbx, rby, 0.0],
-                                    [0.0, 0.0, cz]])
-        self.structure = Structure(unpadded_lattice, rspecies,
-                                   rcartesian_coords,
-                                   coords_are_cartesian=True)
+        rspecies = reduced_structure.species
+        self.modify_lattice(reduced_structure.lattice)
+        site_indices = []
+        for i in range(len(self.sites)):
+            site_indices.append(i)
+        self.remove_sites(site_indices)
+        for i in range(len(rcartesian_coords)):
+            self.append(rspecies[i], rcartesian_coords[i],
+                        coords_are_cartesian=True)
 
-        # slightly shift the atoms vertically so they lie in the (vertical)
-        # center of the cell
-        self.translate_atoms_into_cell()
-        frac_bounds = self.get_bounding_box(cart_coords=False)
-        z_center = frac_bounds[2][0] + (frac_bounds[2][1] -
-                                        frac_bounds[2][0])/2
-        translation_vector = [0, 0, 0.5 - z_center]
-        site_indices = [i for i in range(len(self.structure.sites))]
-        self.structure.translate_sites(site_indices, translation_vector,
-                                       frac_coords=True, to_unit_cell=False)
+        # rotate the cell into the principal directions
+        self.rotate_to_principal_directions()
+        return True
+
+    def reduce_sheet_cell(self, geometry, constraints):
+        """
+        Applies Niggli cell reduction to a sheet cell. The idea is to make
+        lattice vector c vertical and add lots of vertical vacuum so that the
+        standard reduction algorithm only changes the a and b lattice vectors.
+
+        Returns a boolean indicating whether cell reduction was successful.
+
+        Args:
+            geometry: the Geometry of the search
+
+            constraints: the Constraints of the search
+        """
+        # pad the cell with 100 Angstroms of vertical vacuum
+        geometry.pad(self, padding=100)
+
+        # reduce the padded cell
+        successful_reduction = self.reduce_cell()
+
+        # unpad the reduced cell
+        geometry.unpad(self, constraints)
+
+        return successful_reduction
 
     def get_bounding_box(self, cart_coords=True):
         """
         Returns the smallest and largest coordinates in each dimension of all
-        the sites in the organism's structure, as a list of three lists:
+        the sites in a cell, as a list of three lists:
 
             [[min, max], [min, max], [min, max]]
 
@@ -301,9 +311,9 @@ class Organism(object):
         """
 
         if cart_coords:
-            coords = self.structure.cart_coords
+            coords = self.cart_coords
         else:
-            coords = self.structure.frac_coords
+            coords = self.frac_coords
 
         # find the largest and smallest coordinates in each dimension
         minx = np.inf
@@ -353,9 +363,9 @@ class InitialPopulation():
             organism_to_add: the Organism to add to the initial population
         """
 
-        organism_to_add.structure.sort()
-        organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' +
-                                     str(organism_to_add.id))
+        organism_to_add.cell.sort()
+        organism_to_add.cell.to('poscar', os.getcwd() + '/POSCAR.' +
+                                str(organism_to_add.id))
         print('Adding organism {} to the initial population'.format(
             organism_to_add.id))
         self.initial_population.append(organism_to_add)
@@ -373,9 +383,9 @@ class InitialPopulation():
             new_org: the new Organism to replace the old one
         """
 
-        new_org.structure.sort()
-        new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' +
-                             str(new_org.id))
+        new_org.cell.sort()
+        new_org.cell.to('poscar', os.getcwd() + '/POSCAR.' +
+                        str(new_org.id))
         print('Replacing organism {} with organism {} in the initial '
               'population'.format(old_org.id, new_org.id))
 
@@ -653,9 +663,9 @@ class Pool(object):
         print('Adding organism {} to the pool '.format(organism_to_add.id))
 
         self.num_adds = self.num_adds + 1
-        organism_to_add.structure.sort()
-        organism_to_add.structure.to('poscar', os.getcwd() + '/POSCAR.' +
-                                     str(organism_to_add.id))
+        organism_to_add.cell.sort()
+        organism_to_add.cell.to('poscar', os.getcwd() + '/POSCAR.' +
+                                str(organism_to_add.id))
         organism_to_add.is_active = True
 
         if composition_space.objective_function == 'epa':
@@ -742,9 +752,8 @@ class Pool(object):
         print('Replacing organism {} with organism {} in the pool '.format(
             old_org.id, new_org.id))
 
-        new_org.structure.sort()
-        new_org.structure.to('poscar', os.getcwd() + '/POSCAR.' +
-                             str(new_org.id))
+        new_org.cell.sort()
+        new_org.cell.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
 
         # set new objective function value
         if composition_space.objective_function == 'epa':
@@ -1289,7 +1298,7 @@ class StoppingCriteria(object):
             self.default_num_energy_calcs = 6000
 
         self.default_value_achieved = None
-        self.default_found_structure = None
+        self.default_found_cell = None
         # whether or not the stopping criteria are satisfied
         self.are_satisfied = False
         # to keep track of how many energy calculations have been done
@@ -1299,7 +1308,7 @@ class StoppingCriteria(object):
         if stopping_parameters in (None, 'default'):
             self.num_energy_calcs = self.default_num_energy_calcs
             self.value_achieved = self.default_value_achieved
-            self.found_structure = self.default_found_structure
+            self.found_cell = self.default_found_cell
         # check each keyword to see if it's been included
         else:
             # value achieved
@@ -1314,28 +1323,28 @@ class StoppingCriteria(object):
             # found structure
             if 'found_structure' in stopping_parameters:
                 if stopping_parameters['found_structure'] in (None, 'default'):
-                    self.found_structure = self.default_found_structure
+                    self.found_cell = self.default_found_cell
                 else:
                     self.path_to_structure_file = stopping_parameters[
                         'found_structure']
-                    self.found_structure = Structure.from_file(
+                    self.found_cell = Cell.from_file(
                             stopping_parameters['found_structure'])
             else:
-                self.found_structure = self.default_found_structure
+                self.found_cell = self.default_found_cell
 
             # number energy calculations
             if 'num_energy_calcs' in stopping_parameters:
                 if stopping_parameters['num_energy_calcs'] in (None,
                                                                'default'):
                     if self.value_achieved is None and \
-                            self.found_structure is None:
+                            self.found_cell is None:
                         self.num_energy_calcs = self.default_num_energy_calcs
                     else:
                         self.num_energy_calcs = None
                 else:
                     self.num_energy_calcs = stopping_parameters[
                         'num_energy_calcs']
-            elif self.value_achieved is None and self.found_structure is None:
+            elif self.value_achieved is None and self.found_cell is None:
                 self.num_energy_calcs = self.default_num_energy_calcs
             else:
                 self.num_energy_calcs = None
@@ -1363,8 +1372,8 @@ class StoppingCriteria(object):
         if self.value_achieved is not None:
             if organism.value <= self.value_achieved:
                 self.are_satisfied = True
-        if self.found_structure is not None:
-            if self.found_structure.matches(organism.structure):
+        if self.found_cell is not None:
+            if self.found_cell.matches(organism.cell):
                 self.are_satisfied = True
 
 

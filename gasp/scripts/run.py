@@ -100,7 +100,7 @@ def main():
                     new_organism = creator.create_organism(
                         id_generator, composition_space, constraints, random)
                 if new_organism is not None:  # loop above could return None
-                    geometry.unpad(new_organism, constraints)
+                    geometry.unpad(new_organism.cell, constraints)
                     if developer.develop(new_organism, composition_space,
                                          constraints, geometry, pool):
                         redundant_organism = redundancy_guard.check_redundancy(
@@ -110,7 +110,7 @@ def main():
                             # whole_pop don't change upon relaxation
                             whole_pop.append(copy.deepcopy(new_organism))
                             stopping_criteria.update_calc_counter()
-                            geometry.pad(new_organism)
+                            geometry.pad(new_organism.cell)
                             thread_index = len(threads)
                             thread = threading.Thread(
                                 target=energy_calculator.do_energy_calculation,
@@ -130,7 +130,7 @@ def main():
 
                         # take care of relaxed organism
                         if relaxed_organism is not None:
-                            geometry.unpad(relaxed_organism, constraints)
+                            geometry.unpad(relaxed_organism.cell, constraints)
                             if developer.develop(relaxed_organism,
                                                  composition_space,
                                                  constraints, geometry, pool):
@@ -186,7 +186,7 @@ def main():
                                     id_generator, composition_space,
                                     constraints, random)
                             if new_organism is not None:
-                                geometry.unpad(new_organism, constraints)
+                                geometry.unpad(new_organism.cell, constraints)
                                 if developer.develop(new_organism,
                                                      composition_space,
                                                      constraints, geometry,
@@ -198,7 +198,7 @@ def main():
                                         whole_pop.append(
                                             copy.deepcopy(new_organism))
                                         stopping_criteria.update_calc_counter()
-                                        geometry.pad(new_organism)
+                                        geometry.pad(new_organism.cell)
                                         thread = threading.Thread(
                                             target=energy_calculator.do_energy_calculation,
                                             args=(new_organism,
@@ -224,7 +224,7 @@ def main():
 
                 # take care of relaxed organism
                 if relaxed_organism is not None:
-                    geometry.unpad(relaxed_organism, constraints)
+                    geometry.unpad(relaxed_organism.cell, constraints)
                     if developer.develop(relaxed_organism, composition_space,
                                          constraints, geometry, pool):
                         redundant_organism = redundancy_guard.check_redundancy(
@@ -271,7 +271,7 @@ def main():
             random, pool, variations, geometry, id_generator, whole_pop,
             developer, redundancy_guard, composition_space, constraints)
         whole_pop.append(copy.deepcopy(unrelaxed_offspring))
-        geometry.pad(unrelaxed_offspring)
+        geometry.pad(unrelaxed_offspring.cell)
         stopping_criteria.update_calc_counter()
         thread_index = len(threads)
         thread = threading.Thread(
@@ -291,7 +291,7 @@ def main():
 
                 # take care of relaxed offspring organism
                 if relaxed_offspring is not None:
-                    geometry.unpad(relaxed_offspring, constraints)
+                    geometry.unpad(relaxed_offspring.cell, constraints)
                     if developer.develop(relaxed_offspring, composition_space,
                                          constraints, geometry, pool):
                         # check for redundancy with the the pool first
@@ -364,7 +364,7 @@ def main():
                             whole_pop, developer, redundancy_guard,
                             composition_space, constraints)
                     whole_pop.append(copy.deepcopy(unrelaxed_offspring))
-                    geometry.pad(unrelaxed_offspring)
+                    geometry.pad(unrelaxed_offspring.cell)
                     stopping_criteria.update_calc_counter()
                     thread = threading.Thread(
                         target=energy_calculator.do_energy_calculation,
@@ -389,7 +389,7 @@ def main():
 
                 # take care of relaxed offspring organism
                 if relaxed_offspring is not None:
-                    geometry.unpad(relaxed_offspring, constraints)
+                    geometry.unpad(relaxed_offspring.cell, constraints)
                     if developer.develop(relaxed_offspring, composition_space,
                                          constraints, geometry, pool):
                         # check for redundancy with the pool first

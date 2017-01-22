@@ -24,10 +24,9 @@ organisms.
 
 """
 
-from gasp.general import Organism
+from gasp.general import Organism, Cell
 
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.structure import Structure
 from pymatgen.core.periodic_table import Element, Specie
 
 import copy
@@ -69,6 +68,9 @@ class Mating(object):
         # the probability of randomly shifting the atoms along the lattice
         # vector of the cut before making the cut
         self.default_shift_prob = 1.0
+        # the probability the randomly rotating cluster and wire structures
+        # before making the cut
+        self.default_rotate_prob = 1.0
         # the probability that one of the parents will be doubled before doing
         # the variation
         self.default_doubling_prob = 0.1
@@ -102,6 +104,14 @@ class Mating(object):
             self.shift_prob = self.default_shift_prob
         else:
             self.shift_prob = mating_params['shift_prob']
+
+        # the probability of rotating the parents
+        if 'rotate_prob' not in mating_params:
+            self.rotate_prob = self.default_rotate_prob
+        elif mating_params['rotate_prob'] in (None, 'default'):
+            self.rotate_prob = self.default_rotate_prob
+        else:
+            self.rotate_prob = mating_params['rotate_prob']
 
         # the probability of doubling one of the parents
         if 'doubling_prob' not in mating_params:
@@ -150,7 +160,7 @@ class Mating(object):
             parent organisms.
 
                 1. Selects two organisms from the pool to act as parents, and
-                    makes copies of their structures.
+                    makes copies of their cells.
 
                 2. Optionally doubles one of the parents. This occurs with
                     probability self.doubling_prob, and if it happens, the
@@ -174,42 +184,45 @@ class Mating(object):
                     only occurs if the lattice vector to cut is along a
                     periodic direction.
 
-                7. Copy the sites from the first parent organism with
+                7. TODO: description of random rotations, for wires and
+                    clusters
+
+                8. Copy the sites from the first parent organism with
                     fractional coordinate less than the randomly chosen cut
                     location along the randomly chosen lattice vector to the
                     offspring organism, and do the same for the second parent
                     organism, except copy the sites with fractional coordinate
                     greater than the cut location.
 
-                8. Merge sites in offspring structure that have the same
-                    element and are closer than self.merge_sites times the
-                    atomic radius of the element.
+                9. Merge sites in offspring cell that have the same element and
+                    are closer than self.merge_sites times the atomic radius of
+                    the element.
         """
 
-        # select two parent organisms from the pool and get their structures
+        # select two parent organisms from the pool and get their cells
         parent_orgs = pool.select_organisms(2, random)
-        structure_1 = copy.deepcopy(parent_orgs[0].structure)
-        structure_2 = copy.deepcopy(parent_orgs[1].structure)
+        cell_1 = copy.deepcopy(parent_orgs[0].cell)
+        cell_2 = copy.deepcopy(parent_orgs[1].cell)
 
         # optionally double one of the parents
         if random.random() < self.doubling_prob:
-            vol_1 = structure_1.lattice.volume
-            vol_2 = structure_2.lattice.volume
+            vol_1 = cell_1.lattice.volume
+            vol_2 = cell_2.lattice.volume
             if vol_1 < vol_2:
-                self.double_parent(structure_1, geometry, random)
+                self.double_parent(cell_1, geometry, random)
             else:
-                self.double_parent(structure_2, geometry, random)
+                self.double_parent(cell_2, geometry, random)
 
         # grow the smaller parent if specified
-        if self.grow_parents:
-            vol_1 = structure_1.lattice.volume
-            vol_2 = structure_2.lattice.volume
+        if self.grow_parents and geometry.shape != 'cluster':
+            vol_1 = cell_1.lattice.volume
+            vol_2 = cell_2.lattice.volume
             if vol_1 < vol_2:
                 volume_ratio = vol_2/vol_1
-                parent_to_grow = structure_1
+                parent_to_grow = cell_1
             else:
                 volume_ratio = vol_1/vol_2
-                parent_to_grow = structure_2
+                parent_to_grow = cell_2
             num_doubles = self.get_num_doubles(volume_ratio)
             for _ in range(num_doubles):
                 self.double_parent(parent_to_grow, geometry, random)
@@ -236,18 +249,24 @@ class Mating(object):
 
             # possibly shift the atoms in each parent along the cut vector
             if random.random() < self.shift_prob:
-                self.do_random_shift(structure_1, cut_vector_index, geometry,
+                self.do_random_shift(cell_1, cut_vector_index, geometry,
                                      random)
             if random.random() < self.shift_prob:
-                self.do_random_shift(structure_2, cut_vector_index, geometry,
+                self.do_random_shift(cell_2, cut_vector_index, geometry,
                                      random)
 
+            # possibly rotate the atoms in each parent (for wires and clusters)
+            if random.random() < self.rotate_prob:
+                self.do_random_rotation(cell_1, geometry, random)
+            if random.random() < self.rotate_prob:
+                self.do_random_rotation(cell_2, geometry, random)
+
             # get the site contributions of each parent
-            for site in structure_1.sites:
+            for site in cell_1.sites:
                 if site.frac_coords[cut_vector_index] < cut_location:
                     species_from_parent_1.append(site.species_and_occu)
                     frac_coords_from_parent_1.append(site.frac_coords)
-            for site in structure_2.sites:
+            for site in cell_2.sites:
                 if site.frac_coords[cut_vector_index] > cut_location:
                     species_from_parent_2.append(site.species_and_occu)
                     frac_coords_from_parent_2.append(site.frac_coords)
@@ -258,20 +277,20 @@ class Mating(object):
             frac_coords_from_parent_2
 
         # compute the lattice vectors of the offspring
-        offspring_lengths = 0.5*(np.array(structure_1.lattice.abc) +
-                                 np.array(structure_2.lattice.abc))
-        offspring_angles = 0.5*(np.array(structure_1.lattice.angles) +
-                                np.array(structure_2.lattice.angles))
+        offspring_lengths = 0.5*(np.array(cell_1.lattice.abc) +
+                                 np.array(cell_2.lattice.abc))
+        offspring_angles = 0.5*(np.array(cell_1.lattice.angles) +
+                                np.array(cell_2.lattice.angles))
         offspring_lattice = Lattice.from_lengths_and_angles(offspring_lengths,
                                                             offspring_angles)
 
-        # make the offspring structure and merge close sites
-        offspring_structure = Structure(offspring_lattice, offspring_species,
-                                        offspring_frac_coords)
-        offspring_structure = self.merge_sites(offspring_structure)
+        # make the offspring cell and merge close sites
+        offspring_cell = Cell(offspring_lattice, offspring_species,
+                              offspring_frac_coords)
+        offspring_cell = self.merge_sites(offspring_cell)
 
-        # make the offspring organism from the offspring structure
-        offspring = Organism(offspring_structure, id_generator, self.name)
+        # make the offspring organism from the offspring cell
+        offspring = Organism(offspring_cell, id_generator, self.name)
         print('Creating offspring organism {} from parent organisms {} and {} '
               'with the mating variation '.format(offspring.id,
                                                   parent_orgs[0].id,
@@ -305,35 +324,47 @@ class Mating(object):
         else:
             return 7
 
-    def double_parent(self, structure, geometry, random):
+    def double_parent(self, cell, geometry, random):
         """
-        Modifies a structure by taking a supercell. For bulk geometries, the
+        Modifies a cell by taking a supercell. For bulk geometries, the
         supercell is taken in the direction of the shortest lattice vector. For
-        non-bulk geometries, the supercell is taken in the direction of a
-        randomly chosen lattice vector.
+        sheet geometries, the supercell is taken in the direction of either the
+        a or b lattice vectors, whichever is shorter. For wire geometries, the
+        supercell is taken in the direction of the c lattice vector. For
+        cluster geometries, no supercell is taken.
 
         Args:
-            structure: the Structure to take the supercell of
+            cell: the Cell to take the supercell of
 
             geometry: the Geometry of the search
 
             random: a copy of Python's PRNG
         """
 
+        # get the lattice vector to double
         if geometry.shape == 'bulk':
-            lattice_lengths = structure.lattice.abc
-            smallest_vector = min(lattice_lengths)
-            doubling_index = lattice_lengths.index(smallest_vector)
-        else:
-            doubling_index = random.choice([0, 1, 2])
-        scaling_factors = [1, 1, 1]
-        scaling_factors[doubling_index] = 2
-        structure.make_supercell(scaling_factors)
+            abc_lengths = cell.lattice.abc
+            smallest_vector = min(abc_lengths)
+            doubling_index = abc_lengths.index(smallest_vector)
+        elif geometry.shape == 'sheet':
+            ab_lengths = [cell.lattice.a, cell.lattice.b]
+            smallest_vector = min(ab_lengths)
+            doubling_index = ab_lengths.index(smallest_vector)
+        elif geometry.shape == 'wire':
+            doubling_index = 2
+        elif geometry.shape == 'cluster':
+            doubling_index = None
 
-    def do_random_shift(self, structure, lattice_vector_index, geometry,
+        # take the supercell
+        if doubling_index is not None:
+            scaling_factors = [1, 1, 1]
+            scaling_factors[doubling_index] = 2
+            cell.make_supercell(scaling_factors)
+
+    def do_random_shift(self, cell, lattice_vector_index, geometry,
                         random):
         """
-        Modifies a structure by shifting the atoms along one of the lattice
+        Modifies a cell by shifting the atoms along one of the lattice
         vectors. Makes sure all the atoms lie inside the cell after the shift
         by replacing them with their periodic images if necessary.
 
@@ -342,7 +373,7 @@ class Mating(object):
         could destroy some of the local structure.
 
         Args:
-            structure: the Structure to shift
+            cell: the Cell to shift
 
             lattice_vector_index: the index (0, 1 or 2) of the lattice vector
                 along which to shift the atoms
@@ -360,15 +391,15 @@ class Mating(object):
             pass
         else:
             # do the shift
-            shift_vector = random.random()*structure.lattice.matrix[
+            shift_vector = random.random()*cell.lattice.matrix[
                 lattice_vector_index]
-            site_indices = [i for i in range(len(structure.sites))]
-            structure.translate_sites(site_indices, shift_vector,
-                                      frac_coords=False, to_unit_cell=False)
+            site_indices = [i for i in range(len(cell.sites))]
+            cell.translate_sites(site_indices, shift_vector, frac_coords=False,
+                                 to_unit_cell=False)
 
             # translate the sites back into the cell if needed
             translation_vectors = {}
-            for site in structure.sites:
+            for site in cell.sites:
                 translation_vector = []
                 for coord in site.frac_coords:
                     if coord < 0.0:
@@ -378,39 +409,42 @@ class Mating(object):
                     else:
                         translation_vector.append(0.0)
                 translation_vectors[
-                    structure.sites.index(site)] = translation_vector
+                    cell.sites.index(site)] = translation_vector
             for key in translation_vectors:
-                structure.translate_sites(key, translation_vectors[key],
-                                          frac_coords=True, to_unit_cell=False)
+                cell.translate_sites(key, translation_vectors[key],
+                                     frac_coords=True, to_unit_cell=False)
 
-    def merge_sites(self, structure):
+    def do_random_rotation(self, cell, geometry, random):
+        pass
+
+    def merge_sites(self, cell):
         """
-        Merges sites in the structure that have the same element and are closer
+        Merges sites in the cell that have the same element and are closer
         than self.merge_sites times the atomic radius to each other. Merging
-        means replacing two sites in the structure with one site at the mean of
-        the two sites (Cartesian) positions.
+        means replacing two sites in the cell with one site at the mean of the
+        two sites (Cartesian) positions.
 
-        Returns a new structure with the sites merged.
+        Returns a new cell with the sites merged.
 
         Args:
-            structure: the Structure whose sites to merge
+            cell: the Cell whose sites to merge
         """
 
         species = []
         frac_coords = []
         merged_indices = []
 
-        # go through the structure site by site and merge pairs of sites if
+        # go through the cell site by site and merge pairs of sites if
         # needed
-        for site in structure.sites:
+        for site in cell.sites:
             # check that the site hasn't already been merged
-            if structure.sites.index(site) not in merged_indices:
+            if cell.sites.index(site) not in merged_indices:
                 symbol = site.specie.symbol
                 element = Element(site.specie.symbol)
                 a_radius = element.atomic_radius
-                for other_site in structure.sites:
+                for other_site in cell.sites:
                     # check that the other site hasn't already been merged
-                    if structure.sites.index(other_site) not in merged_indices:
+                    if cell.sites.index(other_site) not in merged_indices:
                         # check that the other site is not the site, and that
                         # it has the same symbol as the site
                         if other_site != site and other_site.specie.symbol == \
@@ -419,35 +453,35 @@ class Mating(object):
                             if site.distance(
                                     other_site) < a_radius*self.merge_cutoff:
                                 merged_indices.append(
-                                    structure.sites.index(other_site))
+                                    cell.sites.index(other_site))
                                 merged_indices.append(
-                                    structure.sites.index(site))
+                                    cell.sites.index(site))
                                 new_frac_coords = np.add(
                                     site.frac_coords, other_site.frac_coords)/2
                                 species.append(site.specie)
                                 frac_coords.append(new_frac_coords)
 
         # get the data for the sites that were NOT merged
-        for site in structure.sites:
-            if structure.sites.index(site) not in merged_indices:
+        for site in cell.sites:
+            if cell.sites.index(site) not in merged_indices:
                 species.append(site.specie)
                 frac_coords.append(site.frac_coords)
 
-        # make a new structure
-        new_structure = Structure(structure.lattice, species, frac_coords)
+        # make a new cell
+        new_cell = Cell(cell.lattice, species, frac_coords)
 
         # if any merges were done, call merge_sites recursively on the new
-        # structure
-        if len(new_structure.sites) < len(structure.sites):
-            return self.merge_sites(new_structure)
+        # cell
+        if len(new_cell.sites) < len(cell.sites):
+            return self.merge_sites(new_cell)
         else:
-            return new_structure
+            return new_cell
 
 
 class StructureMut(object):
     """
-    An operator that creates an offspring organism by mutating the structure
-    of a parent organism.
+    An operator that creates an offspring organism by mutating the cell of a
+    parent organism.
     """
 
     def __init__(self, structure_mut_params):
@@ -548,10 +582,10 @@ class StructureMut(object):
         Description:
 
             Creates an offspring organism by perturbing the atomic positions
-            and lattice vectors of the parent structure.
+            and lattice vectors of the parent cell.
 
                 1. Selects a parent organism from the pool and makes a copy of
-                    its structure.
+                    its cell.
 
                 2. Perturbs the atomic coordinates of each site with
                     probability self.frac_atoms_perturbed. The perturbation of
@@ -573,27 +607,29 @@ class StructureMut(object):
                     between -1 and 1.
         """
 
-        # select a parent organism from the pool and get its structure
+        # select a parent organism from the pool and get its cell
         parent_org = pool.select_organisms(1, random)
-        structure = copy.deepcopy(parent_org[0].structure)
+        cell = copy.deepcopy(parent_org[0].cell)
 
         # perturb the site coordinates
-        self.perturb_atomic_coords(structure, random)
+        self.perturb_atomic_coords(cell, random)
 
         # perturb the lattice vectors
-        self.perturb_lattice_vectors(structure, random)
+        self.perturb_lattice_vectors(cell, random)
 
-        # create a new organism from the perturbed structure
-        offspring = Organism(structure, id_generator, self.name)
-        offspring.translate_atoms_into_cell()
+        # make sure all the atoms are inside the cell
+        cell.translate_atoms_into_cell()
+
+        # create a new organism from the perturbed cell
+        offspring = Organism(cell, id_generator, self.name)
         print('Creating offspring organism {} from parent organism {} with '
               'the structure mutation variation '.format(offspring.id,
                                                          parent_org[0].id))
         return offspring
 
-    def perturb_atomic_coords(self, structure, random):
+    def perturb_atomic_coords(self, cell, random):
         """
-        Modifies a structure by perturbing the coordinates of its sites. The
+        Modifies a cell by perturbing the coordinates of its sites. The
         probability that each site is perturbed is self.frac_atoms_perturbed,
         and the perturbations along each Cartesian coordinate are drawn from a
         Gaussian with mean zero and standard deviation
@@ -602,13 +638,13 @@ class StructureMut(object):
         self.max_atomic_coord_perturbation.
 
         Args:
-            structure: the Structure whose site coordinates are perturbed
+            cell: the Cell whose site coordinates are perturbed
 
             random: a copy of Python's built in PRNG
         """
 
-        # for each site in the structure, possibly randomly perturb it
-        for site in structure.sites:
+        # for each site in the cell, possibly randomly perturb it
+        for site in cell.sites:
             if random.random() < self.frac_atoms_perturbed:
                 # perturbation along x-coordinate
                 nudge_x = random.gauss(0, self.sigma_atomic_coord_perturbation)
@@ -627,13 +663,13 @@ class StructureMut(object):
                         0, self.sigma_atomic_coord_perturbation)
                 # translate the site by the random coordinate perturbations
                 perturbation_vector = [nudge_x, nudge_y, nudge_z]
-                structure.translate_sites(
-                    structure.sites.index(site), perturbation_vector,
+                cell.translate_sites(
+                    cell.sites.index(site), perturbation_vector,
                     frac_coords=False, to_unit_cell=False)
 
-    def perturb_lattice_vectors(self, structure, random):
+    def perturb_lattice_vectors(self, cell, random):
         """
-        Modifies a structure by perturbing its lattice vectors. Each lattice
+        Modifies a cell by perturbing its lattice vectors. Each lattice
         vector is  multiplied by a strain matrix:
 
                         I + E
@@ -644,7 +680,7 @@ class StructureMut(object):
         to lie between -1 and 1.
 
         Args:
-            structure: the Structure whose site coordinates are perturbed
+            cell: the Cell whose site coordinates are perturbed
 
             random: a copy of Python's built in PRNG
         """
@@ -665,11 +701,11 @@ class StructureMut(object):
         strain_matrix = np.array([row_1, row_2, row_3])
 
         # apply the strain matrix to the lattice vectors
-        new_a = strain_matrix.dot(structure.lattice.matrix[0])
-        new_b = strain_matrix.dot(structure.lattice.matrix[1])
-        new_c = strain_matrix.dot(structure.lattice.matrix[2])
+        new_a = strain_matrix.dot(cell.lattice.matrix[0])
+        new_b = strain_matrix.dot(cell.lattice.matrix[1])
+        new_c = strain_matrix.dot(cell.lattice.matrix[2])
         new_lattice = Lattice([new_a, new_b, new_c])
-        structure.modify_lattice(new_lattice)
+        cell.modify_lattice(new_lattice)
 
 
 class NumStoichsMut(object):
@@ -748,10 +784,10 @@ class NumStoichsMut(object):
         Description:
 
             Creates an offspring organism by adding or removing a random number
-            of stoichiometries' worth of atoms to or from the parent structure.
+            of stoichiometries' worth of atoms to or from the parent cell.
 
                 1. Selects a parent organism from the pool and makes a copy of
-                    its structure.
+                    its cell.
 
                 2. Computes the number of stoichiometries to add or remove by
                     drawing from a Gaussian with mean self.mu_num_adds and
@@ -761,21 +797,21 @@ class NumStoichsMut(object):
                 3. Computes the number of atoms of each type to add or remove,
                     and does the additions or removals.
 
-                4. If self.scale_volume is True, scales the new structure to
-                    have the same volume per atom as the parent.
+                4. If self.scale_volume is True, scales the new cell to have
+                    the same volume per atom as the parent.
         """
 
-        # select a parent organism from the pool and get its structure
+        # select a parent organism from the pool and get its cell
         parent_org = pool.select_organisms(1, random)
-        structure = copy.deepcopy(parent_org[0].structure)
-        parent_num_atoms = len(structure.sites)
-        reduced_composition = structure.composition.reduced_composition
-        vol_per_atom = structure.lattice.volume/len(structure.sites)
+        cell = copy.deepcopy(parent_org[0].cell)
+        parent_num_atoms = len(cell.sites)
+        reduced_composition = cell.composition.reduced_composition
+        vol_per_atom = cell.lattice.volume/len(cell.sites)
 
         # loop needed here in case no atoms got added or removed, in which case
         # need to try again. This happens if the randomly chosen number of
         # atoms to remove exceeds the number of atoms in the cell
-        while len(structure.sites) == parent_num_atoms:
+        while len(cell.sites) == parent_num_atoms:
             # compute a non-zero number of stoichiometries to add or remove
             num_add = int(round(random.gauss(self.mu_num_adds,
                                              self.sigma_num_adds)))
@@ -796,23 +832,23 @@ class NumStoichsMut(object):
                     for _ in range(amounts_to_add[key]):
                         frac_coords = [random.random(), random.random(),
                                        random.random()]
-                        structure.append(Specie(key, 0), frac_coords)
-                structure.remove_oxidation_states()
-                structure.sort()
+                        cell.append(Specie(key, 0), frac_coords)
+                cell.remove_oxidation_states()
+                cell.sort()
 
             # if removing, take out random atoms (but right number of each)
-            elif num_add < 0 and -1*total_add < len(structure.sites):
+            elif num_add < 0 and -1*total_add < len(cell.sites):
                 site_indices_to_remove = []
                 for key in amounts_to_add:
                     for _ in range(0, -1*amounts_to_add[key]):
-                        random_site = random.choice(structure.sites)
+                        random_site = random.choice(cell.sites)
                         while str(random_site.specie.symbol) != str(
-                                key) or structure.sites.index(
+                                key) or cell.sites.index(
                                     random_site) in site_indices_to_remove:
-                            random_site = random.choice(structure.sites)
+                            random_site = random.choice(cell.sites)
                         site_indices_to_remove.append(
-                            structure.sites.index(random_site))
-                structure.remove_sites(site_indices_to_remove)
+                            cell.sites.index(random_site))
+                cell.remove_sites(site_indices_to_remove)
 
         # optionally scale the volume after atoms have been added
         if self.scale_volume and num_add > 0:
@@ -820,14 +856,13 @@ class NumStoichsMut(object):
             # method fails
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
-                structure.scale_lattice(vol_per_atom*len(structure.sites))
-                if str(structure.lattice.a) == 'nan' or structure.lattice.a > \
-                        100:
+                cell.scale_lattice(vol_per_atom*len(cell.sites))
+                if str(cell.lattice.a) == 'nan' or cell.lattice.a > 100:
                     return self.do_variation(pool, random, geometry,
                                              id_generator)
 
-        # create a new organism from the structure
-        offspring = Organism(structure, id_generator, self.name)
+        # create a new organism from the cell
+        offspring = Organism(cell, id_generator, self.name)
         print('Creating offspring organism {} from parent organism {} with '
               'the number of stoichiometries mutation variation '.format(
                   offspring.id, parent_org[0].id))
@@ -919,7 +954,7 @@ class Permutation(object):
         Description:
 
             Creates and offspring organism by swapping the elements of some of
-            the sites in the parent structure.
+            the sites in the parent cell.
 
                 1. Selects a parent organism from the pool that is able to have
                     at least one of the allowed swaps done on it.
@@ -931,23 +966,23 @@ class Permutation(object):
 
                 3. Tries to do the computed number of allowed swaps by randomly
                     electing an allowed pair to swap and then randomly
-                    selecting sites in the structure with elements of the
-                    allowed pair. This is repeated until either the computed
-                    number of swaps have been done or no more swaps are
-                    possible with the parent structure.
+                    selecting sites in the cell with elements of the allowed
+                    pair. This is repeated until either the computed number of
+                    swaps have been done or no more swaps are possible with the
+                    parent cell.
         """
 
-        # select a parent organism from the pool and get its structure
+        # select a parent organism from the pool and get its cell
         parent_org = pool.select_organisms(1, random)
-        structure = copy.deepcopy(parent_org[0].structure)
+        cell = copy.deepcopy(parent_org[0].cell)
 
         # keep trying until we get a parent that has at least one possible swap
-        possible_swaps = self.get_possible_swaps(structure)
+        possible_swaps = self.get_possible_swaps(cell)
         num_selects = 0
         while len(possible_swaps) == 0 and num_selects < self.max_num_selects:
             parent_org = pool.select_organisms(1, random)
-            structure = copy.deepcopy(parent_org[0].structure)
-            possible_swaps = self.get_possible_swaps(structure)
+            cell = copy.deepcopy(parent_org[0].cell)
+            possible_swaps = self.get_possible_swaps(cell)
             num_selects = num_selects + 1
 
         # if the maximum number of selections have been made, then this isn't
@@ -966,52 +1001,52 @@ class Permutation(object):
         # either we've got enough or no more swaps are possible
         num_swaps_selected = 0
         pair_indices = []
-        structure_to_check = copy.deepcopy(structure)
+        cell_to_check = copy.deepcopy(cell)
         while num_swaps_selected < num_swaps and len(possible_swaps) > 0:
             # pick a random pair to swap that we know is possible
             swap = random.choice(possible_swaps)
             symbols = swap.split()
             # find sites with the elements to swap
-            site_1 = random.choice(structure_to_check.sites)
+            site_1 = random.choice(cell_to_check.sites)
             while str(site_1.specie.symbol) != symbols[0]:
-                site_1 = random.choice(structure_to_check.sites)
-            site_2 = random.choice(structure_to_check.sites)
+                site_1 = random.choice(cell_to_check.sites)
+            site_2 = random.choice(cell_to_check.sites)
             while str(site_2.specie.symbol) != symbols[1]:
-                site_2 = random.choice(structure_to_check.sites)
-            # record the indices (w.r.t. to the unchanged structure) for this
+                site_2 = random.choice(cell_to_check.sites)
+            # record the indices (w.r.t. to the unchanged cell) for this
             # pair of sites
-            pair_index = [structure.sites.index(site_1),
-                          structure.sites.index(site_2)]
+            pair_index = [cell.sites.index(site_1),
+                          cell.sites.index(site_2)]
             pair_indices.append(pair_index)
             num_swaps_selected += 1
-            # remove these two sites from the structure to check
-            structure_to_check.remove_sites(
-                [structure_to_check.sites.index(site_1),
-                 structure_to_check.sites.index(site_2)])
-            possible_swaps = self.get_possible_swaps(structure_to_check)
+            # remove these two sites from the cell to check
+            cell_to_check.remove_sites(
+                [cell_to_check.sites.index(site_1),
+                 cell_to_check.sites.index(site_2)])
+            possible_swaps = self.get_possible_swaps(cell_to_check)
 
         # do the swaps with the selected pairs
         for pair_index in pair_indices:
-            species_1 = structure.sites[pair_index[0]].specie
-            species_2 = structure.sites[pair_index[1]].specie
-            structure.replace(pair_index[0], species_2)
-            structure.replace(pair_index[1], species_1)
+            species_1 = cell.sites[pair_index[0]].specie
+            species_2 = cell.sites[pair_index[1]].specie
+            cell.replace(pair_index[0], species_2)
+            cell.replace(pair_index[1], species_1)
 
-        # make a new organism from the structure
-        offspring = Organism(structure, id_generator, self.name)
+        # make a new organism from the cell
+        offspring = Organism(cell, id_generator, self.name)
         print('Creating offspring organism {} from parent organism {} with '
               'the permutation variation '.format(offspring.id,
                                                   parent_org[0].id))
         return offspring
 
-    def get_possible_swaps(self, structure):
+    def get_possible_swaps(self, cell):
         """
         Returns a list of swaps that are possible to do, based on what atoms
         are in the cell and which pairs are in self.pairs_to_swap. The returned
-        list is a sublist of self.pairs_to_swap. Does not change the structure.
+        list is a sublist of self.pairs_to_swap. Does not change the cell.
 
         Args:
-            structure: the Structure object to check
+            cell: the Cell to check
         """
 
         possible_pairs = []
@@ -1019,7 +1054,7 @@ class Permutation(object):
             symbols = pair.split()
             has_element_1 = False
             has_element_2 = False
-            for site in structure.sites:
+            for site in cell.sites:
                 if str(site.specie.symbol) == symbols[0]:
                     has_element_1 = True
                 if str(site.specie.symbol) == symbols[1]:

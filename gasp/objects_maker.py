@@ -277,11 +277,11 @@ def make_organism_creators(parameters, composition_space):
                     given_path)
                 # check that the files cover all composition space endpoints
                 if composition_space.objective_function == 'pd':
-                    structures = files_organism_creator.get_structures()
+                    cells = files_organism_creator.get_cells()
                     provided_endpoints = []
                     for endpoint in composition_space.endpoints:
-                        for structure in structures:
-                            if structure.composition.reduced_composition.almost_equals(
+                        for cell in cells:
+                            if cell.composition.reduced_composition.almost_equals(
                                     endpoint.reduced_composition) and \
                                     endpoint not in provided_endpoints:
                                 provided_endpoints.append(endpoint)

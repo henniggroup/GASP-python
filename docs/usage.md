@@ -882,7 +882,7 @@ where 'path_to_repo' is the path to the GASP-python repository on your computer.
 
 ## <a id="energycodeinterfaces"></a>Energy Code Interfaces
 
-GASP is interfaced to GULP, LAMMPS and VASP. 
+GASP is interfaced to [GULP](https://gulp.curtin.edu.au/gulp/), [LAMMPS](http://lammps.sandia.gov/) and [VASP](http://www.vasp.at/). 
 
 
 <br>
