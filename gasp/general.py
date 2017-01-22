@@ -1399,7 +1399,7 @@ class DataWriter(object):
                 data_file.write(' {}'.format(
                     endpoint.reduced_formula.replace(' ', '')))
             data_file.write('\n\n')
-            data_file.write('id\t composition\t total energy\t epa\t\t '
+            data_file.write('id\t\t composition\t total energy\t\t epa\t\t\t '
                             'num calcs\t best value\n\n')
 
     def write_data(self, organism, num_calcs, progress):
@@ -1421,6 +1421,6 @@ class DataWriter(object):
         """
 
         with open(self.file_path, 'a') as data_file:
-            data_file.write('{}\t {}\t\t {}\t {}\t {}\t\t {}\n'.format(
+            data_file.write('{0}\t\t {1}\t\t {2:.6f}\t\t {3:.6f}\t\t {4}\t\t {5:.6f}\n'.format(
                 organism.id, organism.composition.formula.replace(' ', ''),
                 organism.total_energy, organism.epa, num_calcs, progress))
