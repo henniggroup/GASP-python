@@ -14,19 +14,21 @@ This module contains several classes central to the algorithm.
 2. Organism: represents an organism, which consists primarily of a
          structure and an energy
 
-3. InitialPopulation: represents the initial population of organisms,
+3. Cell: represents a structure, and extends pymatgen.core.structure.Structure
+
+4. InitialPopulation: represents the initial population of organisms,
          produced from one or more of the organism creators
 
-4. Pool: represents the population of organisms, after the initial population
+5. Pool: represents the population of organisms, after the initial population
 
-5. OffspringGenerator: high-level class for making offspring organisms
+6. OffspringGenerator: high-level class for making offspring organisms
 
-6. SelectionProbDist: specifies the distribution from which selection
+7. SelectionProbDist: specifies the distribution from which selection
         probabilities are drawn
 
-7. CompositionSpace: specifies the composition or composition range
+8. CompositionSpace: specifies the composition or composition range
 
-8. StoppingCriteria: specifies when a search should stop
+9. StoppingCriteria: specifies when a search should stop
 
 """
 
