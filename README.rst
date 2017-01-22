@@ -9,6 +9,8 @@ Getting GASP
 ============
 It is easiest to install GASP and all its dependencies into a conda_ environment. GASP makes extensive use of pymatgen_, an open source Python library for materials analysis, and these instructions have been adapted from pymatgen. More details on installing pymatgen can be found at http://pymatgen.org/installation.html.
 
+If pymatgen is already installed, steps 1-3 may be skipped.
+
 .. _conda: http://conda.pydata.org/docs/index.html 
 .. _pymatgen: http://pymatgen.org/
 
