@@ -391,6 +391,7 @@ Variations:
         mu_cut_loc: <float>
         sigma_cut_loc: <float>
         shift_prob: <float>
+        rotate_prob: <float>
         doubling_prob: <float>
         grow_parents: <boolean>
         merge_cutoff: <float>
@@ -415,6 +416,10 @@ Specifies the standard deviation of the Gaussian distribution from which the (fr
 Specifies the probability that the atoms in the parent structures are shifted along the lattice vector that is to be cut before the cut is made. The (fractional) magnitudes of the shifts are drawn from a uniform distribution over the unit interval. Optional, and defaults to 1.0. 
 
 For non-bulk structures, the atoms are only shifted if the lattice vector that is to be sliced corresponds to a periodic direction, regardless of the value passed to **shift_prob**. See [here](#nonbulk) for more details on searching for non-bulk structures. 
+
+   * **rotate_prob**
+
+Specifies the probability that the lattices of the parent structures are rotated (relative to the atoms) before the cut is made. The angle of the rotation is drawn from a uniform distribution over \[0, 360). For bulk and 2D structures, no rotation is done, regardless of the value passed to **rotate_prob**. For wire structures, the lattice is rotated about the **c** lattice vector. For clusters, the lattice is rotated about all three lattice vectors. Optional, and defaults to 1.0.
 
    * **doubling_prob**
 

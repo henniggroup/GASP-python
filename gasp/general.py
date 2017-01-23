@@ -1082,7 +1082,7 @@ class OffspringGenerator(object):
             num_tries = 0
             while num_tries < max_num_tries:
                 offspring = variation.do_variation(pool, random, geometry,
-                                                   id_generator)
+                                                   constraints, id_generator)
                 if developer.develop(
                         offspring, composition_space, constraints, geometry,
                         pool) and (redundancy_guard.check_redundancy(

@@ -136,6 +136,8 @@ def print_parameters(objects_dict):
                                           str(variation.sigma_cut_loc) + '\n')
                     parameters_file.write('        shift_prob: ' +
                                           str(variation.shift_prob) + '\n')
+                    parameters_file.write('        rotate_prob: ' +
+                                          str(variation.rotate_prob) + '\n')
                     parameters_file.write('        doubling_prob: ' +
                                           str(variation.doubling_prob) + '\n')
                     parameters_file.write('        grow_parents: ' +

@@ -25,9 +25,14 @@ organisms.
 """
 
 from gasp.general import Organism, Cell
+from gasp.development import Constraints, Geometry # just for testing
+from gasp.general import CompositionSpace
+import random # just for testing
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.periodic_table import Element, Specie
+from pymatgen.transformations.standard_transformations import \
+    RotationTransformation
 
 import copy
 import numpy as np
@@ -138,7 +143,7 @@ class Mating(object):
         else:
             self.merge_cutoff = mating_params['merge_cutoff']
 
-    def do_variation(self, pool, random, geometry, id_generator):
+    def do_variation(self, pool, random, geometry, constraints, id_generator):
         """
         Performs the mating operation.
 
@@ -150,6 +155,8 @@ class Mating(object):
             random: copy of Python's built in PRNG
 
             geometry: the Geometry of the search
+
+            constraints: the Constraints of the search
 
             id_generator: the IDGenerator used to assign id numbers to all
                 organisms
@@ -184,8 +191,13 @@ class Mating(object):
                     only occurs if the lattice vector to cut is along a
                     periodic direction.
 
-                7. TODO: description of random rotations, for wires and
-                    clusters
+                7. In each parent, optionally rotate the lattice relative to
+                    the atoms (with probability self.rotate_prob) by an angle
+                    drawn from a uniform distribution. For clusters, the
+                    lattice is randomly rotated about all three lattice
+                    vectors. For wires, the lattice is only rotated about
+                    lattice vector c. For bulk and sheet structures, the
+                    lattice is not rotated.
 
                 8. Copy the sites from the first parent organism with
                     fractional coordinate less than the randomly chosen cut
@@ -257,9 +269,9 @@ class Mating(object):
 
             # possibly rotate the atoms in each parent (for wires and clusters)
             if random.random() < self.rotate_prob:
-                self.do_random_rotation(cell_1, geometry, random)
+                self.do_random_rotation(cell_1, geometry, constraints, random)
             if random.random() < self.rotate_prob:
-                self.do_random_rotation(cell_2, geometry, random)
+                self.do_random_rotation(cell_2, geometry, constraints, random)
 
             # get the site contributions of each parent
             for site in cell_1.sites:
@@ -329,7 +341,7 @@ class Mating(object):
         Modifies a cell by taking a supercell. For bulk geometries, the
         supercell is taken in the direction of the shortest lattice vector. For
         sheet geometries, the supercell is taken in the direction of either the
-        a or b lattice vectors, whichever is shorter. For wire geometries, the
+        a or b lattice vector, whichever is shorter. For wire geometries, the
         supercell is taken in the direction of the c lattice vector. For
         cluster geometries, no supercell is taken.
 
@@ -414,8 +426,74 @@ class Mating(object):
                 cell.translate_sites(key, translation_vectors[key],
                                      frac_coords=True, to_unit_cell=False)
 
-    def do_random_rotation(self, cell, geometry, random):
-        pass
+    def do_random_rotation(self, cell, geometry, constraints, random):
+        """
+        Modifies a cell by randomly rotating the lattice relative to the atoms.
+        Adds padding before doing the random rotation to make sure the atoms
+        can be translated back into the rotated lattice. Removes the padding
+        after the rotation is complete.
+
+        Note: this method checks the geometry, and will not do the rotation on
+        bulk or sheet structures. For wires, the atoms are randomly rotated
+        about the c lattice vector. For clusters, the atoms are randomly
+        rotated about all three lattice vectors.
+
+        Args:
+            cell: the Cell to shift
+
+            geometry: the Geometry of the search
+
+            random: copy of Python's built in PRNG
+        """
+
+        if geometry.shape == 'bulk' or geometry.shape == 'sheet':
+            pass
+        else:
+            geometry.pad(cell, padding=100)
+            if geometry.shape == 'wire':
+                self.rotate_about_axis(cell, [0, 0, 1], random.random()*360)
+            elif geometry.shape == 'cluster':
+                self.rotate_about_axis(cell, [1, 0, 0], random.random()*360)
+                self.rotate_about_axis(cell, [0, 1, 0], random.random()*360)
+                self.rotate_about_axis(cell, [0, 0, 1], random.random()*360)
+            cell.translate_atoms_into_cell()
+            cell.rotate_to_principal_directions()
+            geometry.unpad(cell, constraints)
+
+    def rotate_about_axis(self, cell, axis, angle):
+        """
+        Modifies a cell by rotating its lattice about the given lattice vector
+        by the given angle. Usually results in the atoms lying outside of the
+        cell.
+
+        Note: this method doesn't change the Cartesian coordinates of the
+        sites. However, the fractional coordinates may be changed.
+
+        Args:
+            cell: the Cell whose lattice to rotate
+
+            axis: the axis about which to rotate (e.g., [1, 0, 0] for lattice
+                vector a)
+
+            angle: the angle to rotate (in degrees)
+        """
+
+        # make the rotation object and get a rotated cell
+        rotation = RotationTransformation(axis, angle)
+        rotated_cell = rotation.apply_transformation(cell)
+
+        # modify the cell to have the rotated lattice but the original
+        # Cartesian atomic site coordinates
+        species = cell.species
+        cartesian_coords = cell.cart_coords
+        cell.modify_lattice(rotated_cell.lattice)
+        site_indices = []
+        for i in range(len(cell.sites)):
+            site_indices.append(i)
+        cell.remove_sites(site_indices)
+        for i in range(len(cartesian_coords)):
+            cell.append(species[i], cartesian_coords[i],
+                        coords_are_cartesian=True)
 
     def merge_sites(self, cell):
         """
@@ -563,7 +641,7 @@ class StructureMut(object):
             self.sigma_strain_matrix_element = structure_mut_params[
                 'sigma_strain_matrix_element']
 
-    def do_variation(self, pool, random, geometry, id_generator):
+    def do_variation(self, pool, random, geometry, constraints, id_generator):
         """
         Performs the structure mutation operation.
 
@@ -765,7 +843,7 @@ class NumStoichsMut(object):
         else:
             self.scale_volume = num_stoichs_mut_params['scale_volume']
 
-    def do_variation(self, pool, random, geometry, id_generator):
+    def do_variation(self, pool, random, geometry, constraints, id_generator):
         """
         Performs the number of stoichiometries mutation operation.
 
@@ -859,7 +937,7 @@ class NumStoichsMut(object):
                 cell.scale_lattice(vol_per_atom*len(cell.sites))
                 if str(cell.lattice.a) == 'nan' or cell.lattice.a > 100:
                     return self.do_variation(pool, random, geometry,
-                                             id_generator)
+                                             constraints, id_generator)
 
         # create a new organism from the cell
         offspring = Organism(cell, id_generator, self.name)
@@ -934,7 +1012,7 @@ class Permutation(object):
         else:
             self.pairs_to_swap = permutation_params['pairs_to_swap']
 
-    def do_variation(self, pool, random, geometry, id_generator):
+    def do_variation(self, pool, random, geometry, constraints, id_generator):
         """
         Performs the permutation operation.
 
@@ -1062,3 +1140,18 @@ class Permutation(object):
             if has_element_1 and has_element_2:
                 possible_pairs.append(pair)
         return possible_pairs
+
+
+# testing
+cell = Cell([[3, 0, 0], [0, 3, 0], [0, 0, 3]], ["C", "C"], [[0.3, 0.3, 0.5], [0.7, 0.7, 0.5]])
+
+mating = Mating({'fraction': 0.8})
+geometry = Geometry({'shape': 'bulk'})
+comp_space = CompositionSpace(['C'])
+constraints = Constraints(None, comp_space)
+
+cell.to('poscar', '/Users/benjaminrevard/Desktop/unrotated.vasp')
+
+mating.do_random_rotation(cell, geometry, constraints, random)
+
+cell.to('poscar', '/Users/benjaminrevard/Desktop/rotated.vasp')
