@@ -212,10 +212,13 @@ InitialPopulation:
         path_to_folder: <string>
     random:
         number: <integer>
-        volume: <float | 'random' | 'from_atomic_radii'> 
+        volumes_per_atom:
+            <string>: <float>
+            <string>: <float>
+            ... 
 ~~~~
 
-The **InitialPopulation** keyword specifies how the algorithm is to generate the initial population of structures. It is optional for fixed composition searches (when there is only one endpoint in [CompositionSpace](#compositionspace)), but it is not optional for variable composition searches, and structures at each endpoint composition must be provided using the **from\_files** keyword.
+The **InitialPopulation** keyword specifies how the algorithm is to generate the initial population of structures. It is optional for fixed composition searches (when there is only one endpoint in [CompositionSpace](#compositionspace)), but it is not optional for phase diagram searches, and structures at each endpoint composition must be provided using the **from\_files** keyword.
 
 
   * **from\_files**
@@ -227,14 +230,7 @@ Specifies that the algorithm is to read structures from provided files and add t
 
 Specifies that the algorithm is to generate random structures and add them to the initial population. It is optional. If used, the keyword **number** must appear on the next line, followed by the number of random structures to make for the initial population. 
 
-The optional keyword **volume** within the **random** block specifies how to scale the volumes (per atom) of the randomly generated structures. Three different values may follow the **volume** keyword:
-
-1. A number specifying the volume (in cubic Angstroms per atom) to which to scale the random structures.
-
-2. The keyword **random**, which means no volume scaling is done on the random structures.
-
-3. The keyword **from\_atomic_radii**, which means that the volumes of the random structures are scaled to twice the sum of the volumes of the constituent atoms, as calculated from their atomic radii. This is the default behavior.   
-
+The optional keyword **volumes_per_atom** within the **random** block specifies how to scale the volumes (per atom) of the randomly generated structures. In particular, the volume of a random structure is scaled to the sum of the volumes of the atoms within the structure, where the volume (in cubic Angstroms) of each atom type is given after its chemical symbol. If the volume for an atom type is not given, the value computed from the elemental ground state structure listed on [materials project](https://materialsproject.org/) is used. This is the default behavior.    
 
 For fixed composition searches, the entire **InitialPopulation** block is optional. If not specified, it defaults to this:
 
@@ -242,8 +238,12 @@ For fixed composition searches, the entire **InitialPopulation** block is option
 InitialPopulation:
     random:
         number: 28
-        volume: from_atomic_radii
+        volumes_per_atom: 
+            Al: 16.47 
+            Cu: 11.82 
 ~~~~
+
+where the default volumes per atom were computed from the ground state structures of Al and Cu.
 
 To provide a sufficient initial sampling of the solution space, we recommend that the number of structures in the initial population exceed the number of structures in the pool (see the [Pool](#pool) keyword). This is achieved by the default values for fixed composition searches: the pool contains 20 structures and the initial population contains 28 structures - a 40% increase. For phase diagram searches, the initial population must be specified in the input file. The default pool size for a binary phase diagram search is 25 structures, so to achieve a 40% increase, the initial population should contain 35 structures. This is easily done by specifying that the initial population contain 33 random structures in addition to the two reference structures at the endpoint compositions. For this case, the **InitialPopulation** block would look like this:
 
@@ -253,10 +253,9 @@ InitialPopulation:
         path_to_folder: <path to folder containing two structures at the endpoint compositions>
     random:
         number: 33
-        volume: from_atomic_radii 
 ~~~~
 
-Similarly, for ternary phase diagram searches, the default pool size is 75 structures, so 105 structures are needed in the initial population to achieve a 40% increase; here is an example:
+where the **volumes_per_atom** keyword has been omitted, resulting in default values being used. Similarly, for ternary phase diagram searches, the default pool size is 75 structures, so 105 structures are needed in the initial population to achieve a 40% increase; here is an example:
 
 ~~~~
 InitialPopulation:
@@ -264,7 +263,6 @@ InitialPopulation:
         path_to_folder: <path to folder containing three structures at the endpoint compositions>
     random:
         number: 102 
-        volume: from_atomic_radii 
 ~~~~
 
 And for quaternary phase diagram searches, the default pool size is 150 structures, so we need 210 structures in the initial population:
@@ -275,7 +273,6 @@ InitialPopulation:
         path_to_folder: <path to folder containing four structures at the endpoint compositions>
     random:
         number: 206 
-        volume: from_atomic_radii 
 ~~~~
 
 

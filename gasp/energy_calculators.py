@@ -232,7 +232,7 @@ class LammpsEnergyCalculator(object):
         except subprocess.CalledProcessError as e:
             # write the output of a bad LAMMPS call to for the user's reference
             with open(job_dir_path + '/log.lammps', 'w') as log_file:
-                log_file.write(e.output)
+                log_file.write(e.output.decode('utf-8'))
             print('Error running LAMMPS on organism {} '.format(organism.id))
             dictionary[key] = None
             return
@@ -612,7 +612,7 @@ class GulpEnergyCalculator(object):
             # write the output of a bad GULP call to for the user's reference
             with open(job_dir_path + '/' + str(organism.id) + '.gout',
                       'w') as gout_file:
-                gout_file.write(e.output)
+                gout_file.write(e.output.decode('utf-8'))
             print('Error running GULP on organism {} '.format(organism.id))
             dictionary[key] = None
             return

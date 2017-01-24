@@ -54,12 +54,45 @@ class RandomOrganismCreator(object):
         # number of random organisms to make (only used for epa searches)
         self.default_number = 28
         # volume scaling behavior
-        self.default_volume = 'from_atomic_radii'
+        # default volumes per atom of elemental ground state structures
+        # computed from structures on materials project (materialsproject.org)
+        self.all_default_vpas = {'H': 13.89, 'He': 15.79, 'Li': 20.12,
+                                 'Be': 7.94, 'C': 10.58, 'N': 42.73,
+                                 'O': 13.46, 'F': 16.00, 'Ne': 19.93,
+                                 'Na': 37.12, 'Mg': 23.04, 'Al': 16.47,
+                                 'Si': 20.44, 'P': 23.93, 'S': 36.03,
+                                 'Cl': 34.90, 'Ar': 44.87, 'K': 73.51,
+                                 'Ca': 42.42, 'Sc': 24.64, 'Ti': 17.11,
+                                 'V': 13.41, 'Cr': 11.57, 'Mn': 11.04,
+                                 'Fe': 11.55, 'Co': 10.92, 'Ni': 10.79,
+                                 'Cu': 11.82, 'Zn': 15.56, 'Ga': 20.34,
+                                 'Ge': 23.92, 'As': 22.45, 'Se': 38.13,
+                                 'Br': 37.53, 'Kr': 65.09, 'Rb': 90.44,
+                                 'Sr': 54.88, 'Y': 32.85, 'Zr': 23.50,
+                                 'Nb': 18.31, 'Mo': 15.89, 'Tc': 14.59,
+                                 'Ru': 13.94, 'Rh': 14.25, 'Pd': 15.45,
+                                 'Ag': 18.00, 'Cd': 23.28, 'In': 27.56,
+                                 'Sn': 36.70, 'Sb': 31.78, 'Te': 35.03,
+                                 'I': 50.34, 'Xe': 83.51, 'Cs': 116.17,
+                                 'Ba': 63.64, 'Hf': 22.50, 'Ta': 18.25,
+                                 'W': 16.19, 'Re': 15.06, 'Os': 14.36,
+                                 'Ir': 14.55, 'Pt': 15.72, 'Au': 18.14,
+                                 'Hg': 31.45, 'Tl': 31.13, 'Pb': 32.30,
+                                 'Bi': 36.60, 'La': 37.15, 'Ce': 26.30,
+                                 'Pr': 36.47, 'Nd': 35.44, 'Pm': 34.58,
+                                 'Sm': 33.88, 'Eu': 46.28, 'Gd': 33.33,
+                                 'Tb': 32.09, 'Dy': 31.57, 'Ho': 31.45,
+                                 'Er': 30.90, 'Tm': 30.30, 'Yb': 40.45,
+                                 'Lu': 29.43, 'Ac': 45.52, 'Th': 32.03,
+                                 'Pa': 25.21, 'U': 19.98, 'Np': 18.43,
+                                 'Pu': 18.34}
+
+        self.default_vpas = self.get_default_vpas(composition_space)
 
         # set to defaults
         if random_org_parameters in (None, 'default'):
             self.number = self.default_number
-            self.volume = self.default_volume
+            self.vpas = self.default_vpas
         # parse the parameters and set to defaults if necessary
         else:
             # the number to make
@@ -71,16 +104,36 @@ class RandomOrganismCreator(object):
                 self.number = random_org_parameters['number']
 
             # volume scaling
-            if 'volume' not in random_org_parameters:
-                self.volume = self.default_volume
-            elif random_org_parameters['volume'] in (None, 'default'):
-                self.volume = self.default_volume
+            self.vpas = self.default_vpas
+            if 'volumes_per_atom' not in random_org_parameters:
+                pass
+            elif random_org_parameters['volumes_per_atom'] in (None,
+                                                               'default'):
+                pass
             else:
-                self.volume = random_org_parameters['volume']
+                # replace the specified volumes per atom with the given values
+                for symbol in random_org_parameters['volumes_per_atom']:
+                    self.vpas[symbol] = random_org_parameters[
+                        'volumes_per_atom'][symbol]
 
         self.num_made = 0  # number added to initial population
         self.is_successes_based = True  # it's based on number added
         self.is_finished = False
+
+    def get_default_vpas(self, composition_space):
+        """
+        Returns a dictionary containing the default volumes per atom for all
+        the elements in the composition space.
+
+        Args:
+            composition_space: the CompositionSpace of the search
+        """
+
+        default_vpas = {}
+        for element in composition_space.get_all_elements():
+            default_vpas[element.symbol] = self.all_default_vpas[
+                element.symbol]
+        return default_vpas
 
     def create_organism(self, id_generator, composition_space, constraints,
                         random):
@@ -332,8 +385,8 @@ class RandomOrganismCreator(object):
 
     def scale_volume(self, random_cell):
         """
-        Scales the volume of the random cell according the value of
-        self.volume.
+        Scales the volume of the random cell according the values in
+        self.vpas.
 
         Returns a boolean indicating whether volume scaling was completed
         without errors.
@@ -342,59 +395,16 @@ class RandomOrganismCreator(object):
             random_cell: the random Cell whose volume to possibly scale
         """
 
-        if self.volume == 'from_atomic_radii':
-            return self.scale_volume_atomic_radii(random_cell)
-        elif self.volume == 'random':  # no volume scaling
-            return True
-        else:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                random_cell.scale_lattice(self.volume*len(
-                    random_cell.sites))
-                if str(random_cell.lattice.a) == 'nan' or \
-                        random_cell.lattice.a > 100:
-                    return False
-                else:
-                    return True
+        # compute the volume to scale to
+        composition = random_cell.composition
+        total_volume = 0
+        for specie in composition:
+            total_volume += composition[specie]*self.vpas[specie.symbol]
 
-    def scale_volume_atomic_radii(self, random_cell):
-        """
-        Scales the volume of the random cell based on the radii of the
-        atoms in the cell.
-
-        Args:
-            random_cell: the random Cell whose volume to possibly scale
-
-        Description:
-
-            The actual volume per atom of most elemental solids is roughly two
-            times the volume per atom computed from the atomic radii. This
-            empirical relationship is used to compute what volume the cell
-            should be scaled to.
-
-            Since the default per-species mids are fractions of the atomic
-            radii, this also helps remove compositional bias introduced by the
-            per-species mids.
-        """
-
-        # sum atomic volumes (from atomic radii)
-        total_atomic_volume = 0
-        for element in random_cell.composition:
-            volume_per_atom = (4.0/3.0)*np.pi*np.power(element.atomic_radius,
-                                                       3)
-            num_atoms = random_cell.composition[element]
-            total_atomic_volume += volume_per_atom*num_atoms
-
-        # empirical scale factor
-        scale_factor = 2
-
-        # scale to the computed volume
-        #
-        # this is to suppress the warnings produced if the
-        # scale_lattice method fails
+        # scale the volume
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            random_cell.scale_lattice(scale_factor*total_atomic_volume)
+            random_cell.scale_lattice(total_volume)
             if str(random_cell.lattice.a) == 'nan' or \
                     random_cell.lattice.a > 100:
                 return False

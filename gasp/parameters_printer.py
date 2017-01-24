@@ -96,8 +96,10 @@ def print_parameters(objects_dict):
                 parameters_file.write('    random: \n')
                 parameters_file.write('        number: ' +
                                       str(creator.number) + '\n')
-                parameters_file.write('        volume: ' +
-                                      str(creator.volume) + '\n')
+                parameters_file.write('        volumes_per_atom: ' + '\n')
+                for vpa in creator.vpas:
+                    parameters_file.write('            ' + str(vpa) + ': ' +
+                                          str(creator.vpas[vpa]) + '\n')
             elif creator.name == 'file organism creator':
                 parameters_file.write('    from_files: \n')
                 parameters_file.write('        number: ' +
