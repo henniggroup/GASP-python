@@ -1027,11 +1027,11 @@ pair_coeff * * <path to AlCu.eam.alloy file> Al Cu
 neigh_modify one 5000
 minimize 0.0 1.0e-8 1 1
 fix 1 all box/relax tri 1e4 vmax 0.001
-minimize 0.0 1.0e-8 10000 100000 
+minimize 0.0 1.0e-8 1000000 10000000 
 dump myDump all atom 100000000000000 dump.atom
 dump_modify myDump sort 1 scale no 
 fix 1 all box/relax tri 0 vmax 0.001
-minimize 0.0 1.0e-8 10000 100000 
+minimize 0.0 1.0e-8 1000000 10000000 
 ~~~~
 
 The input script given to the algorithm must contain the following lines:
@@ -1063,11 +1063,14 @@ read_data	in.data
 pair_style eam/alloy 
 pair_coeff * * <path to AlCu.eam.alloy file> Al Cu
 
-minimize 0.0 1.0e-8 10000 100000 
+neigh_modify one 5000
+minimize 0.0 1.0e-8 1 1
+fix 1 all box/relax x 0 y 0 xy 0 vmax 0.001
+minimize 0.0 1.0e-8 1000000 10000000 
 dump myDump all atom 100000000000000 dump.atom
 dump_modify myDump sort 1 scale no 
 fix 1 all box/relax x 0 y 0 xy 0 vmax 0.001
-minimize 0.0 1.0e-8 10000 100000 
+minimize 0.0 1.0e-8 1000000 10000000 
 ~~~~
 
 The options following the `boundary` command tell LAMMPS to use periodic boundary conditions in the *x* and *y* directions, but not in the *z* direction. The options following the `fix` command specify that only the **a** and **b** lattice vectors, and the angle between them, are to be relaxed.
@@ -1084,11 +1087,14 @@ read_data	in.data
 pair_style eam/alloy 
 pair_coeff * * <path to AlCu.eam.alloy file> Al Cu
 
-minimize 0.0 1.0e-8 10000 100000 
+neigh_modify one 5000
+minimize 0.0 1.0e-8 1 1
+fix 1 all box/relax z 0 vmax 0.001
+minimize 0.0 1.0e-8 1000000 10000000 
 dump myDump all atom 100000000000000 dump.atom
 dump_modify myDump sort 1 scale no 
 fix 1 all box/relax z 0 vmax 0.001
-minimize 0.0 1.0e-8 10000 100000 
+minimize 0.0 1.0e-8 1000000 10000000 
 ~~~~
 
 The options following the `boundary` command tell LAMMPS to use periodic boundary conditions in the *z* direction, but not in the *x* and *y* directions. The options following the `fix` command specify that only the **c** lattice vector is to be relaxed.
@@ -1105,10 +1111,12 @@ read_data	in.data
 pair_style eam/alloy 
 pair_coeff * * <path to AlCu.eam.alloy file> Al Cu
 
-minimize 0.0 1.0e-8 10000 100000 
+neigh_modify one 5000
+minimize 0.0 1.0e-8 1 1
+minimize 0.0 1.0e-8 1000000 10000000 
 dump myDump all atom 100000000000000 dump.atom
 dump_modify myDump sort 1 scale no 
-minimize 0.0 1.0e-8 10000 100000 
+minimize 0.0 1.0e-8 1000000 10000000 
 ~~~~
 
 See the [Geometry](#geometry) keyword for details on how to specify a non-bulk structure search in the input file of the genetic algorithm.
