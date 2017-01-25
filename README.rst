@@ -45,7 +45,7 @@ When conda asks you::
 
     proceed ([y]/n)?
 
-Type 'y'.
+Type 'y' and press Enter.
 
 Now activate the environment so that packages can be installed into it::
 
