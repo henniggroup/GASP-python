@@ -1140,18 +1140,3 @@ class Permutation(object):
             if has_element_1 and has_element_2:
                 possible_pairs.append(pair)
         return possible_pairs
-
-
-# testing
-cell = Cell([[3, 0, 0], [0, 3, 0], [0, 0, 3]], ["C", "C"], [[0.3, 0.3, 0.5], [0.7, 0.7, 0.5]])
-
-mating = Mating({'fraction': 0.8})
-geometry = Geometry({'shape': 'bulk'})
-comp_space = CompositionSpace(['C'])
-constraints = Constraints(None, comp_space)
-
-cell.to('poscar', '/Users/benjaminrevard/Desktop/unrotated.vasp')
-
-mating.do_random_rotation(cell, geometry, constraints, random)
-
-cell.to('poscar', '/Users/benjaminrevard/Desktop/rotated.vasp')
