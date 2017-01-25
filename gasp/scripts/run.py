@@ -248,8 +248,11 @@ def main():
                             initial_population.add_organism(relaxed_organism,
                                                             composition_space)
                             whole_pop.append(relaxed_organism)
-                            initial_population.print_progress(
-                                composition_space)
+                            progress = initial_population.get_progress(
+                                    composition_space)
+                            data_writer.write_data(relaxed_organism,
+                                                   num_finished_calcs,
+                                                   progress)
                             print('Number of energy calculations so far: '
                                   '{} '.format(num_finished_calcs))
 
