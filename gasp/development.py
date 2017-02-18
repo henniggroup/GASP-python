@@ -61,7 +61,7 @@ class Constraints(object):
 
         # default values
         self.default_min_num_atoms = 2
-        self.default_max_num_atoms = 50
+        self.default_max_num_atoms = 30
         self.default_min_lattice_length = 0.5
         self.default_max_lattice_length = 20
         self.default_min_lattice_angle = 40

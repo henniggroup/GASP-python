@@ -21,6 +21,7 @@ from gasp import development
 from pymatgen.core.structure import Structure
 
 import os
+import math
 
 
 def make_objects(parameters):
@@ -126,16 +127,47 @@ def make_objects(parameters):
     stopping_criteria = make_stopping_criteria(parameters, composition_space)
     objects_dict['stopping_criteria'] = stopping_criteria
 
-    # default fractions for the variations
-    default_variation_fractions = {}
-    default_variation_fractions['structure_mut'] = 0.1
-    default_variation_fractions['num_stoichs_mut'] = 0.1
+    # determine which variations should have non-zero default fractions
+    do_permutation = False
     if len(composition_space.get_all_swappable_pairs()) > 0:
-        default_variation_fractions['mating'] = 0.7
-        default_variation_fractions['permutation'] = 0.1
+        do_permutation = True
+
+    # get the number of atoms per composition
+    if len(composition_space.endpoints) > 1:
+        atoms_per_comp = len(composition_space.endpoints)
     else:
-        default_variation_fractions['mating'] = 0.8
+        atoms_per_comp = \
+            composition_space.endpoints[0].reduced_composition.num_atoms
+    # see if numstoichmut can be done w/o violating the min or max number of
+    # atoms constraints
+    bottom = int(math.ceil(constraints.min_num_atoms/atoms_per_comp))
+    top = int(math.floor(constraints.max_num_atoms/atoms_per_comp))
+    do_numstoichsmut = False
+    if top > bottom:
+        do_numstoichsmut = True
+
+    # set default fractions for the variations
+    default_variation_fractions = {}
+    if do_permutation and do_numstoichsmut:
+        default_variation_fractions['permutation'] = 0.1
+        default_variation_fractions['num_stoichs_mut'] = 0.1
+        default_variation_fractions['structure_mut'] = 0.1
+        default_variation_fractions['mating'] = 0.7
+    elif not do_permutation and do_numstoichsmut:
         default_variation_fractions['permutation'] = 0.0
+        default_variation_fractions['num_stoichs_mut'] = 0.1
+        default_variation_fractions['structure_mut'] = 0.1
+        default_variation_fractions['mating'] = 0.8
+    elif do_permutation and not do_numstoichsmut:
+        default_variation_fractions['permutation'] = 0.1
+        default_variation_fractions['num_stoichs_mut'] = 0.0
+        default_variation_fractions['structure_mut'] = 0.1
+        default_variation_fractions['mating'] = 0.8
+    elif not do_permutation and not do_numstoichsmut:
+        default_variation_fractions['permutation'] = 0.0
+        default_variation_fractions['num_stoichs_mut'] = 0.0
+        default_variation_fractions['structure_mut'] = 0.2
+        default_variation_fractions['mating'] = 0.8
 
     # make the variations
     variations_list = make_variations(parameters, default_variation_fractions,
