@@ -230,6 +230,8 @@ def print_parameters(objects_dict):
                               str(redundancy_guard.use_primitive_cell) + '\n')
         parameters_file.write('    attempt_supercell: ' +
                               str(redundancy_guard.attempt_supercell) + '\n')
+        parameters_file.write('    rmsd_tol: ' +
+                              str(redundancy_guard.rmsd_tol) + '\n')
         parameters_file.write('    epa_diff: ' +
                               str(redundancy_guard.epa_diff) + '\n')
         parameters_file.write('\n')

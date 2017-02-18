@@ -25,12 +25,19 @@ before and after it is submitted for an energy calculation.
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element, DummySpecie
+from pymatgen.core.structure import Molecule
 from pymatgen.core.sites import Site
 from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.phasediagram.analyzer import PDAnalyzer
 from pymatgen.analysis.structure_matcher import StructureMatcher
+from pymatgen.analysis.molecule_matcher import InchiMolAtomMapper, \
+    IsomorphismMolAtomMapper, MoleculeMatcher
 from pymatgen.analysis.structure_matcher import ElementComparator
+try:
+    import openbabel as ob
+except ImportError:
+    ob = None
 
 import warnings
 import numpy as np
@@ -701,7 +708,7 @@ class Developer(object):
 class RedundancyGuard(object):
     '''
     A RedundancyGuard object is used to check if an Organism is redundant with
-    other organisms already seen by the alrogithm.
+    other organisms already seen by the algorithm.
     '''
 
     def __init__(self, redundancy_parameters):
@@ -709,8 +716,10 @@ class RedundancyGuard(object):
         Makes a RedundancyGuard, and sets default parameter values if
         necessary.
 
-        TODO: pymatgen's structure matcher assumes periodic boundary
-            conditions, but this doesn't make sense for all geometries...
+        TODO: currently using pymatgen's structure matcher for comparing sheet
+            and wire structures. It assumes periodic boundary conditions in all
+            three dimensions, so not ideal. Using pymatgen's molecule matcher
+            for clusters.
 
         Args:
             redundancy parameters: a dictionary of parameters
@@ -728,6 +737,8 @@ class RedundancyGuard(object):
         self.default_use_primitive_cell = True
         # whether to check if structures are equal to supercells of each other
         self.default_attempt_supercell = True
+        # RMSD tolerance for comparing clusters
+        self.default_rmsd_tol = 2.0
         # the epa difference interval
         self.default_epa_diff = 0.0
 
@@ -784,6 +795,14 @@ class RedundancyGuard(object):
                 self.attempt_supercell = redundancy_parameters[
                     'attempt_supercell']
 
+            # RMSD tolerance
+            if 'rmsd_tol' not in redundancy_parameters:
+                self.rmsd_tol = self.default_rmsd_tol
+            elif redundancy_parameters['rmsd_tol'] in (None, 'default'):
+                self.rmsd_tol = self.default_rmsd_tol
+            else:
+                self.rmsd_tol = redundancy_parameters['rmsd_tol']
+
             # epa difference
             if 'epa_diff' not in redundancy_parameters:
                 self.epa_diff = self.default_epa_diff
@@ -801,6 +820,12 @@ class RedundancyGuard(object):
             self.use_primitive_cell, False, self.attempt_supercell, False,
             ElementComparator())
 
+        # make the MoleculeMatcher object
+        iso_mol_atom_mapper = IsomorphismMolAtomMapper()
+        self.molecule_matcher = MoleculeMatcher(self.rmsd_tol,
+                                                iso_mol_atom_mapper)
+        ob.obErrorLog.SetOutputLevel(0)  # to suppress openbabel warnings
+
     def set_all_to_defaults(self):
         '''
         Sets all the redundancy parameters to default values.
@@ -811,9 +836,10 @@ class RedundancyGuard(object):
         self.site_tol = self.default_site_tol
         self.use_primitive_cell = self.default_use_primitive_cell
         self.attempt_supercell = self.default_attempt_supercell
+        self.rmsd_tol = self.default_rmsd_tol
         self.epa_diff = self.default_epa_diff
 
-    def check_redundancy(self, new_organism, orgs_list):
+    def check_redundancy(self, new_organism, orgs_list, geometry):
         '''
         Checks for redundancy, both structural and if specified, epa (d-value).
 
@@ -824,6 +850,8 @@ class RedundancyGuard(object):
             new_organism: the Organism to check for redundancy
 
             orgs_list: the list containing all Organisms to check against
+
+            geometry: the Geometry of the search
         '''
 
         # if new_organism isn't relaxed, then just check structures
@@ -831,8 +859,7 @@ class RedundancyGuard(object):
             for organism in orgs_list:
                 if new_organism.id != organism.id:  # just in case
                     # check if their structures match
-                    if self.structure_matcher.fit(new_organism.cell,
-                                                  organism.cell):
+                    if self.check_structures(new_organism, organism, geometry):
                         print('Organism {} failed structural redundancy - '
                               'looks like organism {} '.format(new_organism.id,
                                                                organism.id))
@@ -843,8 +870,7 @@ class RedundancyGuard(object):
             for organism in orgs_list:
                 if new_organism.id != organism.id and organism.epa is not None:
                     # check if their structures match
-                    if self.structure_matcher.fit(new_organism.cell,
-                                                  organism.cell):
+                    if self.check_structures(new_organism, organism, geometry):
                         print('Organism {} failed structural redundancy - '
                               'looks like organism {} '.format(new_organism.id,
                                                                organism.id))
@@ -858,6 +884,30 @@ class RedundancyGuard(object):
                                   '{} '.format(new_organism.id, organism.id))
                             return organism
         return None
+
+    def check_structures(self, org1, org2, geometry):
+        '''
+        Compares the structures of two organisms to determine if they are
+        redundant.
+
+        Returns a boolean indicating whether the structures of the two
+        organisms are redundant.
+
+        Args:
+            org1: the first Organism
+
+            org2: the second Organism
+
+            geometry: the Geometry of the search
+        '''
+
+        # use the molecule matcher for cluster searches
+        if geometry.shape == 'cluster':
+            mol1 = Molecule(org1.cell.species, org1.cell.cart_coords)
+            mol2 = Molecule(org2.cell.species, org2.cell.cart_coords)
+            return self.molecule_matcher.fit(mol1, mol2)
+        else:
+            return self.structure_matcher.fit(org1.cell, org2.cell)
 
 
 class Geometry(object):

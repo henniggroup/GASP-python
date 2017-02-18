@@ -24,7 +24,6 @@ from pymatgen.core.composition import Composition
 
 from fractions import Fraction
 import warnings
-import numpy as np
 import os
 
 

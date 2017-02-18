@@ -104,7 +104,7 @@ def main():
                     if developer.develop(new_organism, composition_space,
                                          constraints, geometry, pool):
                         redundant_organism = redundancy_guard.check_redundancy(
-                            new_organism, whole_pop)
+                            new_organism, whole_pop, geometry)
                         if redundant_organism is None:  # no redundancy
                             # add a copy to whole_pop so the organisms in
                             # whole_pop don't change upon relaxation
@@ -136,7 +136,7 @@ def main():
                                                  constraints, geometry, pool):
                                 redundant_organism = \
                                     redundancy_guard.check_redundancy(
-                                        relaxed_organism, whole_pop)
+                                        relaxed_organism, whole_pop, geometry)
                                 if redundant_organism is not None:  # redundant
                                     if redundant_organism.is_active and \
                                             redundant_organism.epa > \
@@ -193,7 +193,7 @@ def main():
                                                      pool):
                                     redundant_organism = \
                                         redundancy_guard.check_redundancy(
-                                            new_organism, whole_pop)
+                                            new_organism, whole_pop, geometry)
                                     if redundant_organism is None:  # not redundant
                                         whole_pop.append(
                                             copy.deepcopy(new_organism))
@@ -228,7 +228,7 @@ def main():
                     if developer.develop(relaxed_organism, composition_space,
                                          constraints, geometry, pool):
                         redundant_organism = redundancy_guard.check_redundancy(
-                            relaxed_organism, whole_pop)
+                            relaxed_organism, whole_pop, geometry)
                         if redundant_organism is not None:  # redundant
                             if redundant_organism.is_active and \
                                     redundant_organism.epa > \
@@ -299,7 +299,7 @@ def main():
                                          constraints, geometry, pool):
                         # check for redundancy with the the pool first
                         redundant_organism = redundancy_guard.check_redundancy(
-                            relaxed_offspring, pool.to_list())
+                            relaxed_offspring, pool.to_list(), geometry)
                         if redundant_organism is not None:  # redundant
                             if redundant_organism.epa > relaxed_offspring.epa:
                                 pool.replace_organism(redundant_organism,
@@ -318,7 +318,7 @@ def main():
                         else:
                             redundant_organism = \
                                 redundancy_guard.check_redundancy(
-                                    relaxed_offspring, whole_pop)
+                                    relaxed_offspring, whole_pop, geometry)
                         if redundant_organism is None:  # not redundant
                             stopping_criteria.check_organism(relaxed_offspring)
                             pool.add_organism(relaxed_offspring,
@@ -397,7 +397,7 @@ def main():
                                          constraints, geometry, pool):
                         # check for redundancy with the pool first
                         redundant_organism = redundancy_guard.check_redundancy(
-                            relaxed_offspring, pool.to_list())
+                            relaxed_offspring, pool.to_list(), geometry)
                         if redundant_organism is not None:  # redundant
                             if redundant_organism.epa > relaxed_offspring.epa:
                                 pool.replace_organism(redundant_organism,
@@ -416,7 +416,7 @@ def main():
                         else:
                             redundant_organism = \
                                 redundancy_guard.check_redundancy(
-                                    relaxed_offspring, whole_pop)
+                                    relaxed_offspring, whole_pop, geometry)
                         if redundant_organism is None:  # not redundant
                             pool.add_organism(relaxed_offspring,
                                               composition_space)

@@ -1086,7 +1086,7 @@ class OffspringGenerator(object):
                 if developer.develop(
                         offspring, composition_space, constraints, geometry,
                         pool) and (redundancy_guard.check_redundancy(
-                            offspring, whole_pop) is None):
+                            offspring, whole_pop, geometry) is None):
                     return offspring
                 else:
                     num_tries = num_tries + 1
