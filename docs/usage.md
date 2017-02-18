@@ -682,6 +682,7 @@ RedundancyGuard:
     site_tol: <float>
     use_primitive_cell: <boolean>
     attempt_supercell: <boolean>
+    rmsd_tol: <float>
     epa_diff: <float>
 ~~~~
 
@@ -706,6 +707,10 @@ Specifies whether structures should be reduced to their primitive cells before t
    * **attempt_supercell**
 
 Specifies whether the matching algorithm should try to match structures with differing numbers of atoms by taking a supercell of the smaller one. This value is passed to the pymatgen.analysis.structure_matcher.StructureMatcher class as the *attempt_supercell* parameter. Optional, and defaults to True.
+
+   * **rmsd_tol**
+
+Specifies the RMSD difference threshold for whether two clusters are considered different. This value is passed to the pymatgen.analysis.molecule_matcher.MoleculeMatcher class as the *tolerance* parameter. Only used when searching for clusters (see the [Geometry](#geometry) keyword). Optional, and defaults to 2.0.  
 
    * **epa_diff**
 
