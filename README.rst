@@ -39,7 +39,7 @@ After completing the installation, create a new terminal in order for the enviro
 
 To create a new conda environment named 'my_gasp', type::
 
-    conda create --name my_gasp python
+    conda create --name my_gasp python=3.5
 
 When conda asks you::
 

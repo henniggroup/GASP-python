@@ -31,8 +31,8 @@ from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.phasediagram.analyzer import PDAnalyzer
 from pymatgen.analysis.structure_matcher import StructureMatcher
-from pymatgen.analysis.molecule_matcher import InchiMolAtomMapper, \
-    IsomorphismMolAtomMapper, MoleculeMatcher
+from pymatgen.analysis.molecule_matcher import IsomorphismMolAtomMapper, \
+    MoleculeMatcher
 from pymatgen.analysis.structure_matcher import ElementComparator
 try:
     import openbabel as ob
