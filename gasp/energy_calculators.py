@@ -625,7 +625,6 @@ class GulpEnergyCalculator(object):
         # check if not converged (part of this is copied from pymatgen)
         conv_err_string = 'Conditions for a minimum have not been satisfied'
         gradient_norm = self.get_grad_norm(gulp_output)
-        print(gradient_norm)
         if conv_err_string in gulp_output and gradient_norm > 0.1:
             print('The GULP calculation on organism {} did not '
                   'converge '.format(organism.id))
@@ -706,7 +705,7 @@ class GulpEnergyCalculator(object):
 
         output_lines = gout.split('\n')
         for line in output_lines:
-            if 'Final Gnorm,' in line:
+            if 'Final Gnorm' in line:
                 line_parts = line.split()
                 return float(line_parts[3])
 
