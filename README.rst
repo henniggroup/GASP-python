@@ -29,7 +29,7 @@ For Mac or Linux, run the bash script::
     # if Linux
     bash Miniconda3-latest-Linux-x86_64.sh
 
-The installer will ask you to approve the terms of the license and then tell you where the installation will be located. The default location is fine, so press Enter. Finally, the installer will ask if you would like it to add the install location to your PATH by prepending a line to your .bash_profile (for Mac) or .bashrc (for Linux) file. You do, so type 'yes' and press Enter.
+The installer will ask you to approve the terms of the license and then tell you where the installation will be located. The default location is fine, so press Enter. Finally, the installer will ask if you would like it to add the install location to your PATH by prepending a line to your .bash_profile (for Mac) or .bashrc (for Linux) file. Type 'yes' and press Enter.
 
 After completing the installation, create a new terminal in order for the environment variables added by conda to be loaded.
 

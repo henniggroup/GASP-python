@@ -212,6 +212,7 @@ InitialPopulation:
         path_to_folder: <string>
     random:
         number: <integer>
+        max_num_atoms: <integer>
         volumes_per_atom:
             <string>: <float>
             <string>: <float>
@@ -230,6 +231,8 @@ Specifies that the algorithm is to read structures from provided files and add t
 
 Specifies that the algorithm is to generate random structures and add them to the initial population. It is optional. If used, the keyword **number** must appear on the next line, followed by the number of random structures to make for the initial population. 
 
+The optional keyword **max_num_atoms** within the **random** block specifies the maximum number of atoms allowed in the randomly generated structures. Defaults to 6 plus the value of **min_num_atoms** in [Constraints](#constraints) or the value of **max_num_atoms** in [Constraints](#constraints), whichever is smaller. The value given here must lie in the range defined by the **min_num_atoms** and **max_num_atoms** keywords in [Constraints](#constraints) (including the endpoints).
+
 The optional keyword **volumes_per_atom** within the **random** block specifies how to scale the volumes (per atom) of the randomly generated structures. In particular, the volume of a random structure is scaled to the sum of the volumes of the atoms within the structure, where the volume (in cubic Angstroms) of each atom type is given after its chemical symbol. If the volume for an atom type is not given, the value computed from the elemental ground state structure listed on [materials project](https://materialsproject.org/) is used. This is the default behavior.    
 
 For fixed composition searches, the entire **InitialPopulation** block is optional. If not specified, it defaults to this:
@@ -238,12 +241,13 @@ For fixed composition searches, the entire **InitialPopulation** block is option
 InitialPopulation:
     random:
         number: 28
+        max_num_atoms: 8
         volumes_per_atom: 
             Al: 16.47 
             Cu: 11.82 
 ~~~~
 
-where the default volumes per atom were computed from the ground state structures of Al and Cu.
+where the default **max_num_atoms** was computed from the default **min_num_atoms** in [Constraints](#constraints) (note that the default value of **max_num_atoms** could be different if the **min_num_atoms** keyword in [Constraints](#constraints) is specified). The default volumes per atom were computed from the ground state structures of Al and Cu.
 
 To provide a sufficient initial sampling of the solution space, we recommend that the number of structures in the initial population exceed the number of structures in the pool (see the [Pool](#pool) keyword). This is achieved by the default values for fixed composition searches: the pool contains 20 structures and the initial population contains 28 structures - a 40% increase. For phase diagram searches, the initial population must be specified in the input file. The default pool size for a binary phase diagram search is 25 structures, so to achieve a 40% increase, the initial population should contain 35 structures. This is easily done by specifying that the initial population contain 33 random structures in addition to the two reference structures at the endpoint compositions. For this case, the **InitialPopulation** block would look like this:
 
@@ -255,7 +259,7 @@ InitialPopulation:
         number: 33
 ~~~~
 
-where the **volumes_per_atom** keyword has been omitted, resulting in default values being used. Similarly, for ternary phase diagram searches, the default pool size is 75 structures, so 105 structures are needed in the initial population to achieve a 40% increase; here is an example:
+where the **max_num_atoms** and **volumes_per_atom** keywords have been omitted, resulting in default values being used. Similarly, for ternary phase diagram searches, the default pool size is 75 structures, so 105 structures are needed in the initial population to achieve a 40% increase; here is an example:
 
 ~~~~
 InitialPopulation:
@@ -630,7 +634,9 @@ Specifies the minimum number of atoms allowed in the cell. Optional, and default
 
   * **max_num_atoms** 
 
-Specifies the maximum number of atoms allowed in the cell. Optional, and defaults to 30.
+Specifies the maximum number of atoms allowed in the cell. Optional, and defaults to 30. 
+
+For fixed-composition searches, the range defined by the **min_num_atoms** and **max_num_atoms** constraints must contain at least one integer multiple of the number of atoms in the formula unit of the composition.
 
   * **min_lattice_length** 
 
