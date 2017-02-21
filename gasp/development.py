@@ -41,6 +41,7 @@ except ImportError:
 
 import warnings
 import numpy as np
+import math
 
 
 class Constraints(object):
@@ -149,6 +150,9 @@ class Constraints(object):
                 # check for missing pairs, and set default mids for them
                 self.set_some_mids_to_defaults(composition_space)
 
+        # check that min and max numbers of atoms makes sense
+        self.check_num_atoms_range(composition_space)
+
     def set_all_to_defaults(self, composition_space):
         '''
         Sets all general constraints (those in Constraints block of input file)
@@ -221,6 +225,31 @@ class Constraints(object):
             if self.per_species_mids[key] > max_mid:
                 max_mid = self.per_species_mids[key]
         return max_mid
+
+    def check_num_atoms_range(self, composition_space):
+        '''
+        For epa searches, checks that the range defined by the min and max
+        number of atoms constraints allows at least one integer multiple of the
+        number of atoms in the composition space endpoint.
+
+        Args:
+            composition_space: the CompositionSpace of the search
+        '''
+
+        if len(composition_space.endpoints) == 1:
+            atoms_per_comp = \
+                composition_space.endpoints[0].reduced_composition.num_atoms
+            bottom = int(math.ceil(self.min_num_atoms/atoms_per_comp))
+            top = int(math.floor(self.max_num_atoms/atoms_per_comp))
+            if top < bottom:
+                print('The range defined by the minimum and maximum number of '
+                      'atoms constraints does not contain an integer multiple '
+                      'of the number of atoms in the specified composition.')
+                print('Please use the "min_num_atoms" and "max_num_atoms" '
+                      'keywords in the Constraints block to set a valid range '
+                      'for the allowed number of atoms.')
+                print('Quitting...')
+                quit()
 
 
 class Developer(object):

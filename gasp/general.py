@@ -1432,6 +1432,3 @@ class DataWriter(object):
             data_file.write(format_string.format(
                 organism.id, organism.composition.formula.replace(' ', ''),
                 organism.total_energy, organism.epa, num_calcs, progress))
-          #  data_file.write('{0}\t\t {1}\t\t {2:.6f}\t\t {3:.6f}\t\t {4}\t\t {5:.6f}\n'.format(
-          #      organism.id, organism.composition.formula.replace(' ', ''),
-          #      organism.total_energy, organism.epa, num_calcs, progress))

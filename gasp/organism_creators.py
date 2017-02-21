@@ -25,6 +25,7 @@ from pymatgen.core.composition import Composition
 from fractions import Fraction
 import warnings
 import os
+import math
 
 
 class RandomOrganismCreator(object):
@@ -32,7 +33,7 @@ class RandomOrganismCreator(object):
     Creates random organisms for the initial population.
     """
 
-    def __init__(self, random_org_parameters, composition_space):
+    def __init__(self, random_org_parameters, composition_space, constraints):
         """
         Makes a RandomOrganismCreator, and sets default parameter values if
         necessary.
@@ -43,7 +44,7 @@ class RandomOrganismCreator(object):
 
             composition_space: the CompositionSpace of the search
 
-            random: a copy of Python's built in PRNG
+            constraints: the Constraints of the search
         """
 
         self.name = 'random organism creator'
@@ -52,6 +53,9 @@ class RandomOrganismCreator(object):
         #
         # number of random organisms to make (only used for epa searches)
         self.default_number = 28
+        # max number of atoms
+        self.default_max_num_atoms = min(constraints.min_num_atoms + 6,
+                                         constraints.max_num_atoms)
         # volume scaling behavior
         # default volumes per atom of elemental ground state structures
         # computed from structures on materials project (materialsproject.org)
@@ -91,6 +95,7 @@ class RandomOrganismCreator(object):
         # set to defaults
         if random_org_parameters in (None, 'default'):
             self.number = self.default_number
+            self.max_num_atoms = self.default_max_num_atoms
             self.vpas = self.default_vpas
         # parse the parameters and set to defaults if necessary
         else:
@@ -101,6 +106,30 @@ class RandomOrganismCreator(object):
                 self.number = self.default_number
             else:
                 self.number = random_org_parameters['number']
+
+            # the max number of atoms
+            if 'max_num_atoms' not in random_org_parameters:
+                self.max_num_atoms = self.default_max_num_atoms
+            elif random_org_parameters['max_num_atoms'] in (None, 'default'):
+                self.max_num_atoms = self.default_max_num_atoms
+            elif random_org_parameters['max_num_atoms'] > \
+                    constraints.max_num_atoms:
+                print('The value passed to the "max_num_atoms" keyword in the '
+                      'InitialPopulation block may not exceed the value passed'
+                      ' to the "max_num_atoms" keyword in the Constraints '
+                      'block.')
+                print('Quitting...')
+                quit()
+            elif random_org_parameters['max_num_atoms'] < \
+                    constraints.min_num_atoms:
+                print('The value passed to the "max_num_atoms" keyword in the '
+                      'InitialPopulation block may not be smaller than the '
+                      'value passed to the "min_num_atoms" keyword in the '
+                      'Constraints block.')
+                print('Quitting...')
+                quit()
+            else:
+                self.max_num_atoms = random_org_parameters['max_num_atoms']
 
             # volume scaling
             self.vpas = self.default_vpas
@@ -250,7 +279,8 @@ class RandomOrganismCreator(object):
         Description:
 
             1. Computes the minimum and maximum number of formula units from
-                the minimum and maximum number of atoms and the number of atoms
+                the minimum (constraints.min_num_atoms) and maximum
+                (self.max_num_atoms) number of atoms and the number of atoms
                 per formula unit.
 
             2. Gets a random number of formula units within the range allowed
@@ -262,10 +292,13 @@ class RandomOrganismCreator(object):
         # get random number of formula units and resulting number of atoms
         reduced_formula = composition_space.endpoints[0].reduced_composition
         num_atoms_in_formula = reduced_formula.num_atoms
-        max_num_formulas = int(constraints.max_num_atoms/num_atoms_in_formula)
-        min_num_formulas = int(constraints.min_num_atoms/num_atoms_in_formula)
-        if min_num_formulas == 0:
-            min_num_formulas = 1
+        max_num_formulas = int(math.floor(
+            self.max_num_atoms/num_atoms_in_formula))
+        min_num_formulas = int(math.ceil(
+            constraints.min_num_atoms/num_atoms_in_formula))
+        # round up the next formula unit if necessary
+        if max_num_formulas < min_num_formulas:
+            max_num_formulas += 1
         random_num_formulas = random.randint(min_num_formulas,
                                              max_num_formulas)
 
@@ -299,18 +332,20 @@ class RandomOrganismCreator(object):
                 endpoint and the amount of each specie within each endpoint.
 
             3. Approximates the fraction of each specie as a rational number
-                with a random maximum possible denominator that is close to the
-                maximum number of atoms divided by the number of endpoints.
+                with a maximum possible denominator of self.max_num_atoms.
 
             4. Takes the product of the denominators of all the species'
                 rational fractions, and then multiplies each specie's rational
                 fraction by this product to obtain the number of atoms of that
                 species.
 
-            5. Checks that the resulting number of atoms satisfies the maximum
-                and minimum number of atoms constraints, and that the resulting
-                composition is not equivalent to one of the endpoint
-                compositions.
+            5. Reduces the composition obtained in 4. to the smallest possible
+                number of atoms.
+
+            6. Checks that the resulting number of atoms satisfies the maximum
+                (self.max_num_atoms) and minimum (constraints.min_num_atoms)
+                number of atoms constraints, and that the resulting composition
+                is not equivalent to one of the endpoint compositions.
         """
 
         # get random fractions for each endpoint that sum to 1 (i.e., a
@@ -343,13 +378,11 @@ class RandomOrganismCreator(object):
 
         # approximate the decimal amount of each element as a fraction
         # (rational number)
-        max_denom = int(constraints.max_num_atoms/len(
-            composition_space.endpoints))
         rational_amounts = {}
         for element in element_amounts:
             rational_amounts[element] = Fraction(
                 element_amounts[element]).limit_denominator(
-                    random.randint(int(0.9*max_denom), max_denom))
+                    self.max_num_atoms)
 
         # multiply the denominators together, then multiply each fraction
         # by this result to get the number of atoms of each element
@@ -360,13 +393,14 @@ class RandomOrganismCreator(object):
             element_amounts[element] = round(float(
                 denom_product)*rational_amounts[element])
 
-        # make a Composition object from the amounts of each element
+        # make a Composition object from the amounts of each element and reduce
+        # it if possible
         random_composition = Composition(element_amounts)
         reduced_composition = random_composition.reduced_composition
         num_atoms = int(reduced_composition.num_atoms)
 
         # check the min and max number of atoms constraints
-        if num_atoms > constraints.max_num_atoms or num_atoms < \
+        if num_atoms > self.max_num_atoms or num_atoms < \
                 constraints.min_num_atoms:
             return None
 

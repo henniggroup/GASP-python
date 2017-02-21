@@ -88,8 +88,8 @@ def make_objects(parameters):
     objects_dict['id_generator'] = id_generator
 
     # make the organism creators
-    initial_organism_creators = make_organism_creators(parameters,
-                                                       composition_space)
+    initial_organism_creators = make_organism_creators(
+        parameters, composition_space, constraints)
 
     # if more than one organism creator, sort them so that the attempts-based
     # ones are at the front and the successes-based ones are at the back
@@ -220,7 +220,7 @@ def make_objects(parameters):
     return objects_dict
 
 
-def make_organism_creators(parameters, composition_space):
+def make_organism_creators(parameters, composition_space, constraints):
     """
     Returns a list containing organism creator objects.
 
@@ -229,12 +229,14 @@ def make_organism_creators(parameters, composition_space):
             file
 
         composition_space: the CompositionSpace of the search
+
+        constraints: the Constraints of the search
     """
 
     if 'InitialPopulation' not in parameters:
-        return make_default_organism_creator(composition_space)
+        return make_default_organism_creator(composition_space, constraints)
     elif parameters['InitialPopulation'] in (None, 'default'):
-        return make_default_organism_creator(composition_space)
+        return make_default_organism_creator(composition_space, constraints)
     # make the specified creators
     else:
         # check that at least one valid option is used
@@ -253,7 +255,8 @@ def make_organism_creators(parameters, composition_space):
         # the random organism creator
         if 'random' in parameters['InitialPopulation']:
             random_organism_creator = organism_creators.RandomOrganismCreator(
-                parameters['InitialPopulation']['random'], composition_space)
+                parameters['InitialPopulation']['random'], composition_space,
+                constraints)
             initial_organism_creators.append(random_organism_creator)
 
         # the from files organism creator
@@ -333,12 +336,14 @@ def make_organism_creators(parameters, composition_space):
         return initial_organism_creators
 
 
-def make_default_organism_creator(composition_space):
+def make_default_organism_creator(composition_space, constraints):
     """
     Returns a list containing a RandomOrganismCreator, or quits.
 
     Args:
         composition_space: the CompositionSpace of the search
+
+        constraints: the Constraints of the search
     """
 
     if composition_space.objective_function == 'pd':
@@ -352,7 +357,7 @@ def make_default_organism_creator(composition_space):
             quit()
     else:
         random_organism_creator = organism_creators.RandomOrganismCreator(
-            'default', composition_space)
+            'default', composition_space, constraints)
         return [random_organism_creator]
 
 

@@ -96,6 +96,8 @@ def print_parameters(objects_dict):
                 parameters_file.write('    random: \n')
                 parameters_file.write('        number: ' +
                                       str(creator.number) + '\n')
+                parameters_file.write('        max_num_atoms: ' +
+                                      str(creator.max_num_atoms) + '\n')
                 parameters_file.write('        volumes_per_atom: ' + '\n')
                 for vpa in creator.vpas:
                     parameters_file.write('            ' + str(vpa) + ': ' +
