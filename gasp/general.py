@@ -1312,7 +1312,7 @@ class StoppingCriteria(object):
         # set defaults if stopping_parameters equals 'default' or None
         if stopping_parameters in (None, 'default'):
             self.num_energy_calcs = self.default_num_energy_calcs
-            self.value_achieved = self.default_value_achieved
+            self.epa_achieved = self.default_epa_achieved
             self.found_cell = self.default_found_cell
         # check each keyword to see if it's been included
         else:
