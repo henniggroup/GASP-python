@@ -94,6 +94,8 @@ class Organism(object):
         self.cell = cell
         self.composition = self.cell.composition
         self.total_energy = None
+        # objective function value
+        self.value = None
         # energy per atom
         self.epa = None
         self.fitness = None
