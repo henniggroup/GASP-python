@@ -89,7 +89,7 @@ def main():
     for creator in organism_creators:
         print('Making {} organisms with {}'.format(creator.number,
                                                    creator.name))
-        while not creator.is_finished:
+        while not creator.is_finished and not stopping_criteria.are_satisfied:
 
             # start initial batch of energy calculations
             if len(threads) < num_calcs_at_once:
@@ -109,8 +109,8 @@ def main():
                             # add a copy to whole_pop so the organisms in
                             # whole_pop don't change upon relaxation
                             whole_pop.append(copy.deepcopy(new_organism))
-                            stopping_criteria.update_calc_counter()
                             geometry.pad(new_organism.cell)
+                            stopping_criteria.update_calc_counter()
                             thread_index = len(threads)
                             thread = threading.Thread(
                                 target=energy_calculator.do_energy_calculation,
@@ -156,7 +156,8 @@ def main():
                                                   num_finished_calcs))
                                 else:  # not redundant
                                     stopping_criteria.check_organism(
-                                        relaxed_organism)
+                                        relaxed_organism, redundancy_guard,
+                                        geometry)
                                     initial_population.add_organism(
                                         relaxed_organism, composition_space)
                                     whole_pop.append(relaxed_organism)
@@ -197,8 +198,8 @@ def main():
                                     if redundant_organism is None:  # not redundant
                                         whole_pop.append(
                                             copy.deepcopy(new_organism))
-                                        stopping_criteria.update_calc_counter()
                                         geometry.pad(new_organism.cell)
+                                        stopping_criteria.update_calc_counter()
                                         thread = threading.Thread(
                                             target=energy_calculator.do_energy_calculation,
                                             args=(new_organism,
@@ -208,9 +209,13 @@ def main():
                                         threads[thread_index] = thread
                                         started_new_calc = True
 
+    # depending on how the loop above exited, update bookkeeping
+    if not stopping_criteria.are_satisfied:
+        num_finished_calcs = num_finished_calcs - 1
+
     # process all the calculations that were still running when the last
     # creator finished
-    num_to_get = num_calcs_at_once  # how many threads we have left to handle
+    num_to_get = num_calcs_at_once  # number of threads left to handle
     handled_indices = []  # the indices of the threads we've already handled
     while num_to_get > 0:
         for thread in threads:
@@ -244,7 +249,8 @@ def main():
                                 print('Number of energy calculations so far: '
                                       '{} '.format(num_finished_calcs))
                         else:  # no redundancy
-                            stopping_criteria.check_organism(relaxed_organism)
+                            stopping_criteria.check_organism(
+                                relaxed_organism, redundancy_guard, geometry)
                             initial_population.add_organism(relaxed_organism,
                                                             composition_space)
                             whole_pop.append(relaxed_organism)
@@ -255,6 +261,11 @@ def main():
                                                    progress)
                             print('Number of energy calculations so far: '
                                   '{} '.format(num_finished_calcs))
+
+    # check if the stopping criteria were already met when making the initial
+    # population
+    if stopping_criteria.are_satisfied:
+        quit()
 
     # populate the pool with the initial population
     pool.add_initial_population(initial_population, composition_space)
@@ -320,7 +331,8 @@ def main():
                                 redundancy_guard.check_redundancy(
                                     relaxed_offspring, whole_pop, geometry)
                         if redundant_organism is None:  # not redundant
-                            stopping_criteria.check_organism(relaxed_offspring)
+                            stopping_criteria.check_organism(
+                                relaxed_offspring, redundancy_guard, geometry)
                             pool.add_organism(relaxed_offspring,
                                               composition_space)
                             whole_pop.append(relaxed_offspring)
@@ -376,8 +388,8 @@ def main():
                     thread.start()
                     threads[thread_index] = thread
 
-    # process all the calculations that were still running when the last
-    # creator finished
+    # process all the calculations that were still running when the
+    # stopping criteria were achieved
     num_to_get = num_calcs_at_once  # how many threads we have left to handle
     handled_indices = []  # the indices of the threads we've already handled
     while num_to_get > 0:

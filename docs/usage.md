@@ -231,7 +231,7 @@ Specifies that the algorithm is to read structures from provided files and add t
 
 Specifies that the algorithm is to generate random structures and add them to the initial population. It is optional. If used, the keyword **number** must appear on the next line, followed by the number of random structures to make for the initial population. 
 
-The optional keyword **max_num_atoms** within the **random** block specifies the maximum number of atoms allowed in the randomly generated structures. Defaults to 6 plus the value of **min_num_atoms** in [Constraints](#constraints) or the value of **max_num_atoms** in [Constraints](#constraints), whichever is smaller. The value given here must lie in the range defined by the **min_num_atoms** and **max_num_atoms** keywords in [Constraints](#constraints) (including the endpoints).
+The optional keyword **max_num_atoms** within the **random** block specifies the maximum number of atoms allowed in the randomly generated structures. Defaults to 6 plus the value of **min_num_atoms** in [Constraints](#constraints) or the value of **max_num_atoms** in [Constraints](#constraints), whichever is smaller. The value given here must lie in the range defined by the values of **min_num_atoms** and **max_num_atoms** in [Constraints](#constraints) (including the endpoints).
 
 The optional keyword **volumes_per_atom** within the **random** block specifies how to scale the volumes (per atom) of the randomly generated structures. In particular, the volume of a random structure is scaled to the sum of the volumes of the atoms within the structure, where the volume (in cubic Angstroms) of each atom type is given after its chemical symbol. If the volume for an atom type is not given, the value computed from the elemental ground state structure listed on [materials project](https://materialsproject.org/) is used. This is the default behavior.    
 
@@ -792,7 +792,7 @@ See [here](#nonbulk) for details on searching for non-bulk structures, including
 ~~~~
 StoppingCriteria:
     num_energy_calcs: <integer>
-    value_achieved: <float>
+    epa_achieved: <float>
     found_structure: <string>
 ~~~~
 
@@ -802,7 +802,7 @@ The **StoppingCriteria** keyword specifies when the genetic algorithm should ter
 
 Specifies that the algorithm should terminate when the given number of energy calculations have been done. This is the default behavior. Optional. 
 
-   * **value_achieved**
+   * **epa_achieved**
 
 Specifies that the algorithm should terminate when a structure has been found with an energy per atom less than or equal to the given amount (in eV/atom). Optional, and only valid for fixed-composition searches. For phase diagram searches, this keyword is ignored. 
 

@@ -252,9 +252,9 @@ def print_parameters(objects_dict):
             parameters_file.write('    num_energy_calcs: ' +
                                   str(stopping_criteria.num_energy_calcs) +
                                   '\n')
-        if stopping_criteria.value_achieved is not None:
-            parameters_file.write('    value_achieved: ' +
-                                  str(stopping_criteria.value_achieved) + '\n')
+        if stopping_criteria.epa_achieved is not None:
+            parameters_file.write('    epa_achieved: ' +
+                                  str(stopping_criteria.epa_achieved) + '\n')
         if stopping_criteria.found_cell is not None:
             parameters_file.write('    found_structure: ' +
                                   stopping_criteria.path_to_structure_file +

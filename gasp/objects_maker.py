@@ -638,8 +638,8 @@ def make_stopping_criteria(parameters, composition_space):
                 print('Quitting...')
                 quit()
             # check that the file has the correct suffix or prefix
-            elif not (given_path.endswith('.cif') or given_path.startswith(
-                    'POSCAR')):
+            elif not (os.path.basename(given_path).endswith('.cif') or
+                      os.path.basename(given_path).startswith('POSCAR.')):
                 print('File containing structure to find must be in POSCAR or '
                       'cif format and begin with POSCAR. or end with .cif, '
                       'respectively.')

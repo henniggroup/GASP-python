@@ -32,7 +32,7 @@ This module contains several classes central to the algorithm.
 
 """
 
-from pymatgen.core.structure import Structure
+from pymatgen.core.structure import Structure, Molecule
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element
@@ -94,9 +94,8 @@ class Organism(object):
         self.cell = cell
         self.composition = self.cell.composition
         self.total_energy = None
+        # energy per atom
         self.epa = None
-        # objective function value
-        self.value = None
         self.fitness = None
         # selection probability of this organism
         self.selection_prob = None
@@ -1299,7 +1298,9 @@ class StoppingCriteria(object):
             # for quaternary phase diagram searches
             self.default_num_energy_calcs = 6000
 
-        self.default_value_achieved = None
+        # the energy per atom at which to stop
+        self.default_epa_achieved = None
+        # the Cell at which to stop when found
         self.default_found_cell = None
         # whether or not the stopping criteria are satisfied
         self.are_satisfied = False
@@ -1314,13 +1315,13 @@ class StoppingCriteria(object):
         # check each keyword to see if it's been included
         else:
             # value achieved
-            if 'value_achieved' in stopping_parameters:
-                if stopping_parameters['value_achieved'] in (None, 'default'):
-                    self.value_achieved = self.default_value_achieved
+            if 'epa_achieved' in stopping_parameters:
+                if stopping_parameters['epa_achieved'] in (None, 'default'):
+                    self.epa_achieved = self.default_epa_achieved
                 elif composition_space.objective_function == 'epa':
-                    self.value_achieved = stopping_parameters['value_achieved']
+                    self.epa_achieved = stopping_parameters['epa_achieved']
             else:
-                self.value_achieved = self.default_value_achieved
+                self.epa_achieved = self.default_epa_achieved
 
             # found structure
             if 'found_structure' in stopping_parameters:
@@ -1338,7 +1339,7 @@ class StoppingCriteria(object):
             if 'num_energy_calcs' in stopping_parameters:
                 if stopping_parameters['num_energy_calcs'] in (None,
                                                                'default'):
-                    if self.value_achieved is None and \
+                    if self.epa_achieved is None and \
                             self.found_cell is None:
                         self.num_energy_calcs = self.default_num_energy_calcs
                     else:
@@ -1346,7 +1347,7 @@ class StoppingCriteria(object):
                 else:
                     self.num_energy_calcs = stopping_parameters[
                         'num_energy_calcs']
-            elif self.value_achieved is None and self.found_cell is None:
+            elif self.epa_achieved is None and self.found_cell is None:
                 self.num_energy_calcs = self.default_num_energy_calcs
             else:
                 self.num_energy_calcs = None
@@ -1358,25 +1359,41 @@ class StoppingCriteria(object):
         """
 
         if self.num_energy_calcs is not None:
-            self.calc_counter = self.calc_counter + 1
+            self.calc_counter += 1
             if self.calc_counter >= self.num_energy_calcs:
                 self.are_satisfied = True
 
-    def check_organism(self, organism):
+    def check_organism(self, organism, redundancy_guard, geometry):
         """
         If value_achieved or found_structure stopping criteria are used, checks
         if the relaxed organism satisfies them, and updates are_satisfied.
 
         Args:
             organism: a relaxed Organism whose value has been computed
+
+            redundancy_guard: the RedundancyGuard of the search
+
+            geometry: the Geometry of the search
         """
 
-        if self.value_achieved is not None:
-            if organism.value <= self.value_achieved:
+        # check the objective function value if needed
+        if self.epa_achieved is not None:
+            if organism.epa <= self.epa_achieved:
                 self.are_satisfied = True
+
+        # check the structure if needed
         if self.found_cell is not None:
-            if self.found_cell.matches(organism.cell):
-                self.are_satisfied = True
+            if geometry.shape == 'cluster':
+                mol1 = Molecule(organism.cell.species,
+                                organism.cell.cart_coords)
+                mol2 = Molecule(self.found_cell.species,
+                                self.found_cell.cart_coords)
+                self.are_satisfied = \
+                    redundancy_guard.molecule_matcher.fit(mol1, mol2)
+            else:
+                self.are_satisfied = \
+                    redundancy_guard.structure_matcher.fit(organism.cell,
+                                                           self.found_cell)
 
 
 class DataWriter(object):
