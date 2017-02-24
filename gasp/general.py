@@ -30,12 +30,14 @@ This module contains several classes central to the algorithm.
 
 9. StoppingCriteria: specifies when a search should stop
 
+10. DataWriter: writes information about the search to a file
+
 """
 
 from pymatgen.core.structure import Structure, Molecule
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.composition import Composition
-from pymatgen.core.periodic_table import Element
+from pymatgen.core.periodic_table import Element, DummySpecie
 from pymatgen.phasediagram.maker import CompoundPhaseDiagram
 from pymatgen.phasediagram.entries import PDEntry
 from pymatgen.phasediagram.analyzer import PDAnalyzer
@@ -93,16 +95,24 @@ class Organism(object):
 
         self.cell = cell
         self.composition = self.cell.composition
+        # position in composition space. Only used for phase diagram searches
+        self.composition_vector = None
         self.total_energy = None
-        # objective function value
+        # the objective function value
         self.value = None
         # energy per atom
         self.epa = None
+        # the fitness and relative fitness
         self.fitness = None
+        self.relative_fitness = None
         # selection probability of this organism
         self.selection_prob = None
         # starting point of interval on number line of size selection_prob
         self.selection_loc = None
+        # relative selection probability
+        self.relative_selection_prob = None
+        # starting point of interval of size relative_selection_prob
+        self.relative_selection_loc = None
         # whether the organism is part of initial population or pool
         self.is_active = False
         # unique id number
@@ -115,6 +125,71 @@ class Organism(object):
     @property
     def id(self):
         return self._id
+
+    def set_composition_vector(self, composition_space):
+        """
+        Sets the composition vector of the organism.
+
+        Args:
+            composition_space: the CompositionSpace of the search.
+        """
+
+        if composition_space.objective_function == 'pd':
+            # make CompoundPhaseDiagram and PDAnalyzer objects
+            pdentries = []
+            for endpoint in composition_space.endpoints:
+                pdentries.append(PDEntry(endpoint, -10))
+            compound_pd = CompoundPhaseDiagram(pdentries,
+                                               composition_space.endpoints)
+            pdanalyzer = PDAnalyzer(compound_pd)
+
+            # transform the organism's composition
+            transformed_entry = compound_pd.transform_entries(
+                [PDEntry(self.composition, 10)], composition_space.endpoints)
+
+            # get the transformed species and amounts
+            transformed_list = str(transformed_entry[0][0]).split()
+            del transformed_list[0]
+            popped = ''
+            while popped != 'with':
+                popped = transformed_list.pop()
+
+            # separate the dummy species symbols from the amounts
+            symbols = []
+            amounts = []
+            for entry in transformed_list:
+                split_entry = entry.split('0+')
+                symbols.append(split_entry[0])
+                amounts.append(float(split_entry[1]))
+
+            # make a dictionary mapping dummy species to amounts
+            dummy_species_amounts = {}
+            for i in range(len(symbols)):
+                dummy_species_amounts[DummySpecie(symbol=symbols[i])] = \
+                    amounts[i]
+
+            # make Composition object with dummy species, get decomposition
+            dummy_comp = Composition(dummy_species_amounts)
+            decomp = pdanalyzer.get_decomposition(dummy_comp)
+
+            # get amounts of the decomposition in terms of the (untransformed)
+            # composition space endpoints
+            formatted_decomp = {}
+            for key in decomp:
+                key_dict = key.as_dict()
+                comp = Composition(key_dict['entry']['composition'])
+                formatted_decomp[comp] = decomp[key]
+
+            # make the composition vector
+            composition_vector = []
+            # because the random organism creator shuffles the endpoints
+            composition_space.endpoints.sort()
+            for endpoint in composition_space.endpoints:
+                if endpoint in formatted_decomp:
+                    composition_vector.append(formatted_decomp[endpoint])
+                else:
+                    composition_vector.append(0.0)
+            self.composition_vector = np.array(composition_vector)
 
 
 class Cell(Structure):
@@ -372,6 +447,8 @@ class InitialPopulation():
         print('Adding organism {} to the initial population'.format(
             organism_to_add.id))
         self.initial_population.append(organism_to_add)
+        if composition_space.objective_function == 'pd':
+            organism_to_add.set_composition_vector(composition_space)
         organism_to_add.is_active = True
 
     def replace_organism(self, old_org, new_org, composition_space):
@@ -398,6 +475,8 @@ class InitialPopulation():
                 self.initial_population.remove(org)
                 org.is_active = False
         self.initial_population.append(new_org)
+        if composition_space.objective_function == 'pd':
+            new_org.set_composition_vector(composition_space)
         new_org.is_active = True
 
     def get_progress(self, composition_space):
@@ -690,6 +769,7 @@ class Pool(object):
                 self.promotion_set.append(organism_to_add)
             else:
                 self.queue.appendleft(organism_to_add)
+            organism_to_add.set_composition_vector(composition_space)
 
     def get_worst_in_promotion_set(self):
         """
@@ -762,6 +842,7 @@ class Pool(object):
         if composition_space.objective_function == 'epa':
             new_org.value = new_org.epa
         elif composition_space.objective_function == 'pd':
+            new_org.set_composition_vector(composition_space)
             organisms_list = self.to_list()
             organisms_list.append(new_org)
             self.compute_pd_values(organisms_list, composition_space)
@@ -864,6 +945,80 @@ class Pool(object):
             if organism not in best_organisms:
                 organism.fitness = 0.0
 
+    def compute_relative_fitnesses(self, ref_organism, composition_space):
+        """
+        Calculates and assigns relative fitnesses to all the organisms in the
+        pool.
+
+        For fixed-composition searches, the relative fitness is equivalent to
+        the regular fitness, except the relative fitness of ref_organism is
+        set to zero.
+
+        For phase diagram searches, the relative fitness is taken to be the
+        average of the regular fitness and the composition fitness, where the
+        composition fitness is defined as 1 minus the normalized distance
+        between an organism and the ref_organism in composition space. The
+        relative fitness of ref_organism is set to zero.
+
+        Args:
+            ref_organism: relative fitnesses are computed w.r.t. this Organism
+
+            composition_space: the CompositionSpace of the search
+        """
+
+        pool_list = self.to_list()
+
+        if composition_space.objective_function == 'epa':
+            for organism in pool_list:
+                organism.relative_fitness = organism.fitness
+            ref_organism.relative_fitness = 0.0
+        elif composition_space.objective_function == 'pd':
+
+            # compute the weight for the composition fitness based on the
+            # distance between the ref organism's composition and the center of
+            # the composition space (closer to center -> smaller weight)
+            dist_from_center = self.get_composition_distance(
+                ref_organism.composition_vector, composition_space.center)
+            # normalize distance from center to lie between 0 and 1
+            normalized_dist_from_center = (
+                dist_from_center/composition_space.max_dist_from_center)
+            # the maximum weight for the composition fitness to take
+            max_comp_fit_weight = 0.5  # TODO: set this from the input file
+            # the weight for the composition fitness
+            comp_fit_weight = max_comp_fit_weight*normalized_dist_from_center
+
+            # compute the relative fitnesses from the weighted average of the
+            # regular and composition fitnesses
+            for organism in pool_list:
+                if organism.fitness > 0.0:
+                    comp_fitness = 1 - self.get_composition_distance(
+                        organism.composition_vector,
+                        ref_organism.composition_vector)
+                    organism.relative_fitness = \
+                        comp_fit_weight*comp_fitness + (
+                            1 - comp_fit_weight)*organism.fitness
+                else:
+                    organism.relative_fitness = 0.0
+            # set the relative fitness of the reference organism to 0
+            ref_organism.relative_fitness = 0.0
+
+    def get_composition_distance(self, comp_vect1, comp_vect2):
+        """
+        Returns the normalized distance between two composition vectors, which
+        is defined as the L1 norm of their difference, divided by 2 to
+        normalize (so the maximum distance is 1 and the minimum distance is 0).
+
+        Args:
+            comp_vect1: the first composition vector, as a numpy array
+
+            comp_vect2: the second composition vector, as a numpy array
+        """
+
+        # compute the different between the two composition vectors
+        diff_vector = np.subtract(comp_vect1, comp_vect2)
+        # compute the L1 norm of the difference vector
+        return 0.5*np.linalg.norm(diff_vector, ord=1)
+
     def get_n_best_organisms(self, n):
         """
         Returns a list containing the n best organisms in the pool, sorted in
@@ -906,37 +1061,72 @@ class Pool(object):
             organism.selection_loc = selection_loc
             selection_loc = selection_loc + organism.selection_prob
 
-    def select_organisms(self, n, random):
+    def compute_relative_selection_probs(self):
         """
-        Randomly selects n distinct organisms from the pool based on their
-        selection probabilities.
+        Calculates and assigns relative selection probabilities to all the
+        organisms in the pool.
 
-        Returns a list containing n organisms.
+        Precondition: the organisms in the pool all have up-to-date relative
+            fitnesses
+        """
+
+        # get a list of the organisms in the pool, sorted by increasing
+        # relative fitness
+        organisms = self.to_list()
+        organisms.sort(key=lambda x: x.relative_fitness, reverse=False)
+
+        # get the denominator of the expression for selection probability
+        denom = 0
+        for organism in organisms:
+            denom = denom + math.pow(organism.relative_fitness,
+                                     self.selection.power)
+
+        # compute the relative selection probability and interval location for
+        # each organism in best_organisms. The interval location is defined
+        # here as the starting point of the interval
+        relative_selection_loc = 0
+        for organism in organisms:
+            organism.relative_selection_prob = math.pow(
+                organism.relative_fitness, self.selection.power)/denom
+            organism.relative_selection_loc = relative_selection_loc
+            relative_selection_loc = relative_selection_loc + \
+                organism.relative_selection_prob
+
+    def select_organism(self, random, composition_space, excluded_org=None):
+        """
+        Randomly selects an organism from the pool based on selection
+        probabilities (either standard or relative). Returns the selected
+        organism.
 
         Args:
-            n: how many organisms to select from the pool
-
             random: a copy of Python's built in PRNG
 
-        Precondition: all the organisms in the pool have been assigned
-            selection probabilities.
+            composition_space: the CompositionSpace of the search
+
+            excluded_org: an Organism to exclude from being selected
         """
 
-        selected_orgs = []
         pool_list = self.to_list()
 
-        # keep going until we've selected enough
-        while True:
+        # if not excluding an organism, then select based on standard selection
+        # probabilities
+        if excluded_org is None:
             rand = random.random()
             for organism in pool_list:
                 if rand >= organism.selection_loc and rand < (
                         organism.selection_loc + organism.selection_prob):
-                    # check that we haven't already selected this one
-                    if organism not in selected_orgs:
-                        selected_orgs.append(organism)
-                        # check if we've selected enough
-                        if len(selected_orgs) == n:
-                            return selected_orgs
+                    return organism
+        # if excluding an organism, first compute relative selection
+        # probabilities, then select based on those
+        else:
+            self.compute_relative_fitnesses(excluded_org, composition_space)
+            self.compute_relative_selection_probs()
+            rand = random.random()
+            for organism in pool_list:
+                if rand >= organism.relative_selection_loc and rand < (
+                        organism.relative_selection_loc +
+                        organism.relative_selection_prob):
+                    return organism
 
     def print_summary(self, composition_space):
         """
@@ -1082,8 +1272,9 @@ class OffspringGenerator(object):
                                               variations)
             num_tries = 0
             while num_tries < max_num_tries:
-                offspring = variation.do_variation(pool, random, geometry,
-                                                   constraints, id_generator)
+                offspring = variation.do_variation(
+                    pool, random, geometry, constraints, id_generator,
+                    composition_space)
                 if developer.develop(
                         offspring, composition_space, constraints, geometry,
                         pool) and (redundancy_guard.check_redundancy(
@@ -1197,22 +1388,39 @@ class CompositionSpace(object):
         # objective function lives here
         self.objective_function = self.infer_objective_function()
 
+        # the center of the composition space
+        self.center = self.get_center()
+
+        # the distance from an endpoint to the center
+        self.max_dist_from_center = (float(len(self.endpoints) - 1))/float(len(
+            self.endpoints))
+
     def infer_objective_function(self):
         """
         Infers the objective function (energy per atom or phase diagram) based
         on the composition space.
 
-        Returns either "epa" or "pd".
+        Returns either 'epa' or 'pd'.
         """
 
         if len(self.endpoints) == 1:
-            return "epa"
+            return 'epa'
         else:
             for point in self.endpoints:
                 for next_point in self.endpoints:
                     if not point.almost_equals(next_point, 0.0, 0.0):
-                        return "pd"
-        return "epa"
+                        return 'pd'
+        return 'epa'
+
+    def get_center(self):
+        """
+        Returns the center of the composition space, as a numpy array.
+        """
+
+        center_vect = []
+        for _ in range(len(self.endpoints)):
+            center_vect.append(1/len(self.endpoints))
+        return np.array(center_vect)
 
     def get_all_elements(self):
         """

@@ -25,9 +25,6 @@ organisms.
 """
 
 from gasp.general import Organism, Cell
-from gasp.development import Constraints, Geometry # just for testing
-from gasp.general import CompositionSpace
-import random # just for testing
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.periodic_table import Element, Specie
@@ -143,7 +140,8 @@ class Mating(object):
         else:
             self.merge_cutoff = mating_params['merge_cutoff']
 
-    def do_variation(self, pool, random, geometry, constraints, id_generator):
+    def do_variation(self, pool, random, geometry, constraints, id_generator,
+                     composition_space):
         """
         Performs the mating operation.
 
@@ -160,6 +158,8 @@ class Mating(object):
 
             id_generator: the IDGenerator used to assign id numbers to all
                 organisms
+
+            composition_space: the composition_space of the search
 
         Description:
 
@@ -212,9 +212,11 @@ class Mating(object):
         """
 
         # select two parent organisms from the pool and get their cells
-        parent_orgs = pool.select_organisms(2, random)
-        cell_1 = copy.deepcopy(parent_orgs[0].cell)
-        cell_2 = copy.deepcopy(parent_orgs[1].cell)
+        parent1 = pool.select_organism(random, composition_space)
+        parent2 = pool.select_organism(random, composition_space,
+                                       excluded_org=parent1)
+        cell_1 = copy.deepcopy(parent1.cell)
+        cell_2 = copy.deepcopy(parent2.cell)
 
         # optionally double one of the parents
         if random.random() < self.doubling_prob:
@@ -304,9 +306,8 @@ class Mating(object):
         # make the offspring organism from the offspring cell
         offspring = Organism(offspring_cell, id_generator, self.name)
         print('Creating offspring organism {} from parent organisms {} and {} '
-              'with the mating variation '.format(offspring.id,
-                                                  parent_orgs[0].id,
-                                                  parent_orgs[1].id))
+              'with the mating variation '.format(offspring.id, parent1.id,
+                                                  parent2.id))
         return offspring
 
     def get_num_doubles(self, volume_ratio):
@@ -641,7 +642,8 @@ class StructureMut(object):
             self.sigma_strain_matrix_element = structure_mut_params[
                 'sigma_strain_matrix_element']
 
-    def do_variation(self, pool, random, geometry, constraints, id_generator):
+    def do_variation(self, pool, random, geometry, constraints, id_generator,
+                     composition_space):
         """
         Performs the structure mutation operation.
 
@@ -656,6 +658,8 @@ class StructureMut(object):
 
             id_generator: the IDGenerator used to assign id numbers to all
                 organisms
+
+            composition_space: the CompositionSpace of the search
 
         Description:
 
@@ -686,8 +690,8 @@ class StructureMut(object):
         """
 
         # select a parent organism from the pool and get its cell
-        parent_org = pool.select_organisms(1, random)
-        cell = copy.deepcopy(parent_org[0].cell)
+        parent_org = pool.select_organism(random, composition_space)
+        cell = copy.deepcopy(parent_org.cell)
 
         # perturb the site coordinates
         self.perturb_atomic_coords(cell, random)
@@ -702,7 +706,7 @@ class StructureMut(object):
         offspring = Organism(cell, id_generator, self.name)
         print('Creating offspring organism {} from parent organism {} with '
               'the structure mutation variation '.format(offspring.id,
-                                                         parent_org[0].id))
+                                                         parent_org.id))
         return offspring
 
     def perturb_atomic_coords(self, cell, random):
@@ -843,7 +847,8 @@ class NumStoichsMut(object):
         else:
             self.scale_volume = num_stoichs_mut_params['scale_volume']
 
-    def do_variation(self, pool, random, geometry, constraints, id_generator):
+    def do_variation(self, pool, random, geometry, constraints, id_generator,
+                     composition_space):
         """
         Performs the number of stoichiometries mutation operation.
 
@@ -858,6 +863,8 @@ class NumStoichsMut(object):
 
             id_generator: the IDGenerator used to assign id numbers to all
                 organisms
+
+            composition_space: the CompositionSpace of the search
 
         Description:
 
@@ -880,8 +887,8 @@ class NumStoichsMut(object):
         """
 
         # select a parent organism from the pool and get its cell
-        parent_org = pool.select_organisms(1, random)
-        cell = copy.deepcopy(parent_org[0].cell)
+        parent_org = pool.select_organism(random, composition_space)
+        cell = copy.deepcopy(parent_org.cell)
         parent_num_atoms = len(cell.sites)
         reduced_composition = cell.composition.reduced_composition
         vol_per_atom = cell.lattice.volume/len(cell.sites)
@@ -943,7 +950,7 @@ class NumStoichsMut(object):
         offspring = Organism(cell, id_generator, self.name)
         print('Creating offspring organism {} from parent organism {} with '
               'the number of stoichiometries mutation variation '.format(
-                  offspring.id, parent_org[0].id))
+                  offspring.id, parent_org.id))
         return offspring
 
 
@@ -1012,7 +1019,8 @@ class Permutation(object):
         else:
             self.pairs_to_swap = permutation_params['pairs_to_swap']
 
-    def do_variation(self, pool, random, geometry, constraints, id_generator):
+    def do_variation(self, pool, random, geometry, constraints, id_generator,
+                     composition_space):
         """
         Performs the permutation operation.
 
@@ -1028,6 +1036,8 @@ class Permutation(object):
 
             id_generator: the IDGenerator used to assign id numbers to all
                 organisms
+
+            composition_space: the CompositionSpace of the search
 
         Description:
 
@@ -1051,15 +1061,15 @@ class Permutation(object):
         """
 
         # select a parent organism from the pool and get its cell
-        parent_org = pool.select_organisms(1, random)
-        cell = copy.deepcopy(parent_org[0].cell)
+        parent_org = pool.select_organism(random, composition_space)
+        cell = copy.deepcopy(parent_org.cell)
 
         # keep trying until we get a parent that has at least one possible swap
         possible_swaps = self.get_possible_swaps(cell)
         num_selects = 0
         while len(possible_swaps) == 0 and num_selects < self.max_num_selects:
-            parent_org = pool.select_organisms(1, random)
-            cell = copy.deepcopy(parent_org[0].cell)
+            parent_org = pool.select_organism(random, composition_space)
+            cell = copy.deepcopy(parent_org.cell)
             possible_swaps = self.get_possible_swaps(cell)
             num_selects = num_selects + 1
 
@@ -1113,8 +1123,7 @@ class Permutation(object):
         # make a new organism from the cell
         offspring = Organism(cell, id_generator, self.name)
         print('Creating offspring organism {} from parent organism {} with '
-              'the permutation variation '.format(offspring.id,
-                                                  parent_org[0].id))
+              'the permutation variation '.format(offspring.id, parent_org.id))
         return offspring
 
     def get_possible_swaps(self, cell):

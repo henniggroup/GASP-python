@@ -554,7 +554,7 @@ class Developer(object):
                 the organism would decompose to, based on its composition.
 
             2. Computes the weighted average volume per atom of the structures
-                in the composition.
+                in the decomposition.
 
             3. Scales the volume per atom of the organism to the computed
                 value, plus 10%.
