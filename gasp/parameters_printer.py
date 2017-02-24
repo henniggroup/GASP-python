@@ -124,6 +124,16 @@ def print_parameters(objects_dict):
         parameters_file.write('    power: ' + str(pool.selection.power) + '\n')
         parameters_file.write('\n')
 
+        # write the composition fitness weight if phase diagram search
+        if composition_space.objective_function == 'pd':
+            parameters_file.write('CompositionFitnessWeight: \n')
+            parameters_file.write('    max_weight: ' +
+                                  str(pool.comp_fitness_weight.max_weight) +
+                                  '\n')
+            parameters_file.write('    power: ' +
+                                  str(pool.comp_fitness_weight.power) + '\n')
+            parameters_file.write('\n')
+
         # write the variations info
         parameters_file.write('Variations: \n')
         for variation in variations:

@@ -192,7 +192,7 @@ def make_objects(parameters):
 
     objects_dict['variations'] = variations_list
 
-    # make the pool and selection
+    # make the pool, selection, and composition fitness weight
     if 'Pool' not in parameters:
         pool = general.Pool(None, composition_space, run_dir_name)
     else:
@@ -214,7 +214,27 @@ def make_objects(parameters):
         selection = general.SelectionProbDist(parameters['Selection'],
                                               pool.size)
 
+    if 'CompositionFitnessWeight' not in parameters:
+        comp_fitness_weight = general.CompositionFitnessWeight(None)
+    else:
+        if 'max_weight' in parameters['CompositionFitnessWeight']:
+            if parameters['CompositionFitnessWeight']['max_weight'] < 0 or \
+                    parameters['CompositionFitnessWeight']['max_weight'] > 1:
+                print('The maximum weight of the composition fitness must lie'
+                      ' in the interval [0,1].')
+                print('Please change the value passed to the "max_weight" '
+                      'keyword in the CompositionFitnessWeight block.')
+                print('Quitting...')
+                quit()
+            else:
+                comp_fitness_weight = general.CompositionFitnessWeight(
+                    parameters['CompositionFitnessWeight'])
+        else:
+            comp_fitness_weight = general.CompositionFitnessWeight(
+                parameters['CompositionFitnessWeight'])
+
     pool.selection = selection
+    pool.comp_fitness_weight = comp_fitness_weight
     objects_dict['pool'] = pool
 
     return objects_dict

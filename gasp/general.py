@@ -649,8 +649,12 @@ class Pool(object):
         self.promotion_set = []
         # the rest of the organisms in the pool
         self.queue = deque()
-        # the parameters for the selection distribution
+        # the parameters for the selection distribution and composition fitness
+        # weight
+        # note: these are just placeholders - they get set in
+        # objects_maker.make_objects()
         self.selection = []
+        self.comp_fitness_weight = []
         # the number of organisms added to the pool (excluding the initial
         # population)
         self.num_adds = 0
@@ -982,10 +986,9 @@ class Pool(object):
             # normalize distance from center to lie between 0 and 1
             normalized_dist_from_center = (
                 dist_from_center/composition_space.max_dist_from_center)
-            # the maximum weight for the composition fitness to take
-            max_comp_fit_weight = 0.5  # TODO: set this from the input file
             # the weight for the composition fitness
-            comp_fit_weight = max_comp_fit_weight*normalized_dist_from_center
+            comp_fit_weight = self.comp_fitness_weight.max_weight*math.pow(
+                normalized_dist_from_center, self.comp_fitness_weight.power)
 
             # compute the relative fitnesses from the weighted average of the
             # regular and composition fitnesses
@@ -1356,7 +1359,7 @@ class SelectionProbDist(object):
             else:
                 self.num_parents = selection_params['num_parents']
 
-            # check the selection_power parameter
+            # check the power parameter
             if 'power' not in selection_params:
                 self.power = self.default_power
             elif selection_params['power'] in (None, 'default'):
@@ -1476,6 +1479,48 @@ class CompositionSpace(object):
             if diff <= 1.1:
                 allowed_pairs.append(pair)
         return allowed_pairs
+
+
+class CompositionFitnessWeight(object):
+    """
+    Defines how the weight given to the composition fitness of organisms in
+    phase diagram searches is computed.
+    """
+
+    def __init__(self, comp_fitness_params):
+        """
+        Makes a CompositionFitnessWeight, and sets default parameters if
+        necessary.
+
+        Args:
+            comp_fitness_params: a dictionary of parameters
+        """
+
+        # default values
+        self.default_max_weight = 0.8
+        self.default_power = 2
+
+        # if entire CompositionFitnessWeight block was left blank or set to
+        # default
+        if comp_fitness_params in (None, 'default'):
+            self.max_weight = self.default_max_weight
+            self.power = self.default_power
+        else:
+            # check the max_weight parameter
+            if 'max_weight' not in comp_fitness_params:
+                self.max_weight = self.default_max_weight
+            elif comp_fitness_params['max_weight'] in (None, 'default'):
+                self.max_weight = self.default_max_weight
+            else:
+                self.max_weight = comp_fitness_params['max_weight']
+
+            # check the power parameter
+            if 'power' not in comp_fitness_params:
+                self.power = self.default_power
+            elif comp_fitness_params['power'] in (None, 'default'):
+                self.power = self.default_power
+            else:
+                self.power = comp_fitness_params['power']
 
 
 class StoppingCriteria(object):

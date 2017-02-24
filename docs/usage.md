@@ -17,6 +17,8 @@
        * [Pool](#pool)
 
        * [Selection](#selection)
+ 
+       * [CompositionFitnessWeight](#comp_fitness_weight)
 
        * [Variations](#variations)
 
@@ -360,6 +362,36 @@ Specifies how many structures from the pool will have a chance to become parents
 Specifies the exponent of the power law that defines how structures' selection probabilities are computed from their fitnesses. Optional, and defaults to 1.0 (linear).
 
 See TODO for a description of how selection probabilities are computed. 
+
+[Go back to Contents](#contents)
+
+
+<br>
+
+
+#### <a id="comp_fitness_weight"></a>CompositionFitnessWeight
+
+~~~~
+CompositionFitnessWeight:
+    max_weight: <float>
+    power: <float>
+~~~~
+
+The **CompositionFitnessWeight** keyword specifies how the weight assigned to an organism's composition fitness is computed. The composition fitness of one organism relative to another is defined as 1 - *d*, where *d* is the normalized distance between the two organisms in composition space (see TODO for details on how this distance is computed).     
+
+When selecting a second parent organism (e.g., in the [Mating](#mating) variation), the fitnesses of the remaining organisms in the population are computed relative to the first parent organism. These relative fitnesses are taken to be the weighted average of the regular fitness (based on objective function value) and the composition fitness (based on distance from the first parent organism in composition space). The weight assigned to the composition fitness ranges from 0 (if the first parent organism is located at the center of the composition space) to **max_weight** (if the first parent organism is located at an endpoint of the composition space). 
+
+The motivation for using the composition fitness is to prevent the population from drifting toward intermediate compositions as the search progresses. This drift is likely to happen because the offspring produced by the mating variation tend to have compositions between those of the parents. To combat this, we use relative fitnesses to make it more likely for two parents to have similar compositions, especially near the endpoints of the composition space.  
+
+The entire block is optional, and it is only used for phase diagram searches.
+
+   * **max_weight**
+
+Specifies the maximum weight to give to the composition fitness (when the first parent is located at an enpoint of the composition space). Must lie between 0.0 and 1.0. Optional, and defaults to 0.8.
+
+   * **power**
+
+Specifies the exponent of the power law used to compute the weight of the composition fitness. Optional, and defaults to 2 (quadratic). 
 
 [Go back to Contents](#contents)
 
