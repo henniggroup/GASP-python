@@ -387,11 +387,11 @@ The entire block is optional, and it is only used for phase diagram searches.
 
    * **max_weight**
 
-Specifies the maximum weight to give to the composition fitness (when the first parent is located at an enpoint of the composition space). Must lie between 0.0 and 1.0. Optional, and defaults to 0.8.
+Specifies the maximum weight to give to the composition fitness (when the first parent is located at an enpoint of the composition space). Must lie between 0.0 and 1.0. Optional, and defaults to 0.5.
 
    * **power**
 
-Specifies the exponent of the power law used to compute the weight of the composition fitness. Optional, and defaults to 2 (quadratic). 
+Specifies the exponent of the power law used to compute the weight of the composition fitness. Optional, and defaults to 1 (linear). 
 
 [Go back to Contents](#contents)
 

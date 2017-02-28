@@ -209,7 +209,8 @@ class RandomOrganismCreator(object):
             return None  # sometimes pymatgen's scaling algorithm crashes
 
         # make the random organism
-        random_org = Organism(random_cell, id_generator, self.name)
+        random_org = Organism(random_cell, id_generator, self.name,
+                              composition_space)
         print('Random organism creator making organism {} '.format(
             random_org.id))
         return random_org
@@ -512,7 +513,8 @@ class FileOrganismCreator(object):
                 new_cell = Cell.from_file(
                     str(self.path_to_folder) + "/" + str(
                         self.files[self.num_made - 1]))
-                new_org = Organism(new_cell, id_generator, self.name)
+                new_org = Organism(new_cell, id_generator, self.name,
+                                   composition_space)
                 print('Making organism {} from file: {} '.format(
                     new_org.id, self.files[self.num_made - 1]))
                 self.update_status()

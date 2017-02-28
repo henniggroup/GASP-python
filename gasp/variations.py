@@ -304,7 +304,8 @@ class Mating(object):
         offspring_cell = self.merge_sites(offspring_cell)
 
         # make the offspring organism from the offspring cell
-        offspring = Organism(offspring_cell, id_generator, self.name)
+        offspring = Organism(offspring_cell, id_generator, self.name,
+                             composition_space)
         print('Creating offspring organism {} from parent organisms {} and {} '
               'with the mating variation '.format(offspring.id, parent1.id,
                                                   parent2.id))
@@ -703,7 +704,7 @@ class StructureMut(object):
         cell.translate_atoms_into_cell()
 
         # create a new organism from the perturbed cell
-        offspring = Organism(cell, id_generator, self.name)
+        offspring = Organism(cell, id_generator, self.name, composition_space)
         print('Creating offspring organism {} from parent organism {} with '
               'the structure mutation variation '.format(offspring.id,
                                                          parent_org.id))
@@ -947,7 +948,7 @@ class NumStoichsMut(object):
                                              constraints, id_generator)
 
         # create a new organism from the cell
-        offspring = Organism(cell, id_generator, self.name)
+        offspring = Organism(cell, id_generator, self.name, composition_space)
         print('Creating offspring organism {} from parent organism {} with '
               'the number of stoichiometries mutation variation '.format(
                   offspring.id, parent_org.id))
@@ -1121,7 +1122,7 @@ class Permutation(object):
             cell.replace(pair_index[1], species_1)
 
         # make a new organism from the cell
-        offspring = Organism(cell, id_generator, self.name)
+        offspring = Organism(cell, id_generator, self.name, composition_space)
         print('Creating offspring organism {} from parent organism {} with '
               'the permutation variation '.format(offspring.id, parent_org.id))
         return offspring

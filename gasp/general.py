@@ -12,12 +12,12 @@ This module contains several classes central to the algorithm.
 1. IDGenerator: generates consecutive integer ID numbers for organisms
 
 2. Organism: represents an organism, which consists primarily of a
-         structure and an energy
+        structure and an energy
 
 3. Cell: represents a structure, and extends pymatgen.core.structure.Structure
 
 4. InitialPopulation: represents the initial population of organisms,
-         produced from one or more of the organism creators
+        produced from one or more of the organism creators
 
 5. Pool: represents the population of organisms, after the initial population
 
@@ -28,9 +28,12 @@ This module contains several classes central to the algorithm.
 
 8. CompositionSpace: specifies the composition or composition range
 
-9. StoppingCriteria: specifies when a search should stop
+9. CompositionFitnessWeight: specifies how the weight given to the composition
+        fitness is to be computed
 
-10. DataWriter: writes information about the search to a file
+10. StoppingCriteria: specifies when a search should stop
+
+11. DataWriter: writes information about the search to a file
 
 """
 
@@ -79,7 +82,7 @@ class Organism(object):
     several derived quantities.
     """
 
-    def __init__(self, cell, id_generator, maker):
+    def __init__(self, cell, id_generator, maker, composition_space):
         """
         Makes an Organism.
 
@@ -91,12 +94,15 @@ class Organism(object):
 
             maker: the name of algorithm that made the organism, as a string.
                 Either a creator or a variation
+
+            composition_space: the CompositionSpace of the search
         """
 
         self.cell = cell
         self.composition = self.cell.composition
         # position in composition space. Only used for phase diagram searches
-        self.composition_vector = None
+        self.composition_vector = self.get_composition_vector(
+            composition_space)
         self.total_energy = None
         # the objective function value
         self.value = None
@@ -126,15 +132,17 @@ class Organism(object):
     def id(self):
         return self._id
 
-    def set_composition_vector(self, composition_space):
+    def get_composition_vector(self, composition_space):
         """
-        Sets the composition vector of the organism.
+        Returns the composition vector of the organism.
 
         Args:
             composition_space: the CompositionSpace of the search.
         """
 
-        if composition_space.objective_function == 'pd':
+        if composition_space.objective_function == 'epa':
+            return None
+        elif composition_space.objective_function == 'pd':
             # make CompoundPhaseDiagram and PDAnalyzer objects
             pdentries = []
             for endpoint in composition_space.endpoints:
@@ -189,7 +197,7 @@ class Organism(object):
                     composition_vector.append(formatted_decomp[endpoint])
                 else:
                     composition_vector.append(0.0)
-            self.composition_vector = np.array(composition_vector)
+            return np.array(composition_vector)
 
 
 class Cell(Structure):
@@ -447,8 +455,6 @@ class InitialPopulation():
         print('Adding organism {} to the initial population'.format(
             organism_to_add.id))
         self.initial_population.append(organism_to_add)
-        if composition_space.objective_function == 'pd':
-            organism_to_add.set_composition_vector(composition_space)
         organism_to_add.is_active = True
 
     def replace_organism(self, old_org, new_org, composition_space):
@@ -475,8 +481,6 @@ class InitialPopulation():
                 self.initial_population.remove(org)
                 org.is_active = False
         self.initial_population.append(new_org)
-        if composition_space.objective_function == 'pd':
-            new_org.set_composition_vector(composition_space)
         new_org.is_active = True
 
     def get_progress(self, composition_space):
@@ -773,7 +777,6 @@ class Pool(object):
                 self.promotion_set.append(organism_to_add)
             else:
                 self.queue.appendleft(organism_to_add)
-            organism_to_add.set_composition_vector(composition_space)
 
     def get_worst_in_promotion_set(self):
         """
@@ -846,7 +849,6 @@ class Pool(object):
         if composition_space.objective_function == 'epa':
             new_org.value = new_org.epa
         elif composition_space.objective_function == 'pd':
-            new_org.set_composition_vector(composition_space)
             organisms_list = self.to_list()
             organisms_list.append(new_org)
             self.compute_pd_values(organisms_list, composition_space)
@@ -1497,8 +1499,8 @@ class CompositionFitnessWeight(object):
         """
 
         # default values
-        self.default_max_weight = 0.8
-        self.default_power = 2
+        self.default_max_weight = 0.5
+        self.default_power = 1
 
         # if entire CompositionFitnessWeight block was left blank or set to
         # default
