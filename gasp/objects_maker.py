@@ -138,34 +138,39 @@ def make_objects(parameters):
     else:
         atoms_per_comp = \
             composition_space.endpoints[0].reduced_composition.num_atoms
+
     # see if numstoichmut can be done w/o violating the min or max number of
     # atoms constraints
-    bottom = int(math.ceil(constraints.min_num_atoms/atoms_per_comp))
-    top = int(math.floor(constraints.max_num_atoms/atoms_per_comp))
-    do_numstoichsmut = False
-    if top > bottom:
-        do_numstoichsmut = True
+    do_atomsmut = False
+    if composition_space.objective_function == 'pd':
+        if constraints.min_num_atoms != constraints.max_num_atoms:
+            do_atomsmut = True
+    elif composition_space.objective_function == 'epa':
+        bottom = int(math.ceil(constraints.min_num_atoms/atoms_per_comp))
+        top = int(math.floor(constraints.max_num_atoms/atoms_per_comp))
+        if top > bottom:
+            do_atomsmut = True
 
     # set default fractions for the variations
     default_variation_fractions = {}
-    if do_permutation and do_numstoichsmut:
+    if do_permutation and do_atomsmut:
         default_variation_fractions['permutation'] = 0.1
-        default_variation_fractions['num_stoichs_mut'] = 0.1
+        default_variation_fractions['num_atoms_mut'] = 0.1
         default_variation_fractions['structure_mut'] = 0.1
         default_variation_fractions['mating'] = 0.7
-    elif not do_permutation and do_numstoichsmut:
+    elif not do_permutation and do_atomsmut:
         default_variation_fractions['permutation'] = 0.0
-        default_variation_fractions['num_stoichs_mut'] = 0.1
+        default_variation_fractions['num_atoms_mut'] = 0.1
         default_variation_fractions['structure_mut'] = 0.1
         default_variation_fractions['mating'] = 0.8
-    elif do_permutation and not do_numstoichsmut:
+    elif do_permutation and not do_atomsmut:
         default_variation_fractions['permutation'] = 0.1
-        default_variation_fractions['num_stoichs_mut'] = 0.0
+        default_variation_fractions['num_atoms_mut'] = 0.0
         default_variation_fractions['structure_mut'] = 0.1
         default_variation_fractions['mating'] = 0.8
-    elif not do_permutation and not do_numstoichsmut:
+    elif not do_permutation and not do_atomsmut:
         default_variation_fractions['permutation'] = 0.0
-        default_variation_fractions['num_stoichs_mut'] = 0.0
+        default_variation_fractions['num_atoms_mut'] = 0.0
         default_variation_fractions['structure_mut'] = 0.2
         default_variation_fractions['mating'] = 0.8
 
@@ -686,7 +691,7 @@ def make_variations(parameters, default_fractions, composition_space):
     Creates the variations, using default parameter values if needed.
 
     Returns a list containing the variation objects (Mating, StructureMut,
-    NumStoichsMut and Permutation).
+    NumAtomssMut and Permutation).
 
     Args:
         parameters: the dictionary produced by calling yaml.load() on the input
@@ -745,26 +750,26 @@ def make_variations(parameters, default_fractions, composition_space):
                     parameters['Variations']['StructureMut'])
                 variations_list.append(structure_mut)
 
-        # mutating the number of stoichiometries worth of atoms in the cell
-        if 'NumStoichsMut' not in parameters['Variations']:
+        # mutating the number of atoms in the cell
+        if 'NumAtomsMut' not in parameters['Variations']:
             pass
-        elif parameters['Variations']['NumStoichsMut'] is None:
-            print('If the "NumStoichsMut" keyword is used, its "fraction" '
+        elif parameters['Variations']['NumAtomsMut'] is None:
+            print('If the "NumAtomsMut" keyword is used, its "fraction" '
                   'keyword must also be set.')
             print('Quitting...')
             quit()
         else:
-            if parameters['Variations']['NumStoichsMut']['fraction'] in (
+            if parameters['Variations']['NumAtomsMut']['fraction'] in (
                     None, 'default'):
                 print('The "fraction" keyword is not optional and must '
                       'contain a valid entry (between 0 and 1) for the '
-                      'NumStoichsMut variation.')
+                      'NumAtomsMut variation.')
                 print('Quitting...')
                 quit()
             else:
-                num_stoichs_mut = variations.NumStoichsMut(
-                    parameters['Variations']['NumStoichsMut'])
-                variations_list.append(num_stoichs_mut)
+                num_atoms_mut = variations.NumAtomsMut(
+                    parameters['Variations']['NumAtomsMut'])
+                variations_list.append(num_atoms_mut)
 
         # permutation (swapping atoms)
         if 'Permutation' not in parameters['Variations']:
@@ -795,7 +800,7 @@ def make_default_variations(default_fractions, composition_space):
     default fractions.
 
     Returns a list containing the variation objects (Mating, StructureMut,
-    NumStoichsMut and Permutation).
+    NumAtomsMut and Permutation).
 
     Args:
         default_fractions: a dictionary containing the default fractions to use
@@ -808,13 +813,13 @@ def make_default_variations(default_fractions, composition_space):
     mating = variations.Mating({'fraction': default_fractions['mating']})
     structure_mut = variations.StructureMut(
                 {'fraction': default_fractions['structure_mut']})
-    num_stoichs_mut = variations.NumStoichsMut(
-                {'fraction': default_fractions['num_stoichs_mut']})
+    num_atoms_mut = variations.NumAtomsMut(
+                {'fraction': default_fractions['num_atoms_mut']})
     permutation = variations.Permutation(
                 {'fraction': default_fractions['permutation']},
                 composition_space)
     variations_list.append(mating)
     variations_list.append(structure_mut)
-    variations_list.append(num_stoichs_mut)
+    variations_list.append(num_atoms_mut)
     variations_list.append(permutation)
     return variations_list

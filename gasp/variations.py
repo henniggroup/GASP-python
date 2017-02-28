@@ -16,7 +16,7 @@ organisms.
 2. StructureMut: creates an offspring organism by mutating the structure of a
         parent organism
 
-3. NumStoichsMut: creates an offspring organism by adding or removing atoms
+3. NumAtomsMut: creates an offspring organism by adding or removing atoms
         from a parent organism
 
 4. Permutation: creates an offspring organism by swapping atoms in a parent
@@ -791,28 +791,28 @@ class StructureMut(object):
         cell.modify_lattice(new_lattice)
 
 
-class NumStoichsMut(object):
+class NumAtomsMut(object):
     """
     An operator that creates an offspring organism by mutating the number of
-    stoichiometries' worth of atoms in the parent organism.
+    atoms in the parent organism.
     """
 
-    def __init__(self, num_stoichs_mut_params):
+    def __init__(self, num_atoms_mut_params):
         """
-        Makes a NumStoichsMut operator, and sets default parameter values if
+        Makes a NumAtomssMut operator, and sets default parameter values if
         necessary.
 
         Args:
-            num_stoichs_mut_params: The parameters for doing the NumStoichsMut
+            num_atoms_mut_params: The parameters for doing the NumAtomsMut
                 operation, as a dictionary
 
-        Precondition: the 'fraction' parameter in num_stoichs_mut_params is not
-            optional, and it is assumed that num_stoichs_mut_params contains
+        Precondition: the 'fraction' parameter in num_atoms_mut_params is not
+            optional, and it is assumed that num_atoms_mut_params contains
             this parameter
         """
 
-        self.name = 'number of stoichiometries mutation'
-        self.fraction = num_stoichs_mut_params['fraction']  # not optional
+        self.name = 'number of atoms mutation'
+        self.fraction = num_atoms_mut_params['fraction']  # not optional
 
         # the default values
         #
@@ -825,33 +825,33 @@ class NumStoichsMut(object):
         self.default_scale_volume = True
 
         # the average number of stoichiometries to add
-        if 'mu_num_adds' not in num_stoichs_mut_params:
+        if 'mu_num_adds' not in num_atoms_mut_params:
             self.mu_num_adds = self.default_mu_num_adds
-        elif num_stoichs_mut_params['mu_num_adds'] in (None, 'default'):
+        elif num_atoms_mut_params['mu_num_adds'] in (None, 'default'):
             self.mu_num_adds = self.default_mu_num_adds
         else:
-            self.mu_num_adds = num_stoichs_mut_params['mu_num_adds']
+            self.mu_num_adds = num_atoms_mut_params['mu_num_adds']
 
         # the standard deviation of the number of stoichiometries
-        if 'sigma_num_adds' not in num_stoichs_mut_params:
+        if 'sigma_num_adds' not in num_atoms_mut_params:
             self.sigma_num_adds = self.default_sigma_num_adds
-        elif num_stoichs_mut_params['sigma_num_adds'] in (None, 'default'):
+        elif num_atoms_mut_params['sigma_num_adds'] in (None, 'default'):
             self.sigma_num_adds = self.default_sigma_num_adds
         else:
-            self.sigma_num_adds = num_stoichs_mut_params['sigma_num_adds']
+            self.sigma_num_adds = num_atoms_mut_params['sigma_num_adds']
 
         # whether to scale the volume of the offspring after adding atoms
-        if 'scale_volume' not in num_stoichs_mut_params:
+        if 'scale_volume' not in num_atoms_mut_params:
             self.scale_volume = self.default_scale_volume
-        elif num_stoichs_mut_params['scale_volume'] in (None, 'default'):
+        elif num_atoms_mut_params['scale_volume'] in (None, 'default'):
             self.scale_volume = self.default_scale_volume
         else:
-            self.scale_volume = num_stoichs_mut_params['scale_volume']
+            self.scale_volume = num_atoms_mut_params['scale_volume']
 
     def do_variation(self, pool, random, geometry, constraints, id_generator,
                      composition_space):
         """
-        Performs the number of stoichiometries mutation operation.
+        Performs the number of atoms mutation operation.
 
         Returns the resulting offspring as an Organism.
 
@@ -870,21 +870,26 @@ class NumStoichsMut(object):
         Description:
 
             Creates an offspring organism by adding or removing a random number
-            of stoichiometries' worth of atoms to or from the parent cell.
+            of atoms to or from the parent cell. For fixed composition
+            searches, a random number of stoichiomenties' worth of atoms is
+            added or removed so that the offspring has the same composition as
+            the parent. For phase diagram searches, the composition of the
+            offspring may differ from that of the parent.
 
                 1. Selects a parent organism from the pool and makes a copy of
                     its cell.
 
-                2. Computes the number of stoichiometries to add or remove by
-                    drawing from a Gaussian with mean self.mu_num_adds and
-                    standard deviation self.sigma_num_adds and rounding the
-                    result to the nearest integer.
+                2. Computes the number of atoms (or stoichiometries, for fixed
+                    composition searches) to add or remove by drawing from a
+                    Gaussian with mean self.mu_num_adds and standard deviation
+                    self.sigma_num_adds and rounding the result to the nearest
+                    integer.
 
                 3. Computes the number of atoms of each type to add or remove,
                     and does the additions or removals.
 
-                4. If self.scale_volume is True, scales the new cell to have
-                    the same volume per atom as the parent.
+                4. If self.scale_volume is True and atoms were added, scales
+                    the new cell to the same volume per atom as the parent.
         """
 
         # select a parent organism from the pool and get its cell
@@ -905,36 +910,65 @@ class NumStoichsMut(object):
                 num_add = int(round(random.gauss(self.mu_num_adds,
                                                  self.sigma_num_adds)))
 
-            # compute the number of each type of atom to add (or remove)
-            amounts_to_add = {}
-            total_add = 0
-            for key in reduced_composition:
-                amounts_to_add[key] = int(num_add*reduced_composition[key])
-                total_add = total_add + int(num_add*reduced_composition[key])
+            # if fixed composition search
+            if composition_space.objective_function == 'epa':
+                # compute the number of each type of atom to add (or remove)
+                amounts_to_add = {}
+                total_add = 0
+                for key in reduced_composition:
+                    amounts_to_add[key] = int(num_add*reduced_composition[key])
+                    total_add += amounts_to_add[key]
 
-            # if adding, put the new atoms in the cell at random locations
-            if num_add > 0:
-                for key in amounts_to_add:
-                    for _ in range(amounts_to_add[key]):
-                        frac_coords = [random.random(), random.random(),
-                                       random.random()]
-                        cell.append(Specie(key, 0), frac_coords)
-                cell.remove_oxidation_states()
-                cell.sort()
+                # if adding, put the new atoms in the cell at random locations
+                if num_add > 0:
+                    for key in amounts_to_add:
+                        for _ in range(amounts_to_add[key]):
+                            frac_coords = [random.random(), random.random(),
+                                           random.random()]
+                            cell.append(Specie(key, 0), frac_coords)
+                    cell.remove_oxidation_states()
+                    cell.sort()
 
-            # if removing, take out random atoms (but right number of each)
-            elif num_add < 0 and -1*total_add < len(cell.sites):
-                site_indices_to_remove = []
-                for key in amounts_to_add:
-                    for _ in range(0, -1*amounts_to_add[key]):
-                        random_site = random.choice(cell.sites)
-                        while str(random_site.specie.symbol) != str(
+                # if removing, take out random atoms (but right number of each)
+                elif num_add < 0 and -1*total_add < len(cell.sites):
+                    site_indices_to_remove = []
+                    for key in amounts_to_add:
+                        for _ in range(0, -1*amounts_to_add[key]):
+                            random_site = random.choice(cell.sites)
+                            while str(random_site.specie.symbol) != str(
                                 key) or cell.sites.index(
                                     random_site) in site_indices_to_remove:
-                            random_site = random.choice(cell.sites)
-                        site_indices_to_remove.append(
-                            cell.sites.index(random_site))
-                cell.remove_sites(site_indices_to_remove)
+                                random_site = random.choice(cell.sites)
+                            site_indices_to_remove.append(
+                                cell.sites.index(random_site))
+                    cell.remove_sites(site_indices_to_remove)
+
+            # if phase diagram search
+            elif composition_space.objective_function == 'pd':
+                # if adding, add random atoms
+                if num_add > 0:
+                    # get the random symbols to add
+                    symbols_to_add = []
+                    while len(symbols_to_add) < num_add:
+                        random_endpoint = random.choice(
+                            composition_space.endpoints)
+                        random_element = random.choice(list(
+                            random_endpoint.keys()))
+                        symbols_to_add.append(random_element.symbol)
+                    # add each random symbol, and random fractional coordinates
+                    for symbol in symbols_to_add:
+                        frac_coords = [random.random(), random.random(),
+                                       random.random()]
+                        cell.append(Specie(symbol, 0), frac_coords)
+                    cell.remove_oxidation_states()
+                    cell.sort()
+
+                # if removing, take out random atoms
+                elif num_add < 0 and -1*num_add < len(cell.sites):
+                    all_site_indices = list(range(len(cell.sites)))
+                    site_indices_to_remove = random.sample(all_site_indices,
+                                                           -1*num_add)
+                    cell.remove_sites(site_indices_to_remove)
 
         # optionally scale the volume after atoms have been added
         if self.scale_volume and num_add > 0:
@@ -950,7 +984,7 @@ class NumStoichsMut(object):
         # create a new organism from the cell
         offspring = Organism(cell, id_generator, self.name, composition_space)
         print('Creating offspring organism {} from parent organism {} with '
-              'the number of stoichiometries mutation variation '.format(
+              'the number of atoms mutation variation '.format(
                   offspring.id, parent_org.id))
         return offspring
 

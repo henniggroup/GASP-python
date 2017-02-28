@@ -176,8 +176,8 @@ def print_parameters(objects_dict):
                         '        sigma_strain_matrix_element: ' +
                         str(variation.sigma_strain_matrix_element) + '\n')
 
-                elif variation.name == 'number of stoichiometries mutation':
-                    parameters_file.write('    NumStoichsMut: \n')
+                elif variation.name == 'number of atoms mutation':
+                    parameters_file.write('    NumAtomsMut: \n')
                     parameters_file.write('        fraction: ' +
                                           str(variation.fraction) + '\n')
                     parameters_file.write('        mu_num_adds: ' +

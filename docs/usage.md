@@ -407,8 +407,8 @@ Variations:
         <mating parameters>
     StructureMut:
         <structure mutation parameters>
-    NumStoichsMut:
-        <number of stoichiometries mutation parameters>
+    NumAtomsMut:
+        <number of atoms mutation parameters>
     Permutation:
         <permutation parameters>
 ~~~~
@@ -434,7 +434,7 @@ The **Mating** keyword specifies the parameters associated with the cut-and-spli
 
    * **fraction**
 
-Specifies the fraction of offspring to create with the mating variation. If the entire **Variations** block is not specified, then **fraction** defaults to 0.7 or 0.8, depending on the default fractions of the **NumStoichsMut** and **Permutation** variations. Otherwise, it is not optional. Furthermore, the values of the **fraction** keywords of all specified variations (could include **Mating**, **StructureMut**, **NumStoichsMut** and **Permutation**) must sum to 1.0. 
+Specifies the fraction of offspring to create with the mating variation. If the entire **Variations** block is not specified, then **fraction** defaults to 0.7 or 0.8, depending on the default fractions of the **NumAtomsMut** and **Permutation** variations. Otherwise, it is not optional. Furthermore, the values of the **fraction** keywords of all specified variations (could include **Mating**, **StructureMut**, **NumAtomsMut** and **Permutation**) must sum to 1.0. 
  
 
    * **mu_cut_loc**
@@ -486,7 +486,7 @@ The **StructureMut** keyword specifies the parameters associated with the struct
 
    * **fraction**
 
-Specifies the fraction of offspring to create with the structure mutation variation. If the entire **Variations** block is not specified, then **fraction** defaults to 0.1 or 0.2, depending on the fractions of the **NumStoichsMut** and **Permutation** variations. Otherwise, it is not optional. Furthermore, the values of the **fraction** keywords of all specified variations (could include **Mating**, **StructureMut**, **NumStoichsMut** and **Permutation**) must sum to 1.0. 
+Specifies the fraction of offspring to create with the structure mutation variation. If the entire **Variations** block is not specified, then **fraction** defaults to 0.1 or 0.2, depending on the fractions of the **NumAtomsMut** and **Permutation** variations. Otherwise, it is not optional. Furthermore, the values of the **fraction** keywords of all specified variations (could include **Mating**, **StructureMut**, **NumAtomsMut** and **Permutation**) must sum to 1.0. 
 
    * **frac_atoms_perturbed**
 
@@ -507,30 +507,30 @@ Specifies the distribution from which the non-identity components of the element
 [Go back to Contents](#contents)
 
 
-#### <a id="numstoichsmut"></a>NumStoichsMut
+#### <a id="numatomsmut"></a>NumAtomsMut
 
 ~~~~
 Variations:
-    NumStoichsMut:
+    NumAtomsMut:
         fraction: <float>
         mu_num_adds: <float>
         sigma_num_adds: <float>
         scale_volume: <boolean>
 ~~~~
 
-The **NumStoichsMut** keyword specifies the parameters associated with the number of stoichiometries mutation variation. 
+The **NumAtomsMut** keyword specifies the parameters associated with the number of atoms mutation variation. 
 
    * **fraction**
 
-Specifies the fraction of offspring to create with the number of stochiometries mutation variation. If the entire **Variations** block is not specified, then **fraction** defaults to 0.1 if mutating the number of stoichiometries would not always violate the minimum and maximum number of atoms constraints (see [Constraints](#constraints)), and it defaults to 0.0 if it would. Otherwise, it is not optional. Furthermore, the values of the **fraction** keywords of all specified variations (could include **Mating**, **StructureMut**, **NumStoichsMut** and **Permutation**) must sum to 1.0. 
+Specifies the fraction of offspring to create with the number of atoms mutation variation. If the entire **Variations** block is not specified, then **fraction** defaults to 0.1 if mutating the number of atoms would not always violate the minimum and maximum number of atoms constraints (see [Constraints](#constraints)), and it defaults to 0.0 if it would. Otherwise, it is not optional. Furthermore, the values of the **fraction** keywords of all specified variations (could include **Mating**, **StructureMut**, **NumAtomsMut** and **Permutation**) must sum to 1.0. 
 
    * **mu_num_adds**
 
-Specifies the mean of the Gaussian distribution from which the number of stoichiometries' worth of atoms to add to (or remove from) a parent structure is drawn. Optional, and defaults to 0.0. 
+Specifies the mean of the Gaussian distribution from which the number of atoms (or number of stoichiometries' worth of atoms, for fixed-composition searches) to add to (or remove from) a parent structure is drawn. Optional, and defaults to 0.0. 
 
    * **sigma_num_adds**
 
-Specifies the standard deviation of the Gaussian distribution from which the number of stoichiometries' worth of atoms to add to (or remove from) a parent structure is drawn. Optional, and defaults to 1.0. 
+Specifies the standard deviation of the Gaussian distribution from which the number of atoms (or number of stoichiometries' worth of atoms, for fixed-composition searches) to add to (or remove from) a parent structure is drawn. Optional, and defaults to 1.0. 
  
    * **scale_volume**
 
@@ -557,7 +557,7 @@ The **Permutation** keyword specifies the parameters associated with the permuta
 
    * **fraction**
 
-Specifies the fraction of offspring to create with the permutation variation. If the entire **Variations** block is not specified, then **fraction** defaults to 0.1 if the composition space contains pairs of atoms whose electronegativities differ by 1.1 or less, and it defaults to 0.0 if the composition space contains no such pairs of atoms. Otherwise, it is not optional. Furthermore, the values of the **fraction** keywords of all specified variations (could include **Mating**, **StructureMut**, **NumStoichsMut** and **Permutation**) must sum to 1.0. 
+Specifies the fraction of offspring to create with the permutation variation. If the entire **Variations** block is not specified, then **fraction** defaults to 0.1 if the composition space contains pairs of atoms whose electronegativities differ by 1.1 or less, and it defaults to 0.0 if the composition space contains no such pairs of atoms. Otherwise, it is not optional. Furthermore, the values of the **fraction** keywords of all specified variations (could include **Mating**, **StructureMut**, **NumAtomsMut** and **Permutation**) must sum to 1.0. 
 
    * **mu_num_swaps** 
 
@@ -576,10 +576,11 @@ Below is an example **Variations** block containing all the default parameter va
 ~~~~
 Variations:
     Mating:
-        fraction: 0.8
+        fraction: 0.7
         mu_cut_loc: 0.5 
         sigma_cut_loc: 0.5 
         shift_prob: 1.0
+        rotate_prob: 1.0
         doubling_prob: 0.1
         grow_parents: True
         merge_sites: 1.0
@@ -589,19 +590,17 @@ Variations:
         sigma_atomic_coord_perturbation: 0.5 
         max_atomic_coord_perturbation: 5.0
         sigma_strain_matrix_element: 0.2
-    NumStoichsMut:
+    NumAtomsMut:
         fraction: 0.1
         mu_num_adds: 0.0
         sigma_num_adds: 1.0
         scale_volume: True 
     Permutation:
-        fraction: 0.0
+        fraction: 0.1
         mu_num_swaps: 2.0 
         sigma_num_swaps: 1.0
         pairs_to_swap:
             - Al Cu
-            - Al Zr
-            - Cu Zr 
 ~~~~
 
 [Go back to contents](#contents)
