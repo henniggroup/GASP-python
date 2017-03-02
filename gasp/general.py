@@ -101,7 +101,7 @@ class Organism(object):
         self.cell = cell
         self.composition = self.cell.composition
         # position in composition space. Only used for phase diagram searches
-        self.composition_vector = self.get_composition_vector(
+        self.composition_vector = self.compute_composition_vector(
             composition_space)
         self.total_energy = None
         # the objective function value
@@ -132,9 +132,9 @@ class Organism(object):
     def id(self):
         return self._id
 
-    def get_composition_vector(self, composition_space):
+    def compute_composition_vector(self, composition_space):
         """
-        Returns the composition vector of the organism.
+        Returns the composition vector of the organism, as a numpy array.
 
         Args:
             composition_space: the CompositionSpace of the search.

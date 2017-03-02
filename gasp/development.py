@@ -685,6 +685,9 @@ class Developer(object):
             constraints: the Constraints of the search
         """
 
+        # delete duplicate sites
+        organism.cell.merge_sites(mode='delete')
+
         # check the per-species minimum interatomic distance constraints
         species_symbols = organism.cell.symbol_set
         for site in organism.cell.sites:

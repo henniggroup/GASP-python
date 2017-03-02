@@ -504,7 +504,7 @@ class Mating(object):
         means replacing two sites in the cell with one site at the mean of the
         two sites (Cartesian) positions.
 
-        Returns a new cell with the sites merged.
+        Returns a new Cell with the sites merged.
 
         Args:
             cell: the Cell whose sites to merge
@@ -522,24 +522,23 @@ class Mating(object):
                 symbol = site.specie.symbol
                 element = Element(site.specie.symbol)
                 a_radius = element.atomic_radius
+                site_index = cell.sites.index(site)
                 for other_site in cell.sites:
-                    # check that the other site hasn't already been merged
-                    if cell.sites.index(other_site) not in merged_indices:
-                        # check that the other site is not the site, and that
-                        # it has the same symbol as the site
-                        if other_site != site and other_site.specie.symbol == \
-                                    symbol:
-                            # make a new site if the two are close enough
-                            if site.distance(
-                                    other_site) < a_radius*self.merge_cutoff:
-                                merged_indices.append(
-                                    cell.sites.index(other_site))
-                                merged_indices.append(
-                                    cell.sites.index(site))
-                                new_frac_coords = np.add(
-                                    site.frac_coords, other_site.frac_coords)/2
-                                species.append(site.specie)
-                                frac_coords.append(new_frac_coords)
+                    other_symbol = other_site.specie.symbol
+                    other_index = cell.sites.index(other_site)
+                    # check that the other site hasn't already been merged, is
+                    # distinct from and has the same symbol as the site
+                    if other_index not in merged_indices and other_index != \
+                            site_index and other_symbol == symbol:
+                        # make a new site if the two are close enough
+                        if site.distance(other_site) < \
+                                a_radius*self.merge_cutoff:
+                            merged_indices.append(other_index)
+                            merged_indices.append(site_index)
+                            new_frac_coords = np.add(
+                                site.frac_coords, other_site.frac_coords)/2
+                            species.append(site.specie)
+                            frac_coords.append(new_frac_coords)
 
         # get the data for the sites that were NOT merged
         for site in cell.sites:
