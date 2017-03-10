@@ -1203,7 +1203,7 @@ class Geometry(object):
         cell.translate_sites(site_indices, translation_vector,
                              frac_coords=True, to_unit_cell=False)
 
-    def unpad(self, organism, constraints):
+    def unpad(self, cell, constraints):
         '''
         Modifies a cell by removing vacuum padding, which returns an organism's
         structure to a form used by the variations. Does nothing if shape is
@@ -1217,11 +1217,11 @@ class Geometry(object):
 
         # call the appropriate unpadding algorithm
         if self.shape == 'sheet':
-            self.unpad_sheet(organism, constraints)
+            self.unpad_sheet(cell, constraints)
         elif self.shape == 'wire':
-            self.unpad_wire(organism, constraints)
+            self.unpad_wire(cell, constraints)
         elif self.shape == 'cluster':
-            self.unpad_cluster(organism, constraints)
+            self.unpad_cluster(cell, constraints)
 
     def unpad_sheet(self, cell, constraints):
         '''

@@ -51,6 +51,12 @@ def make_objects(parameters):
 
     # make the constraints object
     if 'Constraints' in parameters:
+        if 'min_num_atoms' in parameters['Constraints']:
+            if parameters['Constraints']['min_num_atoms'] < 2:
+                print('The value passed to the "min_num_atoms" keyword in the '
+                      'Constraints block must greater than or equal to 2.')
+                print('Quitting...')
+                quit()
         constraints = development.Constraints(parameters['Constraints'],
                                               composition_space)
     else:

@@ -661,7 +661,7 @@ The **Constraints** keyword specifies the constraints placed on structures consi
 
   * **min_num_atoms** 
 
-Specifies the minimum number of atoms allowed in the cell. Optional, and defaults to 2.
+Specifies the minimum number of atoms allowed in the cell. Optional, and defaults to 2. If specified, must be greater than or equal to 2. 
 
   * **max_num_atoms** 
 

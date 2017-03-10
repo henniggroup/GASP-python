@@ -1381,7 +1381,7 @@ class CompositionSpace(object):
         pymatgen.core.composition.Composition objects.
 
         Args:
-            endpoints: the list of compositions, as strings (e.g. ["Al2O3"])
+            endpoints: the list of compositions, as strings (e.g., ["Al2O3"])
         """
 
         for i in range(len(endpoints)):

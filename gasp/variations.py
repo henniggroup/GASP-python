@@ -173,10 +173,10 @@ class Mating(object):
                     probability self.doubling_prob, and if it happens, the
                     parent with the smallest cell volume is doubled.
 
-                3. Optionally grows one the parents to the approximate size of
-                    the other parent, if self.grow_parents is True. The number
-                    of times to double the smaller parent is determined by the
-                    ratio of the cell volumes of the parents.
+                3. Optionally grows the smaller parent to the approximate size
+                    of the other parent, if self.grow_parents is True. The
+                    number of times to double the smaller parent is determined
+                    by the ratio of the cell volumes of the parents.
 
                 4. Randomly selects one of the three lattice vectors to slice.
 
@@ -220,88 +220,22 @@ class Mating(object):
 
         # optionally double one of the parents
         if random.random() < self.doubling_prob:
-            vol_1 = cell_1.lattice.volume
-            vol_2 = cell_2.lattice.volume
-            if vol_1 < vol_2:
-                self.double_parent(cell_1, geometry, random)
+            if cell_1.lattice.volume < cell_2.lattice.volume:
+                self.double_parent(cell_1, geometry)
             else:
-                self.double_parent(cell_2, geometry, random)
+                self.double_parent(cell_2, geometry)
 
         # grow the smaller parent if specified
         if self.grow_parents and geometry.shape != 'cluster':
-            vol_1 = cell_1.lattice.volume
-            vol_2 = cell_2.lattice.volume
-            if vol_1 < vol_2:
-                volume_ratio = vol_2/vol_1
-                parent_to_grow = cell_1
-            else:
-                volume_ratio = vol_1/vol_2
-                parent_to_grow = cell_2
-            num_doubles = self.get_num_doubles(volume_ratio)
-            for _ in range(num_doubles):
-                self.double_parent(parent_to_grow, geometry, random)
+            self.grow_parent_cell(cell_1, cell_2, geometry, random)
 
-        species_from_parent_1 = []
-        species_from_parent_2 = []
+        # get the offspring cell
+        offspring_cell = self.make_offspring_cell(cell_1, cell_2, geometry,
+                                                  constraints, random)
 
-        # make the cut
-        # loop needed here because sometimes no atoms get contributed from one
-        # of the parents, so have to try again
-        while len(species_from_parent_1) == 0 or len(
-                species_from_parent_2) == 0:
-            species_from_parent_1 = []
-            frac_coords_from_parent_1 = []
-            species_from_parent_2 = []
-            frac_coords_from_parent_2 = []
-
-            # get the lattice vector to cut and the cut location
-            cut_vector_index = random.randint(0, 2)
-            cut_location = random.gauss(self.mu_cut_loc, self.sigma_cut_loc)
-            while cut_location > 1 or cut_location < 0:
-                cut_location = random.gauss(self.mu_cut_loc,
-                                            self.sigma_cut_loc)
-
-            # possibly shift the atoms in each parent along the cut vector
-            if random.random() < self.shift_prob:
-                self.do_random_shift(cell_1, cut_vector_index, geometry,
-                                     random)
-            if random.random() < self.shift_prob:
-                self.do_random_shift(cell_2, cut_vector_index, geometry,
-                                     random)
-
-            # possibly rotate the atoms in each parent (for wires and clusters)
-            if random.random() < self.rotate_prob:
-                self.do_random_rotation(cell_1, geometry, constraints, random)
-            if random.random() < self.rotate_prob:
-                self.do_random_rotation(cell_2, geometry, constraints, random)
-
-            # get the site contributions of each parent
-            for site in cell_1.sites:
-                if site.frac_coords[cut_vector_index] < cut_location:
-                    species_from_parent_1.append(site.species_and_occu)
-                    frac_coords_from_parent_1.append(site.frac_coords)
-            for site in cell_2.sites:
-                if site.frac_coords[cut_vector_index] > cut_location:
-                    species_from_parent_2.append(site.species_and_occu)
-                    frac_coords_from_parent_2.append(site.frac_coords)
-
-        # combine the information for the sites contributed by each parent
-        offspring_species = species_from_parent_1 + species_from_parent_2
-        offspring_frac_coords = frac_coords_from_parent_1 + \
-            frac_coords_from_parent_2
-
-        # compute the lattice vectors of the offspring
-        offspring_lengths = 0.5*(np.array(cell_1.lattice.abc) +
-                                 np.array(cell_2.lattice.abc))
-        offspring_angles = 0.5*(np.array(cell_1.lattice.angles) +
-                                np.array(cell_2.lattice.angles))
-        offspring_lattice = Lattice.from_lengths_and_angles(offspring_lengths,
-                                                            offspring_angles)
-
-        # make the offspring cell and merge close sites
-        offspring_cell = Cell(offspring_lattice, offspring_species,
-                              offspring_frac_coords)
-        offspring_cell = self.merge_sites(offspring_cell)
+        # merge close sites in the offspring cell
+        offspring_cell = self.merge_sites(offspring_cell, geometry,
+                                          constraints)
 
         # make the offspring organism from the offspring cell
         offspring = Organism(offspring_cell, id_generator, self.name,
@@ -310,6 +244,68 @@ class Mating(object):
               'with the mating variation '.format(offspring.id, parent1.id,
                                                   parent2.id))
         return offspring
+
+    def double_parent(self, cell, geometry):
+        """
+        Modifies a cell by taking a supercell. For bulk geometries, the
+        supercell is taken in the direction of the shortest lattice vector. For
+        sheet geometries, the supercell is taken in the direction of either the
+        a or b lattice vector, whichever is shorter. For wire geometries, the
+        supercell is taken in the direction of the c lattice vector. For
+        cluster geometries, no supercell is taken.
+
+        Args:
+            cell: the Cell to take the supercell of
+
+            geometry: the Geometry of the search
+        """
+
+        # get the lattice vector to double
+        if geometry.shape == 'bulk':
+            abc_lengths = cell.lattice.abc
+            smallest_vector = min(abc_lengths)
+            doubling_index = abc_lengths.index(smallest_vector)
+        elif geometry.shape == 'sheet':
+            ab_lengths = [cell.lattice.a, cell.lattice.b]
+            smallest_vector = min(ab_lengths)
+            doubling_index = ab_lengths.index(smallest_vector)
+        elif geometry.shape == 'wire':
+            doubling_index = 2
+        elif geometry.shape == 'cluster':
+            doubling_index = None
+
+        # take the supercell
+        if doubling_index is not None:
+            scaling_factors = [1, 1, 1]
+            scaling_factors[doubling_index] = 2
+            cell.make_supercell(scaling_factors)
+
+    def grow_parent_cell(self, parent_cell_1, parent_cell_2, geometry, random):
+        """
+        Modifies the smaller parent cell by taking supercells until it is the
+        approximate size of the larger parent cell.
+
+        Args:
+            parent_cell_1: the Cell of the first parent
+
+            parent_cell_2: the Cell of the second parent
+
+            geometry: the Geometry of the search
+
+            random: copy of Python's PRNG
+        """
+
+        vol_1 = parent_cell_1.lattice.volume
+        vol_2 = parent_cell_2.lattice.volume
+        if vol_1 < vol_2:
+            volume_ratio = vol_2/vol_1
+            parent_to_grow = parent_cell_1
+        else:
+            volume_ratio = vol_1/vol_2
+            parent_to_grow = parent_cell_2
+        num_doubles = self.get_num_doubles(volume_ratio)
+        for _ in range(num_doubles):
+            self.double_parent(parent_to_grow, geometry)
 
     def get_num_doubles(self, volume_ratio):
         """
@@ -338,42 +334,85 @@ class Mating(object):
         else:
             return 7
 
-    def double_parent(self, cell, geometry, random):
+    def make_offspring_cell(self, parent_cell_1, parent_cell_2, geometry,
+                            constraints, random):
         """
-        Modifies a cell by taking a supercell. For bulk geometries, the
-        supercell is taken in the direction of the shortest lattice vector. For
-        sheet geometries, the supercell is taken in the direction of either the
-        a or b lattice vector, whichever is shorter. For wire geometries, the
-        supercell is taken in the direction of the c lattice vector. For
-        cluster geometries, no supercell is taken.
+        Combines two parent structures to produce and offspring structure.
+        Returns the offspring structure, as a Cell.
 
         Args:
-            cell: the Cell to take the supercell of
+            parent_cell_1: the Cell of the first parent
+
+            parent_cell_2: the Cell of the second parent
 
             geometry: the Geometry of the search
 
-            random: a copy of Python's PRNG
+            constraints: the Constraints of the search
+
+            random: copy of Python's built in PRNG
         """
 
-        # get the lattice vector to double
-        if geometry.shape == 'bulk':
-            abc_lengths = cell.lattice.abc
-            smallest_vector = min(abc_lengths)
-            doubling_index = abc_lengths.index(smallest_vector)
-        elif geometry.shape == 'sheet':
-            ab_lengths = [cell.lattice.a, cell.lattice.b]
-            smallest_vector = min(ab_lengths)
-            doubling_index = ab_lengths.index(smallest_vector)
-        elif geometry.shape == 'wire':
-            doubling_index = 2
-        elif geometry.shape == 'cluster':
-            doubling_index = None
+        species_from_parent_1 = []
+        species_from_parent_2 = []
 
-        # take the supercell
-        if doubling_index is not None:
-            scaling_factors = [1, 1, 1]
-            scaling_factors[doubling_index] = 2
-            cell.make_supercell(scaling_factors)
+        # loop needed here because sometimes no atoms get contributed from one
+        # of the parents, so have to try again
+        while len(species_from_parent_1) == 0 or len(
+                species_from_parent_2) == 0:
+            species_from_parent_1 = []
+            frac_coords_from_parent_1 = []
+            species_from_parent_2 = []
+            frac_coords_from_parent_2 = []
+
+            # get the lattice vector to cut and the cut location
+            cut_vector_index = random.randint(0, 2)
+            cut_location = random.gauss(self.mu_cut_loc, self.sigma_cut_loc)
+            while cut_location > 1 or cut_location < 0:
+                cut_location = random.gauss(self.mu_cut_loc,
+                                            self.sigma_cut_loc)
+
+            # possibly shift the atoms in each parent along the cut vector
+            if random.random() < self.shift_prob:
+                self.do_random_shift(parent_cell_1, cut_vector_index, geometry,
+                                     random)
+            if random.random() < self.shift_prob:
+                self.do_random_shift(parent_cell_2, cut_vector_index, geometry,
+                                     random)
+
+            # possibly rotate the atoms in each parent (for wires and clusters)
+            if random.random() < self.rotate_prob:
+                self.do_random_rotation(parent_cell_1, geometry, constraints,
+                                        random)
+            if random.random() < self.rotate_prob:
+                self.do_random_rotation(parent_cell_2, geometry, constraints,
+                                        random)
+
+            # get the site contributions of each parent
+            for site in parent_cell_1.sites:
+                if site.frac_coords[cut_vector_index] <= cut_location:
+                    species_from_parent_1.append(site.species_and_occu)
+                    frac_coords_from_parent_1.append(site.frac_coords)
+            for site in parent_cell_2.sites:
+                if site.frac_coords[cut_vector_index] > cut_location:
+                    species_from_parent_2.append(site.species_and_occu)
+                    frac_coords_from_parent_2.append(site.frac_coords)
+
+        # combine the information for the sites contributed by each parent
+        offspring_species = species_from_parent_1 + species_from_parent_2
+        offspring_frac_coords = frac_coords_from_parent_1 + \
+            frac_coords_from_parent_2
+
+        # compute the lattice vectors of the offspring
+        offspring_lengths = 0.5*(np.array(parent_cell_1.lattice.abc) +
+                                 np.array(parent_cell_2.lattice.abc))
+        offspring_angles = 0.5*(np.array(parent_cell_1.lattice.angles) +
+                                np.array(parent_cell_2.lattice.angles))
+        offspring_lattice = Lattice.from_lengths_and_angles(offspring_lengths,
+                                                            offspring_angles)
+
+        # make the offspring cell
+        return Cell(offspring_lattice, offspring_species,
+                    offspring_frac_coords)
 
     def do_random_shift(self, cell, lattice_vector_index, geometry,
                         random):
@@ -465,8 +504,7 @@ class Mating(object):
     def rotate_about_axis(self, cell, axis, angle):
         """
         Modifies a cell by rotating its lattice about the given lattice vector
-        by the given angle. Usually results in the atoms lying outside of the
-        cell.
+        by the given angle. Can result in the atoms lying outside of the cell.
 
         Note: this method doesn't change the Cartesian coordinates of the
         sites. However, the fractional coordinates may be changed.
@@ -497,22 +535,33 @@ class Mating(object):
             cell.append(species[i], cartesian_coords[i],
                         coords_are_cartesian=True)
 
-    def merge_sites(self, cell):
+    def merge_sites(self, cell, geometry, constraints):
         """
         Merges sites in the cell that have the same element and are closer
         than self.merge_sites times the atomic radius to each other. Merging
         means replacing two sites in the cell with one site at the mean of the
-        two sites (Cartesian) positions.
+        two sites' (Cartesian) positions.
 
         Returns a new Cell with the sites merged.
 
         Args:
             cell: the Cell whose sites to merge
+
+            geometry: the Geometry of the search
+
+            constraints: the constraints of the search
         """
 
         species = []
         frac_coords = []
         merged_indices = []
+
+        # pad the cell first to prevent incorrect merges
+        geometry.pad(cell)
+
+        # remove duplicate sites if needed
+        if cell.num_sites > 1:
+            cell.merge_sites(mode='delete')
 
         # go through the cell site by site and merge pairs of sites if
         # needed
@@ -546,13 +595,14 @@ class Mating(object):
                 species.append(site.specie)
                 frac_coords.append(site.frac_coords)
 
-        # make a new cell
+        # make a new cell and unpad it
         new_cell = Cell(cell.lattice, species, frac_coords)
+        geometry.unpad(new_cell, constraints)
 
         # if any merges were done, call merge_sites recursively on the new
         # cell
         if len(new_cell.sites) < len(cell.sites):
-            return self.merge_sites(new_cell)
+            return self.merge_sites(new_cell, geometry, constraints)
         else:
             return new_cell
 
@@ -694,13 +744,10 @@ class StructureMut(object):
         cell = copy.deepcopy(parent_org.cell)
 
         # perturb the site coordinates
-        self.perturb_atomic_coords(cell, random)
+        self.perturb_atomic_coords(cell, geometry, constraints, random)
 
         # perturb the lattice vectors
         self.perturb_lattice_vectors(cell, random)
-
-        # make sure all the atoms are inside the cell
-        cell.translate_atoms_into_cell()
 
         # create a new organism from the perturbed cell
         offspring = Organism(cell, id_generator, self.name, composition_space)
@@ -709,7 +756,7 @@ class StructureMut(object):
                                                          parent_org.id))
         return offspring
 
-    def perturb_atomic_coords(self, cell, random):
+    def perturb_atomic_coords(self, cell, geometry, constraints, random):
         """
         Modifies a cell by perturbing the coordinates of its sites. The
         probability that each site is perturbed is self.frac_atoms_perturbed,
@@ -722,8 +769,16 @@ class StructureMut(object):
         Args:
             cell: the Cell whose site coordinates are perturbed
 
+            geometry: the Geometry of the search
+
+            constraints: the Constraints of the search
+
             random: a copy of Python's built in PRNG
         """
+
+        # pad the cell first to prevent atoms from getting perturbed out of it
+        # in non-periodic directions
+        geometry.pad(cell)
 
         # for each site in the cell, possibly randomly perturb it
         for site in cell.sites:
@@ -747,7 +802,10 @@ class StructureMut(object):
                 perturbation_vector = [nudge_x, nudge_y, nudge_z]
                 cell.translate_sites(
                     cell.sites.index(site), perturbation_vector,
-                    frac_coords=False, to_unit_cell=False)
+                    frac_coords=False, to_unit_cell=True)
+
+        # unpad the cell
+        geometry.unpad(cell, constraints)
 
     def perturb_lattice_vectors(self, cell, random):
         """
@@ -894,88 +952,34 @@ class NumAtomsMut(object):
         # select a parent organism from the pool and get its cell
         parent_org = pool.select_organism(random, composition_space)
         cell = copy.deepcopy(parent_org.cell)
-        parent_num_atoms = len(cell.sites)
-        reduced_composition = cell.composition.reduced_composition
-        vol_per_atom = cell.lattice.volume/len(cell.sites)
+        parent_vol_per_atom = copy.deepcopy(cell.lattice.volume/cell.num_sites)
 
-        # loop needed here in case no atoms got added or removed, in which case
-        # need to try again. This happens if the randomly chosen number of
-        # atoms to remove exceeds the number of atoms in the cell
-        while len(cell.sites) == parent_num_atoms:
-            # compute a non-zero number of stoichiometries to add or remove
-            num_add = int(round(random.gauss(self.mu_num_adds,
-                                             self.sigma_num_adds)))
-            while num_add == 0:
-                num_add = int(round(random.gauss(self.mu_num_adds,
-                                                 self.sigma_num_adds)))
+        # compute a valid, non-zero number of atoms (or stoichiometries) to add
+        # or remove
+        num_adds = self.compute_num_adds(cell, composition_space, random)
 
-            # if fixed composition search
-            if composition_space.objective_function == 'epa':
-                # compute the number of each type of atom to add (or remove)
-                amounts_to_add = {}
-                total_add = 0
-                for key in reduced_composition:
-                    amounts_to_add[key] = int(num_add*reduced_composition[key])
-                    total_add += amounts_to_add[key]
+        # add or remove atoms
+        # if fixed composition search
+        if composition_space.objective_function == 'epa':
+            if num_adds > 0:
+                self.add_atoms_epa(cell, num_adds, random)
+            elif num_adds < 0:
+                self.remove_atoms_epa(cell, -1*num_adds, random)
 
-                # if adding, put the new atoms in the cell at random locations
-                if num_add > 0:
-                    for key in amounts_to_add:
-                        for _ in range(amounts_to_add[key]):
-                            frac_coords = [random.random(), random.random(),
-                                           random.random()]
-                            cell.append(Specie(key, 0), frac_coords)
-                    cell.remove_oxidation_states()
-                    cell.sort()
-
-                # if removing, take out random atoms (but right number of each)
-                elif num_add < 0 and -1*total_add < len(cell.sites):
-                    site_indices_to_remove = []
-                    for key in amounts_to_add:
-                        for _ in range(0, -1*amounts_to_add[key]):
-                            random_site = random.choice(cell.sites)
-                            while str(random_site.specie.symbol) != str(
-                                key) or cell.sites.index(
-                                    random_site) in site_indices_to_remove:
-                                random_site = random.choice(cell.sites)
-                            site_indices_to_remove.append(
-                                cell.sites.index(random_site))
-                    cell.remove_sites(site_indices_to_remove)
-
-            # if phase diagram search
-            elif composition_space.objective_function == 'pd':
-                # if adding, add random atoms
-                if num_add > 0:
-                    # get the random symbols to add
-                    symbols_to_add = []
-                    while len(symbols_to_add) < num_add:
-                        random_endpoint = random.choice(
-                            composition_space.endpoints)
-                        random_element = random.choice(list(
-                            random_endpoint.keys()))
-                        symbols_to_add.append(random_element.symbol)
-                    # add each random symbol, and random fractional coordinates
-                    for symbol in symbols_to_add:
-                        frac_coords = [random.random(), random.random(),
-                                       random.random()]
-                        cell.append(Specie(symbol, 0), frac_coords)
-                    cell.remove_oxidation_states()
-                    cell.sort()
-
-                # if removing, take out random atoms
-                elif num_add < 0 and -1*num_add < len(cell.sites):
-                    all_site_indices = list(range(len(cell.sites)))
-                    site_indices_to_remove = random.sample(all_site_indices,
-                                                           -1*num_add)
-                    cell.remove_sites(site_indices_to_remove)
+        # if phase diagram search
+        elif composition_space.objective_function == 'pd':
+            if num_adds > 0:
+                self.add_atoms_pd(cell, num_adds, composition_space, random)
+            elif num_adds < 0:
+                self.remove_atoms_pd(cell, -1*num_adds, random)
 
         # optionally scale the volume after atoms have been added
-        if self.scale_volume and num_add > 0:
+        if self.scale_volume and num_adds > 0:
             # this is to suppress the warnings produced if the scale_lattice
             # method fails
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
-                cell.scale_lattice(vol_per_atom*len(cell.sites))
+                cell.scale_lattice(parent_vol_per_atom*len(cell.sites))
                 if str(cell.lattice.a) == 'nan' or cell.lattice.a > 100:
                     return self.do_variation(pool, random, geometry,
                                              constraints, id_generator)
@@ -986,6 +990,147 @@ class NumAtomsMut(object):
               'the number of atoms mutation variation '.format(
                   offspring.id, parent_org.id))
         return offspring
+
+    def compute_num_adds(self, cell, composition_space, random):
+        """
+        Computes the number of atoms (or stoichiometries worth of atoms) to add
+        or remove. Returns a non-zero integer.
+
+        Args:
+            cell: the Cell of the parent organism
+
+            composition_space: the CompositionSpace of the search
+
+            random: a copy of Python's built in PRNG
+        """
+
+        num_adds = int(round(random.gauss(self.mu_num_adds,
+                                          self.sigma_num_adds)))
+        # keep trying until we get a valid number
+        while num_adds == 0 or \
+            (composition_space.objective_function == 'epa' and num_adds*-1 >=
+             cell.num_sites/composition_space.endpoints[0].num_atoms) or \
+            (composition_space.objective_function == 'pd' and
+                num_adds*-1 >= cell.num_sites):
+            num_adds = int(round(random.gauss(self.mu_num_adds,
+                                              self.sigma_num_adds)))
+        return num_adds
+
+    def add_atoms_epa(self, cell, num_adds, random):
+        """
+        Modifies a cell by randomly adding atoms to it. Preserves the
+        composition of the cell.
+
+        Args:
+            cell: the Cell to add sites to
+
+            num_adds: the number of stoichiometries worth of atoms to add to
+                the cell. Must be a positive integer.
+
+            random: a copy of Python's built in PRNG
+        """
+
+        # compute the number of each type of atom to add
+        amounts_to_add = {}
+        total_add = 0
+        for key in cell.composition.reduced_composition:
+            amounts_to_add[key] = int(
+                num_adds*cell.composition.reduced_composition[key])
+            total_add += amounts_to_add[key]
+
+        # put the new atoms in the cell at random locations
+        for key in amounts_to_add:
+            for _ in range(amounts_to_add[key]):
+                frac_coords = [random.random(), random.random(),
+                               random.random()]
+                cell.append(Specie(key, 0), frac_coords)
+        cell.remove_oxidation_states()
+        cell.sort()
+
+    def remove_atoms_epa(self, cell, num_removes, random):
+        """
+        Modifies a cell by randomly removing atoms from it. Preserves the
+        composition of the cell.
+
+        Args:
+            cell: the Cell to remove atoms from
+
+            num_removes: the number of stoichiometries worth of atoms to remove
+            from the cell. Must be positive.
+
+            random: a copy of Python's built in PRNG
+
+        Precondition: the total number of atoms to remove does not exceed the
+            number of atoms in the cell.
+        """
+
+        # compute the number of each type of atom to remove
+        amounts_to_remove = {}
+        for key in cell.composition.reduced_composition:
+            amounts_to_remove[key] = int(
+                num_removes*cell.composition.reduced_composition[key])
+
+        # remove random atoms
+        site_indices_to_remove = []
+        for key in amounts_to_remove:
+            for _ in range(0, amounts_to_remove[key]):
+                random_site = random.choice(cell.sites)
+                while str(random_site.specie.symbol) != str(key) or \
+                        cell.sites.index(random_site) in \
+                        site_indices_to_remove:
+                    random_site = random.choice(cell.sites)
+                site_indices_to_remove.append(cell.sites.index(random_site))
+        cell.remove_sites(site_indices_to_remove)
+
+    def add_atoms_pd(self, cell, num_adds, composition_space, random):
+        """
+        Modifies a cell by randomly adding atoms to it. In general, does not
+        preserve the composition of the cell.
+
+        Args:
+            cell: the Cell to add atoms to
+
+            num_adds: the number of atoms to add to the cell. Must be a
+                positive integer.
+
+            composition_space: the CompositionSpcace of the search
+
+            random: a copy of Python's built in PRNG
+        """
+
+        # get the random symbols to add
+        symbols_to_add = []
+        while len(symbols_to_add) < num_adds:
+            random_endpoint = random.choice(composition_space.endpoints)
+            random_element = random.choice(list(random_endpoint.keys()))
+            symbols_to_add.append(random_element.symbol)
+        # add each random symbol, and random fractional coordinates
+        for symbol in symbols_to_add:
+            frac_coords = [random.random(), random.random(), random.random()]
+            cell.append(Specie(symbol, 0), frac_coords)
+        cell.remove_oxidation_states()
+        cell.sort()
+
+    def remove_atoms_pd(self, cell, num_removes, random):
+        """
+        Modifies a cell by randomly removing atoms from it. In general, does
+        not preserve the composition of the cell.
+
+        Args:
+            cell: the Cell to remove atoms from
+
+            num_removes: the number of atoms to remove from the cell. Must be
+                positive.
+
+            random: a copy of Python's built in PRNG
+
+        Precondition: the number of atoms to remove does not exceed the number
+            of atoms in the cell.
+        """
+
+        all_site_indices = list(range(len(cell.sites)))
+        site_indices_to_remove = random.sample(all_site_indices, num_removes)
+        cell.remove_sites(site_indices_to_remove)
 
 
 class Permutation(object):
@@ -1087,30 +1232,22 @@ class Permutation(object):
                     integer.
 
                 3. Tries to do the computed number of allowed swaps by randomly
-                    electing an allowed pair to swap and then randomly
+                    selecting an allowed pair to swap and then randomly
                     selecting sites in the cell with elements of the allowed
                     pair. This is repeated until either the computed number of
                     swaps have been done or no more swaps are possible with the
                     parent cell.
         """
 
-        # select a parent organism from the pool and get its cell
-        parent_org = pool.select_organism(random, composition_space)
-        cell = copy.deepcopy(parent_org.cell)
+        # select a parent organism
+        parent_org = self.select_valid_parent(pool, composition_space, random)
 
-        # keep trying until we get a parent that has at least one possible swap
-        possible_swaps = self.get_possible_swaps(cell)
-        num_selects = 0
-        while len(possible_swaps) == 0 and num_selects < self.max_num_selects:
-            parent_org = pool.select_organism(random, composition_space)
-            cell = copy.deepcopy(parent_org.cell)
-            possible_swaps = self.get_possible_swaps(cell)
-            num_selects = num_selects + 1
-
-        # if the maximum number of selections have been made, then this isn't
-        # working and it's time to stop
-        if num_selects >= self.max_num_selects:
+        # in case no viable parent could be found
+        if parent_org is None:
             return None
+
+        # get a copy of the parent organism's cell
+        cell = copy.deepcopy(parent_org.cell)
 
         # compute a positive random number of swaps to do
         num_swaps = int(round(random.gauss(self.mu_num_swaps,
@@ -1119,8 +1256,91 @@ class Permutation(object):
             num_swaps = int(round(random.gauss(self.mu_num_swaps,
                                                self.sigma_num_swaps)))
 
+        # get the indices of the sites to swap
+        pair_indices = self.get_indices_to_swap(cell, num_swaps, random)
+
+        # do the swaps with the selected pairs
+        self.swap_pairs(cell, pair_indices)
+
+        # make a new organism from the cell
+        offspring = Organism(cell, id_generator, self.name, composition_space)
+        print('Creating offspring organism {} from parent organism {} with '
+              'the permutation variation '.format(offspring.id, parent_org.id))
+        return offspring
+
+    def select_valid_parent(self, pool, composition_space, random):
+        """
+        Selects a parent organism that has at least one possible swap. Returns
+        the selected parent Organism, or None if no viable parent could be
+        found.
+
+        Args:
+            pool: the Pool of Organisms
+
+            composition_space: the CompositionSpace of the search
+
+            random: a copy of Python's built in PRNG
+        """
+
+        # select a parent organism from the pool and get its cell
+        parent_org = pool.select_organism(random, composition_space)
+        possible_swaps = self.get_possible_swaps(parent_org.cell)
+        num_selects = 0
+
+        # keep trying until we get a parent that has at least one possible swap
+        while len(possible_swaps) == 0 and num_selects < self.max_num_selects:
+            parent_org = pool.select_organism(random, composition_space)
+            possible_swaps = self.get_possible_swaps(parent_org.cell)
+            num_selects = num_selects + 1
+
+        if num_selects < self.max_num_selects:
+            return parent_org
+        else:
+            return None
+
+    def get_possible_swaps(self, cell):
+        """
+        Returns a list of swaps that are possible to do, based on what atoms
+        are in the cell and which pairs are in self.pairs_to_swap. The returned
+        list is a sublist of self.pairs_to_swap. Does not change the cell.
+
+        Args:
+            cell: the Cell to check
+        """
+
+        possible_pairs = []
+        for pair in self.pairs_to_swap:
+            symbols = pair.split()
+            has_element_1 = False
+            has_element_2 = False
+            for site in cell.sites:
+                if str(site.specie.symbol) == symbols[0]:
+                    has_element_1 = True
+                if str(site.specie.symbol) == symbols[1]:
+                    has_element_2 = True
+            if has_element_1 and has_element_2:
+                possible_pairs.append(pair)
+        return possible_pairs
+
+    def get_indices_to_swap(self, cell, num_swaps, random):
+        """
+        Computes which sites to swap in a Cell. Returns a list of lists, where
+        each inner list contains the indices of two unique sites to swap. Does
+        not modify the cell.
+
+        Precondition: the cell contains at least one possible swap
+
+        Args:
+            cell: the Cell for which to get the sites to swap
+
+            num_swaps: the number of swaps to try to do
+
+            random: a copy of Python's built in PRNG
+        """
+
         # try to select the computed number of swaps - keep getting more until
         # either we've got enough or no more swaps are possible
+        possible_swaps = self.get_possible_swaps(cell)
         num_swaps_selected = 0
         pair_indices = []
         cell_to_check = copy.deepcopy(cell)
@@ -1146,40 +1366,22 @@ class Permutation(object):
                 [cell_to_check.sites.index(site_1),
                  cell_to_check.sites.index(site_2)])
             possible_swaps = self.get_possible_swaps(cell_to_check)
+        return pair_indices
 
-        # do the swaps with the selected pairs
-        for pair_index in pair_indices:
-            species_1 = cell.sites[pair_index[0]].specie
-            species_2 = cell.sites[pair_index[1]].specie
-            cell.replace(pair_index[0], species_2)
-            cell.replace(pair_index[1], species_1)
-
-        # make a new organism from the cell
-        offspring = Organism(cell, id_generator, self.name, composition_space)
-        print('Creating offspring organism {} from parent organism {} with '
-              'the permutation variation '.format(offspring.id, parent_org.id))
-        return offspring
-
-    def get_possible_swaps(self, cell):
+    def swap_pairs(self, cell, indices_to_swap):
         """
-        Returns a list of swaps that are possible to do, based on what atoms
-        are in the cell and which pairs are in self.pairs_to_swap. The returned
-        list is a sublist of self.pairs_to_swap. Does not change the cell.
+        Modifies a cell by swapping the sites with the specified indices.
 
         Args:
-            cell: the Cell to check
+            cell: the Cell in which to do the swaps
+
+            indices_to_swap: the indices of the sites to swap, as a list of
+                lists, where each inner list contains the indices of two unique
+                sites.
         """
 
-        possible_pairs = []
-        for pair in self.pairs_to_swap:
-            symbols = pair.split()
-            has_element_1 = False
-            has_element_2 = False
-            for site in cell.sites:
-                if str(site.specie.symbol) == symbols[0]:
-                    has_element_1 = True
-                if str(site.specie.symbol) == symbols[1]:
-                    has_element_2 = True
-            if has_element_1 and has_element_2:
-                possible_pairs.append(pair)
-        return possible_pairs
+        for index_pair in indices_to_swap:
+            species_1 = cell.sites[index_pair[0]].specie
+            species_2 = cell.sites[index_pair[1]].specie
+            cell.replace(index_pair[0], species_2)
+            cell.replace(index_pair[1], species_1)
