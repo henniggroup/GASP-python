@@ -261,6 +261,7 @@ class Mating(object):
         """
 
         # get the lattice vector to double
+        doubling_index = 0
         if geometry.shape == 'bulk':
             abc_lengths = cell.lattice.abc
             smallest_vector = min(abc_lengths)

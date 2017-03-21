@@ -215,6 +215,7 @@ InitialPopulation:
     random:
         number: <integer>
         max_num_atoms: <integer>
+        allow_endpoints: <boolean>
         volumes_per_atom:
             <string>: <float>
             <string>: <float>
@@ -235,6 +236,8 @@ Specifies that the algorithm is to generate random structures and add them to th
 
 The optional keyword **max_num_atoms** within the **random** block specifies the maximum number of atoms allowed in the randomly generated structures. Defaults to 6 plus the value of **min_num_atoms** in [Constraints](#constraints) or the value of **max_num_atoms** in [Constraints](#constraints), whichever is smaller. The value given here must lie in the range defined by the values of **min_num_atoms** and **max_num_atoms** in [Constraints](#constraints) (including the endpoints).
 
+The optional keyword **allow_endpoints** within the **random** block specifies whether the randomly generated structures are allowed to have compositions equivalent to the endpoints of the composition space. Defaults to True, and is only used for phase diagram searches. 
+
 The optional keyword **volumes_per_atom** within the **random** block specifies how to scale the volumes (per atom) of the randomly generated structures. In particular, the volume of a random structure is scaled to the sum of the volumes of the atoms within the structure, where the volume (in cubic Angstroms) of each atom type is given after its chemical symbol. If the volume for an atom type is not given, the value computed from the elemental ground state structure listed on [materials project](https://materialsproject.org/) is used. This is the default behavior.    
 
 For fixed composition searches, the entire **InitialPopulation** block is optional. If not specified, it defaults to this:
@@ -244,6 +247,7 @@ InitialPopulation:
     random:
         number: 28
         max_num_atoms: 8
+        allow_endpoints: True
         volumes_per_atom: 
             Al: 16.47 
             Cu: 11.82 
@@ -415,7 +419,7 @@ Variations:
 
 The **Variations** keyword specifies the variations the algorithm uses to create offspring structures from parents. The entire block is optional. 
 
-####<a id="mating"></a>Mating
+#### <a id="mating"></a>Mating
 
 ~~~~
 Variations:
@@ -651,6 +655,7 @@ Constraints:
     max_lattice_length: <float>
     min_lattice_angle: <float>
     max_lattice_angle: <float> 
+    allow_endpoints: <boolean>
     per_species_mids: 
         <string> <string>: <float>
         <string> <string>: <float>
@@ -685,6 +690,10 @@ Specifies the minimum allowed lattice angle. Optional, and defaults to 40.0.
 
 Specifies the maximum allowed lattice angle. Optional, and defaults to 140.0. 
 
+  * **allow_endpoints**
+
+Specifies whether or not to allow structures with compositions equivalent to the endpoints of the composition space. Optional, and defaults to True. Only used for phase diagram searches. Note that this constraint is not applied to structures in the initial population.
+
   * **per_species_mids** 
 
 Specifies the minimum interatomic distance constraints between different pairs of atom types. If not given, the mid for a pair of atom types is set to 75% of the sum of the radii of the two atoms. 
@@ -699,6 +708,7 @@ Constraints:
     max_lattice_length: 20.0
     min_lattice_angle: 40.0
     max_lattice_angle: 140.0
+    allow_endpoints: True
     per_species_mids: 
         Al Al: 1.875
         Al Cu: 1.95

@@ -56,6 +56,8 @@ class RandomOrganismCreator(object):
         # max number of atoms
         self.default_max_num_atoms = min(constraints.min_num_atoms + 6,
                                          constraints.max_num_atoms)
+        # allow structure with compositions at the endpoints (for pd searches)
+        self.default_allow_endpoints = True
         # volume scaling behavior
         # default volumes per atom of elemental ground state structures
         # computed from structures on materials project (materialsproject.org)
@@ -96,6 +98,7 @@ class RandomOrganismCreator(object):
         if random_org_parameters in (None, 'default'):
             self.number = self.default_number
             self.max_num_atoms = self.default_max_num_atoms
+            self.allow_endpoints = self.default_allow_endpoints
             self.vpas = self.default_vpas
         # parse the parameters and set to defaults if necessary
         else:
@@ -130,6 +133,14 @@ class RandomOrganismCreator(object):
                 quit()
             else:
                 self.max_num_atoms = random_org_parameters['max_num_atoms']
+
+            # allowing composition space endpoints (only used for pd searches)
+            if 'allow_endpoints' not in random_org_parameters:
+                self.allow_endpoints = self.default_allow_endpoints
+            elif random_org_parameters['allow_endpoints'] in (None, 'default'):
+                self.allow_endpoints = self.default_allow_endpoints
+            else:
+                self.allow_endpoints = random_org_parameters['allow_endpoints']
 
             # volume scaling
             self.vpas = self.default_vpas
@@ -345,8 +356,9 @@ class RandomOrganismCreator(object):
 
             6. Checks that the resulting number of atoms satisfies the maximum
                 (self.max_num_atoms) and minimum (constraints.min_num_atoms)
-                number of atoms constraints, and that the resulting composition
-                is not equivalent to one of the endpoint compositions.
+                number of atoms constraints, and optionally checks that the
+                resulting composition is not equivalent to one of the endpoint
+                compositions.
         """
 
         # get random fractions for each endpoint that sum to 1 (i.e., a
@@ -398,17 +410,24 @@ class RandomOrganismCreator(object):
         # it if possible
         random_composition = Composition(element_amounts)
         reduced_composition = random_composition.reduced_composition
-        num_atoms = int(reduced_composition.num_atoms)
 
-        # check the min and max number of atoms constraints
-        if num_atoms > self.max_num_atoms or num_atoms < \
-                constraints.min_num_atoms:
+        # needed so elemental endpoints won't violate min_num_atoms constraint
+        while int(reduced_composition.num_atoms) < constraints.min_num_atoms:
+            doubled_composition = {}
+            for element in reduced_composition:
+                doubled_composition[element] = 2*reduced_composition[element]
+            reduced_composition = Composition(doubled_composition)
+
+        # check the max number of atoms constraints
+        if int(reduced_composition.num_atoms) > self.max_num_atoms:
             return None
 
-        # check the composition - don't want endpoints
-        for endpoint in composition_space.endpoints:
-            if endpoint.almost_equals(reduced_composition):
-                return None
+        # check the composition - only allow endpoints if specified
+        if not self.allow_endpoints:
+            for endpoint in composition_space.endpoints:
+                if endpoint.almost_equals(
+                        reduced_composition.reduced_composition):
+                    return None
 
         # save the element objects
         species = []

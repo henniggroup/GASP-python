@@ -67,6 +67,7 @@ class Constraints(object):
         self.default_max_lattice_length = 20
         self.default_min_lattice_angle = 40
         self.default_max_lattice_angle = 140
+        self.default_allow_endpoints = True
         self.default_mid_factor = 0.7
 
         # set to defaults
@@ -130,6 +131,17 @@ class Constraints(object):
                 self.max_lattice_angle = constraints_parameters[
                     'max_lattice_angle']
 
+            # allowing endpoint compositions (for phase diagram searches)
+            # not meant to be applied to organisms in the initial population
+            if 'allow_endpoints' not in constraints_parameters:
+                self.allow_endpoints = self.default_allow_endpoints
+            elif constraints_parameters['allow_endpoints'] in (None,
+                                                               'default'):
+                self.allow_endpoints = self.default_allow_endpoints
+            else:
+                self.allow_endpoints = constraints_parameters[
+                    'allow_endpoints']
+
             # the per-species minimum interatomic distances
             if 'per_species_mids' not in constraints_parameters:
                 self.set_all_mids_to_defaults(composition_space)
@@ -168,6 +180,7 @@ class Constraints(object):
         self.max_lattice_length = self.default_max_lattice_length
         self.min_lattice_angle = self.default_min_lattice_angle
         self.max_lattice_angle = self.default_max_lattice_angle
+        self.allow_endpoints = self.default_allow_endpoints
         self.set_all_mids_to_defaults(composition_space)
 
     def set_all_mids_to_defaults(self, composition_space):
@@ -327,7 +340,8 @@ class Developer(object):
             return False
 
         # check if the organism is is the composition space
-        if not self.is_in_composition_space(organism, composition_space, pool):
+        if not self.is_in_composition_space(organism, composition_space,
+                                            constraints, pool):
             return False
 
         # optionally do Niggli cell reduction
@@ -379,7 +393,8 @@ class Developer(object):
             return False
         return True
 
-    def is_in_composition_space(self, organism, composition_space, pool):
+    def is_in_composition_space(self, organism, composition_space,
+                                constraints, pool):
         """
         Returns a boolean indicating whether the organism is in the composition
         space.
@@ -389,6 +404,8 @@ class Developer(object):
 
             composition_space: the CompositionSpace of the search
 
+            constraints: the Constraints of the search
+
             pool: the Pool
         """
 
@@ -397,9 +414,9 @@ class Developer(object):
             return self.is_in_composition_space_epa(organism,
                                                     composition_space)
         # for pd searches
-        elif composition_space.objective_function == "pd":
+        elif composition_space.objective_function == 'pd':
             return self.is_in_composition_space_pd(organism, composition_space,
-                                                   pool)
+                                                   constraints, pool)
 
     def is_in_composition_space_epa(self, organism, composition_space):
         """
@@ -420,16 +437,19 @@ class Developer(object):
             return False
         return True
 
-    def is_in_composition_space_pd(self, organism, composition_space, pool):
+    def is_in_composition_space_pd(self, organism, composition_space,
+                                   constraints, pool):
         """
         Returns a boolean indicating whether the organism is in the composition
-        space. If the initial population is finished, then returns False for
-        organisms with endpoint compositions.
+        space. Whether composition space endpoints are allowed is determined by
+        the value of constraints.allow_endpoints.
 
         Args:
             organism: the Organism to check
 
             composition_space: the CompositionSpace of the search
+
+            constraints: the Constraints of the search
 
             pool: the Pool
         """
@@ -447,17 +467,17 @@ class Developer(object):
         if len(composition_checker.transform_entries(
                     pdentries, composition_space.endpoints)[0]) == len(
                         composition_space.endpoints):
-            print("Organism {} lies outside the composition space ".format(
+            print('Organism {} lies outside the composition space '.format(
                 organism.id))
             return False
 
-        # check the endpoints if we're not making the initial population
-        elif len(pool.to_list()) > 0:
+        # check the composition space endpoints if specified
+        if not constraints.allow_endpoints and len(pool.to_list()) > 0:
             for endpoint in composition_space.endpoints:
                 if endpoint.almost_equals(
                         organism.composition.reduced_composition):
-                    print('Organism {} is at a composition endpoint '.format(
-                        organism.id))
+                    print('Organism {} is at a composition space '
+                          'endpoint '.format(organism.id))
                     return False
         return True
 

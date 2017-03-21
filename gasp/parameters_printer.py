@@ -98,6 +98,8 @@ def print_parameters(objects_dict):
                                       str(creator.number) + '\n')
                 parameters_file.write('        max_num_atoms: ' +
                                       str(creator.max_num_atoms) + '\n')
+                parameters_file.write('        allow_endpoints: ' +
+                                      str(creator.allow_endpoints) + '\n')
                 parameters_file.write('        volumes_per_atom: ' + '\n')
                 for vpa in creator.vpas:
                     parameters_file.write('            ' + str(vpa) + ': ' +
@@ -222,6 +224,8 @@ def print_parameters(objects_dict):
                               str(constraints.min_lattice_angle) + '\n')
         parameters_file.write('    max_lattice_angle: ' +
                               str(constraints.max_lattice_angle) + '\n')
+        parameters_file.write('    allow_endpoints: ' +
+                              str(constraints.allow_endpoints) + '\n')
         parameters_file.write('    per_species_mids: \n')
         for pair in constraints.per_species_mids:
             parameters_file.write('        ' + pair + ': ' +
