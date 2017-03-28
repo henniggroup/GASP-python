@@ -199,6 +199,20 @@ class Organism(object):
                     composition_vector.append(0.0)
             return np.array(composition_vector)
 
+    def is_at_endpoint(self, composition_space):
+        """
+        Returns a boolean indicating whether the organism is located at an
+        endpoint of the composition space.
+
+        Args:
+            composition_space: the CompositionSpace of the search
+        """
+
+        for endpoint in composition_space.endpoints:
+            if self.composition.reduced_composition.almost_equals(endpoint):
+                return True
+        return False
+
 
 class Cell(Structure):
     """
@@ -963,8 +977,11 @@ class Pool(object):
         For phase diagram searches, the relative fitness is taken to be the
         average of the regular fitness and the composition fitness, where the
         composition fitness is defined as 1 minus the normalized distance
-        between an organism and the ref_organism in composition space. The
-        relative fitness of ref_organism is set to zero.
+        between an organism and the ref_organism in composition space. An
+        exception to this occurs when the ref_organism and the organism are
+        both at the same endpoint of the composition space; in this case, the
+        composition fitness of the organism is set to zero. The relative
+        fitness of ref_organism is always set to zero.
 
         Args:
             ref_organism: relative fitnesses are computed w.r.t. this Organism
@@ -999,9 +1016,16 @@ class Pool(object):
                     comp_fitness = 1 - self.get_composition_distance(
                         organism.composition_vector,
                         ref_organism.composition_vector)
-                    organism.relative_fitness = \
-                        comp_fit_weight*comp_fitness + (
-                            1 - comp_fit_weight)*organism.fitness
+                    # in case both the organisms are at the same endpoint
+                    if ref_organism.is_at_endpoint(composition_space) and \
+                            ref_organism.composition.reduced_composition.almost_equals(
+                                organism.composition.reduced_composition):
+                        organism.relative_fitness = (1 - comp_fit_weight
+                                                     )*organism.fitness
+                    else:
+                        organism.relative_fitness = \
+                            comp_fit_weight*comp_fitness + (
+                                1 - comp_fit_weight)*organism.fitness
                 else:
                     organism.relative_fitness = 0.0
             # set the relative fitness of the reference organism to 0
