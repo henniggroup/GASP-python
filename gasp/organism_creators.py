@@ -26,6 +26,7 @@ from fractions import Fraction
 import warnings
 import os
 import math
+import numpy as np
 
 
 class RandomOrganismCreator(object):
@@ -351,26 +352,30 @@ class RandomOrganismCreator(object):
                 fraction by this product to obtain the number of atoms of that
                 species.
 
-            5. Reduces the composition obtained in 4. to the smallest possible
-                number of atoms.
+            5. Checks if the total number of atoms exceeds self.max_num_atoms.
+                If so, reduce the amount of each atom with a multiplicative
+                factor.
 
-            6. Checks that the resulting number of atoms satisfies the maximum
-                (self.max_num_atoms) and minimum (constraints.min_num_atoms)
-                number of atoms constraints, and optionally checks that the
-                resulting composition is not equivalent to one of the endpoint
-                compositions.
+            6. Reduces the resulting composition (i.e., find the smallest
+                number of atoms needed to describe the composition).
+
+            7. Optionally increases the number of atoms (w/o changing the
+                composition) such that the min num atoms constraint is
+                satisfied if possible.
+
+            8. Checks that the resulting number of atoms satisfies the maximum
+                (self.max_num_atoms) number of atoms constraint, and optionally
+                checks that the resulting composition is not equivalent to one
+                of the endpoint compositions.
         """
 
-        # get random fractions for each endpoint that sum to 1 (i.e., a
-        # random location in the composition space)
-        random.shuffle(composition_space.endpoints)  # to remove bias
-        frac_sum = 0
+        # get random fractions for each endpoint that sum to one 1 (i.e., a
+        # random location in the composition space
+        fracs = self.get_random_endpoint_fractions(composition_space, random)
+        composition_space.endpoints.sort()
         endpoint_fracs = {}
-        for i in range(len(composition_space.endpoints) - 1):
-            next_frac = random.uniform(0, 1.0 - frac_sum)
-            endpoint_fracs[composition_space.endpoints[i]] = next_frac
-            frac_sum += next_frac
-        endpoint_fracs[composition_space.endpoints[-1]] = 1.0 - frac_sum
+        for i in range(len(fracs)):
+            endpoint_fracs[composition_space.endpoints[i]] = fracs[i]
 
         # compute amount of each element from amount of each endpoint
         all_elements = composition_space.get_all_elements()
@@ -406,35 +411,120 @@ class RandomOrganismCreator(object):
             element_amounts[element] = round(float(
                 denom_product)*rational_amounts[element])
 
-        # make a Composition object from the amounts of each element and reduce
-        # it if possible
+        # see how many total atoms we have
+        num_atoms = 0
+        for element in element_amounts:
+            num_atoms += element_amounts[element]
+
+        # reduce the number of atoms of each element if needed
+        if num_atoms > self.max_num_atoms:
+            numerator = random.randint(
+                int(round(0.5*(constraints.min_num_atoms +
+                               self.max_num_atoms))), self.max_num_atoms)
+            factor = numerator/num_atoms
+            for element in element_amounts:
+                element_amounts[element] = round(
+                    factor*element_amounts[element])
+
+        # make a Composition object from the amounts of each element
         random_composition = Composition(element_amounts)
-        reduced_composition = random_composition.reduced_composition
+        random_composition = random_composition.reduced_composition
 
-        # needed so elemental endpoints won't violate min_num_atoms constraint
-        while int(reduced_composition.num_atoms) < constraints.min_num_atoms:
-            doubled_composition = {}
-            for element in reduced_composition:
-                doubled_composition[element] = 2*reduced_composition[element]
-            reduced_composition = Composition(doubled_composition)
+        # possibly increase the number of atoms by a random (allowed) amount
+        min_multiple = int(
+            math.ceil(constraints.min_num_atoms/random_composition.num_atoms))
+        max_multiple = int(
+            math.floor(self.max_num_atoms/random_composition.num_atoms))
+        if max_multiple > min_multiple:
+            random_multiple = random.randint(min_multiple, max_multiple)
+            bigger_composition = {}
+            for element in random_composition:
+                bigger_composition[element] = \
+                    random_multiple*random_composition[element]
+            random_composition = Composition(bigger_composition)
 
-        # check the max number of atoms constraints
-        if int(reduced_composition.num_atoms) > self.max_num_atoms:
+        # check the max number of atoms constraints (should be ok)
+        if int(random_composition.num_atoms) > self.max_num_atoms:
             return None
 
         # check the composition - only allow endpoints if specified
         if not self.allow_endpoints:
             for endpoint in composition_space.endpoints:
                 if endpoint.almost_equals(
-                        reduced_composition.reduced_composition):
+                        random_composition.reduced_composition):
                     return None
 
         # save the element objects
         species = []
-        for specie in reduced_composition:
-            for _ in range(int(reduced_composition[specie])):
+        for specie in random_composition:
+            for _ in range(int(random_composition[specie])):
                 species.append(specie)
         return species
+
+    def get_random_endpoint_fractions(self, composition_space, random):
+        """
+        Uniformly samples the composition space. Returns a list containing the
+        fractions of each endpoint composition (that sum to 1).
+
+        Args:
+            composition_space: the CompositionSpace of the search
+
+            random: a copy of Python's built-in PRNG
+
+        Description:
+
+            1. Computes vectors that span the normalized composition space
+                (e.g., the triangular facet for a ternary system) by
+                subtracting the first composition fraction unit vector from the
+                others.
+
+            2. Takes a random linear combination of these vectors by
+                multiplying each one by a uniform random number and then taking
+                their sum.
+
+            3. Adds the first composition unit vector to the result from step 2
+                to obtain a vector with random fractions of each endpoint
+                composition.
+
+            4. Checks that the vector from step 3 lies in the portion of the
+                plane that corresponds to normalized amounts. This is done be
+                checking that amount of the first endpoint composition is
+                non-negative. If it's negative, calls itself recursively until
+                a valid solution is found.
+        """
+
+        # compute the vectors corresponding to the needed binary edges of the
+        # phase diagram (w.r.t. to the first endpoint of the composition space)
+        num_endpoints = len(composition_space.endpoints)
+        bindary_edges = []
+        for i in range(1, num_endpoints):
+            edge = [-1]
+            for j in range(1, num_endpoints):
+                if j == i:
+                    edge.append(1)
+                else:
+                    edge.append(0)
+            bindary_edges.append(np.array(edge))
+
+        # take a linear combination of the edge vectors, where the weight of
+        # each vector is drawn from a uniform distribution
+        weighted_average = random.random()*bindary_edges[0]
+        for i in range(1, len(bindary_edges)):
+            weighted_average = np.add(weighted_average,
+                                      random.random()*bindary_edges[i])
+
+        # add the first unit vector to the weighted average of the edge
+        # vectors to obtain the fractions of each endpoint
+        endpoint_fracs = weighted_average.tolist()
+        endpoint_fracs[0] = endpoint_fracs[0] + 1
+
+        # check that the computed fraction of the first endpoint is not less
+        # than zero. If it is, try again.
+        if endpoint_fracs[0] < 0:
+            return self.get_random_endpoint_fractions(composition_space,
+                                                      random)
+        else:
+            return endpoint_fracs
 
     def scale_volume(self, random_cell):
         """

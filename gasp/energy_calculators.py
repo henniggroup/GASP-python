@@ -9,7 +9,8 @@ from __future__ import division, unicode_literals, print_function
 Energy Calculators module:
 
 This module contains the classes used to compute the energies of structures
-with external energy codes.
+with external energy codes. All energy calculator classes must implement a
+do_energy_calculation() method.
 
 1. VaspEnergyCalculator: for using VASP to compute energies
 
@@ -60,7 +61,8 @@ class VaspEnergyCalculator(object):
         self.kpoints_file = kpoints_file
         self.potcar_files = potcar_files
 
-    def do_energy_calculation(self, organism, dictionary, key):
+    def do_energy_calculation(self, organism, dictionary, key,
+                              composition_space):
         """
         Calculates the energy of an organism using VASP, and stores the relaxed
         organism in the provided dictionary at the provided key. If the
@@ -73,6 +75,8 @@ class VaspEnergyCalculator(object):
 
             key: the key specifying where to store the relaxed Organism in the
                 dictionary
+
+            composition_space: the CompositionSpace of the search
 
         Precondition: the garun directory and temp subdirectory exist, and we
             are currently located inside the garun directory
@@ -187,7 +191,8 @@ class LammpsEnergyCalculator(object):
         # the path to the lammps input script
         self.input_script = input_script
 
-    def do_energy_calculation(self, organism, dictionary, key):
+    def do_energy_calculation(self, organism, dictionary, key,
+                              composition_space):
         """
         Calculates the energy of an organism using LAMMPS, and stores the
         relaxed organism in the provided dictionary at the provided key. If the
@@ -200,6 +205,8 @@ class LammpsEnergyCalculator(object):
 
             key: the key specifying where to store the relaxed Organism in the
                 dictionary
+
+            composition_space: the CompositionSpace of the search
 
         Precondition: the garun directory and temp subdirectory exist, and we
             are currently located inside the garun directory
@@ -214,12 +221,13 @@ class LammpsEnergyCalculator(object):
         script_name = os.path.basename(self.input_script)
         input_script_path = job_dir_path + '/' + str(script_name)
 
+        # write the in.data file
         self.conform_to_lammps(organism.cell)
-        self.write_data_file(organism, job_dir_path)  # write in.data file
+        self.write_data_file(organism, job_dir_path, composition_space)
 
-        # just for testing, write out the unrelaxed structure to a poscar file
-        # organism.cell.to(fmt='poscar', filename= job_dir_path +
-        #    '/POSCAR.' + str(organism.id) + '_unrelaxed')
+        # write out the unrelaxed structure to a poscar file
+        organism.cell.to(fmt='poscar', filename=job_dir_path + '/POSCAR.' +
+                         str(organism.id) + '_unrelaxed')
 
         # run 'calllammps' script as a subprocess to run LAMMPS
         print('Starting LAMMPS calculation on organism {} '.format(
@@ -242,7 +250,10 @@ class LammpsEnergyCalculator(object):
             log_file.write(lammps_output)
 
         # parse the relaxed structure from the atom.dump file
-        symbols = organism.cell.symbol_set
+        symbols = []
+        all_elements = composition_space.get_all_elements()
+        for element in all_elements:
+            symbols.append(element.symbol)
         try:
             relaxed_cell = self.get_relaxed_cell(
                 job_dir_path + '/dump.atom', job_dir_path + '/in.data',
@@ -262,9 +273,18 @@ class LammpsEnergyCalculator(object):
             dictionary[key] = None
             return
 
+        # check that the total energy isn't unphysically large
+        # (can be a problem for empirical potentials)
+        epa = total_energy/organism.cell.num_sites
+        if epa < -100:
+            print('Discarding organism {} due to unphysically large energy: '
+                  '{} eV/atom.'.format(organism.id, str(epa)))
+            dictionary[key] = None
+            return
+
         organism.cell = relaxed_cell
         organism.total_energy = total_energy
-        organism.epa = total_energy/organism.cell.num_sites
+        organism.epa = epa
         print('Setting energy of organism {} to {} eV/atom '.format(
             organism.id, organism.epa))
         dictionary[key] = organism
@@ -304,7 +324,7 @@ class LammpsEnergyCalculator(object):
             cell.make_supercell([1, 2, 1])
             self.conform_to_lammps(cell)
 
-    def write_data_file(self, organism, job_dir_path):
+    def write_data_file(self, organism, job_dir_path, composition_space):
         """
         Writes the file (called in.data) containing the structure that LAMMPS
         reads.
@@ -314,6 +334,8 @@ class LammpsEnergyCalculator(object):
 
             job_dir_path: the path the job directory (as a string) where the
                 file will be written
+
+            composition_space: the CompositionSpace of the search
         """
 
         # get xhi, yhi and zhi from the lattice vectors
@@ -328,14 +350,37 @@ class LammpsEnergyCalculator(object):
         xz = lattice_coords[2][0]
         yz = lattice_coords[2][1]
 
+        # get a list of the elements from the lammps input script to
+        # preserve their order of appearance
+        num_atoms = len(composition_space.get_all_elements())
+        with open(self.input_script, 'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            if 'pair_coeff' in line:
+                element_symbols = line.split()[-1*num_atoms:]
+        all_elements = []
+        for symbol in element_symbols:
+            all_elements.append(Element(symbol))
+
+        # get the dictionary of atomic masses - set the atom types to the order
+        # of their appearance in the lammps input script
+        atomic_masses_dict = {}
+        for i in range(len(all_elements)):
+            atomic_masses_dict[all_elements[i].symbol] = [
+                i + 1, float(all_elements[i].atomic_mass)]
+
+        # get the atoms data
+        atoms_data = LammpsData.get_atoms_data(
+            organism.cell, atomic_masses_dict, set_charge=True)
+
         # make a LammpsData object
-        ldata = LammpsData.from_structure(organism.cell, box_size,
-                                          set_charge=True)
+        lammps_data = LammpsData(box_size, atomic_masses_dict.values(),
+                                 atoms_data)
 
         # write the data to a file
         # This method doesn't write the tilts, so we have to add those. It also
         # writes the molecule id of each atom, so we have to remove those
-        ldata.write_data_file(job_dir_path + '/in.data')
+        lammps_data.write_data_file(job_dir_path + '/in.data')
 
         # read the in.data file as a list of strings
         with open(job_dir_path + '/in.data', 'r') as f:
@@ -385,7 +430,7 @@ class LammpsEnergyCalculator(object):
             in_data_path: the path (as a string) to the in.data file
 
             element_symbols: a tuple containing the set of chemical symbols of
-                the elements in the structure
+                all the elements in the compositions space
         """
 
         # read the dump.atom file as a list of strings
@@ -569,7 +614,8 @@ class GulpEnergyCalculator(object):
                 cations_shell = True
         return anions_shell, cations_shell
 
-    def do_energy_calculation(self, organism, dictionary, key):
+    def do_energy_calculation(self, organism, dictionary, key,
+                              composition_space):
         """
         Calculates the energy of an organism using GULP, and stores the relaxed
         organism in the provided dictionary at the provided key. If the
@@ -582,6 +628,8 @@ class GulpEnergyCalculator(object):
 
             key: the key specifying where to store the relaxed Organism in the
                 dictionary
+
+            composition_space: the CompositionSpace of the search
 
         Precondition: the garun directory and temp subdirectory exist, and we
             are currently located inside the garun directory

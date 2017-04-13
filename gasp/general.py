@@ -1523,7 +1523,7 @@ class CompositionFitnessWeight(object):
         """
 
         # default values
-        self.default_max_weight = 0.5
+        self.default_max_weight = 0.3
         self.default_power = 1
 
         # if entire CompositionFitnessWeight block was left blank or set to
@@ -1699,8 +1699,8 @@ class DataWriter(object):
                 data_file.write(' {}'.format(
                     endpoint.reduced_formula.replace(' ', '')))
             data_file.write('\n\n')
-            data_file.write('id\t\t composition\t total energy\t\t epa\t\t\t '
-                            'num calcs\t best value\n\n')
+            data_file.write('id\t\t composition\t total energy\t\t '
+                            'epa\t\t\t num calcs\t best value\n\n')
 
     def write_data(self, organism, num_calcs, progress):
         """
@@ -1720,13 +1720,21 @@ class DataWriter(object):
                 constructed.
         """
 
-        format_string = '{0}\t\t {1}\t\t {2:.6f}\t\t {3:.6f}\t\t {4}\t\t'
+        # determine how many tabs to use after the composition
+        formula = organism.composition.formula.replace(' ', '')
+        if len(formula) > 8:
+            format_string = '{0}\t\t {1}\t {2:.6f}\t\t {3:.6f}\t\t {4}\t\t'
+        else:
+            format_string = '{0}\t\t {1}\t\t {2:.6f}\t\t {3:.6f}\t\t {4}\t\t'
+
+        # determine what to write for the progress
         if progress is None:
             format_string = format_string + ' None\n'
         else:
             format_string = format_string + ' {5:.6f}\n'
 
+        # write the line to the file
         with open(self.file_path, 'a') as data_file:
             data_file.write(format_string.format(
-                organism.id, organism.composition.formula.replace(' ', ''),
-                organism.total_energy, organism.epa, num_calcs, progress))
+                organism.id, formula, organism.total_energy, organism.epa,
+                num_calcs, progress))

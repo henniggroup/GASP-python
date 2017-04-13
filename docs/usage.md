@@ -391,7 +391,7 @@ The entire block is optional, and it is only used for phase diagram searches.
 
    * **max_weight**
 
-Specifies the maximum weight to give to the composition fitness (when the first parent is located at an enpoint of the composition space). Must lie between 0.0 and 1.0. Optional, and defaults to 0.5.
+Specifies the maximum weight to give to the composition fitness (when the first parent is located at an enpoint of the composition space). Must lie between 0.0 and 1.0. Optional, and defaults to 0.3.
 
    * **power**
 
@@ -1008,7 +1008,7 @@ C core C core 100470 64.464 0.000 8.5125
 
 This is the Lennard-Jones potential used by Abraham and Probert to model carbon ([https://doi.org/10.1103/PhysRevB.73.224104](https://doi.org/10.1103/PhysRevB.73.224104)).
 
-####<a id="gulp_nonbulk"></a>Non-Bulk Structures
+#### <a id="gulp_nonbulk"></a>Non-Bulk Structures
 
 As discussed [here](#nonbulk), one or more lattice vectors must be fixed when searching for non-bulk structures. To achieve this with GULP, the genetic algorithm writes the appropriate flags to the GULP input file, which specify which lattice vector lengths and angles to fix. In this case, the GULP input file written by the algorithm has the form: 
 
@@ -1101,8 +1101,10 @@ The `pair_style` and `pair_coeff` commands specify the empirical potential to us
 
 We found that using an initial relaxation step with the system under small pressure (as shown here) is helpful for ensuring relaxation with many empirical potentials.
 
+The energy landscapes defined by empirical potentials sometimes contain severely unphysical minima. To prevent such minima from derailing a structure search, the algorithm checks that the energy per atom computed by LAMMPS for each structure is not less than -100 eV/atom. If it is, the algorithm discards the structure and prints a message: *Discarding organism n due to unphysically large energy: x eV/atom*, where *n* is the organism number and *x* is the energy per atom. If GASP is being used to evaluate an empirical potential, problematic structures are likely to be important and can be found by checking for these messages in the output.
 
-####<a id="lammps_nonbulk"></a>Non-Bulk Structures
+
+#### <a id="lammps_nonbulk"></a>Non-Bulk Structures
 
 As discussed [here](#nonbulk), one or more lattice vectors must be fixed when searching for non-bulk structures. To achieve this with LAMMPS, the user must slightly modify the LAMMPS input script. In particular, the `fix` command must be changed so that only the specified lattice vectors are allowed to relax, while the others are fixed. The `boundary` command may also be changed for non-bulk calculations. Here is an example LAMMPS input script for two-dimensional sheets:
 

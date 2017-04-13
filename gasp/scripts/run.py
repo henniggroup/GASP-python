@@ -115,7 +115,7 @@ def main():
                             thread = threading.Thread(
                                 target=energy_calculator.do_energy_calculation,
                                 args=[new_organism, relaxed_organisms,
-                                      thread_index])
+                                      thread_index, composition_space])
                             thread.start()
                             threads.append(thread)
 
@@ -202,9 +202,10 @@ def main():
                                         stopping_criteria.update_calc_counter()
                                         thread = threading.Thread(
                                             target=energy_calculator.do_energy_calculation,
-                                            args=(new_organism,
+                                            args=[new_organism,
                                                   relaxed_organisms,
-                                                  thread_index))
+                                                  thread_index,
+                                                  composition_space])
                                         thread.start()
                                         threads[thread_index] = thread
                                         started_new_calc = True
@@ -290,7 +291,8 @@ def main():
         thread_index = len(threads)
         thread = threading.Thread(
             target=energy_calculator.do_energy_calculation,
-            args=[unrelaxed_offspring, relaxed_organisms, thread_index])
+            args=[unrelaxed_offspring, relaxed_organisms, thread_index,
+                  composition_space])
         thread.start()
         threads.append(thread)
 
@@ -384,7 +386,7 @@ def main():
                     thread = threading.Thread(
                         target=energy_calculator.do_energy_calculation,
                         args=[unrelaxed_offspring, relaxed_organisms,
-                              thread_index])
+                              thread_index, composition_space])
                     thread.start()
                     threads[thread_index] = thread
 

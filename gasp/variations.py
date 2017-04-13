@@ -9,7 +9,7 @@ from __future__ import division, unicode_literals, print_function
 Variations module:
 
 This module contains the classes used to create offspring organisms from parent
-organisms.
+organisms. All variation classes must implement a do_variation() method.
 
 1. Mating: creates an offspring organism by combining two parent organisms
 
