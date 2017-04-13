@@ -24,13 +24,11 @@ from gasp.general import Cell
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.periodic_table import Element
-from pymatgen.io.vasp.outputs import Vasprun
 from pymatgen.io.lammps.data import LammpsData
 import pymatgen.command_line.gulp_caller as gulp_caller
 
 import shutil
 import subprocess
-import warnings
 import os
 
 
@@ -130,40 +128,32 @@ class VaspEnergyCalculator(object):
             dictionary[key] = None
             return
 
-        # make a Vasprun object by reading the vasprun.xml file
-        try:
-            with warnings.catch_warnings():  # don't need warning, so suppress
-                warnings.simplefilter('ignore')
-                vasprun = Vasprun(job_dir_path + '/vasprun.xml',
-                                  ionic_step_skip=None, ionic_step_offset=None,
-                                  parse_dos=False, parse_eigen=False,
-                                  parse_projected_eigen=False,
-                                  parse_potcar_file=False)
-        except:
-            print('Error parsing vasprun.xml file for organism '
-                  '{} '.format(organism.id))
-            dictionary[key] = None
-            return
-
-        # check if the vasp calculation converged
-        if not vasprun.converged:
+        # check if the VASP calculation converged
+        converged = False
+        with open(job_dir_path + '/OUTCAR') as f:
+            for line in f:
+                if 'reached' in line and 'required' in line and \
+                        'accuracy' in line:
+                    converged = True
+        if not converged:
             print('VASP relaxation of organism {} did not converge '.format(
                 organism.id))
             dictionary[key] = None
             return
 
-        # get the total energy from the vasprun
-        try:
-            total_energy = float(vasprun.final_energy)
-        except:
-            print('Error reading energy of organism {} from vasprun.xml '
-                  'file '.format(organism.id))
-            dictionary[key] = None
-            return
+        # parse the internal energy and pV (if needed) and compute the enthalpy
+        pv = 0
+        with open(job_dir_path + '/OUTCAR') as f:
+            for line in f:
+                if 'energy(sigma->0)' in line:
+                    u = float(line.split()[-1])
+                elif 'enthalpy' in line:
+                    pv = float(line.split()[-1])
+        enthalpy = u + pv
 
         organism.cell = relaxed_cell
-        organism.total_energy = total_energy
-        organism.epa = total_energy/organism.cell.num_sites
+        organism.total_energy = enthalpy
+        organism.epa = enthalpy/organism.cell.num_sites
         print('Setting energy of organism {} to {} '
               'eV/atom '.format(organism.id, organism.epa))
         dictionary[key] = organism
