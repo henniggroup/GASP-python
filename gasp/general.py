@@ -156,6 +156,8 @@ class Organism(object):
                 [PDEntry(self.composition, 10)], composition_space.endpoints)
 
             # get the transformed species and amounts
+            if len(transformed_entry[0]) == 0:
+                return None
             transformed_list = str(transformed_entry[0][0]).split()
             del transformed_list[0]
             popped = ''
