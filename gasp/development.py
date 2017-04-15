@@ -61,7 +61,11 @@ class Constraints(object):
         '''
 
         # default values
-        self.default_min_num_atoms = 2
+        if composition_space.objective_function == 'epa':
+            self.default_min_num_atoms = max(
+                2, int(composition_space.endpoints[0].num_atoms))
+        else:
+            self.default_min_num_atoms = 2
         self.default_max_num_atoms = 30
         self.default_min_lattice_length = 0.5
         self.default_max_lattice_length = 20

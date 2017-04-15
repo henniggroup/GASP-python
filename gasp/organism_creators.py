@@ -55,8 +55,19 @@ class RandomOrganismCreator(object):
         # number of random organisms to make (only used for epa searches)
         self.default_number = 28
         # max number of atoms
-        self.default_max_num_atoms = min(constraints.min_num_atoms + 6,
-                                         constraints.max_num_atoms)
+        if composition_space.objective_function == 'epa':
+            # make sure we can sample cells with two formula units
+            target_number = constraints.min_num_atoms + 6
+            num_formulas = target_number/composition_space.endpoints[
+                0].num_atoms
+            if num_formulas < 2:
+                min_of_max = int(2*composition_space.endpoints[0].num_atoms)
+            else:
+                min_of_max = int(round(
+                    num_formulas)*composition_space.endpoints[0].num_atoms)
+        else:
+            min_of_max = constraints.min_num_atoms + 6
+        self.default_max_num_atoms = min(min_of_max, constraints.max_num_atoms)
         # allow structure with compositions at the endpoints (for pd searches)
         self.default_allow_endpoints = True
         # volume scaling behavior
