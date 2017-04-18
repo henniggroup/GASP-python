@@ -631,7 +631,7 @@ class FileOrganismCreator(object):
                 self.num_made - 1].startswith('POSCAR'):
             try:
                 new_cell = Cell.from_file(
-                    str(self.path_to_folder) + "/" + str(
+                    str(self.path_to_folder) + '/' + str(
                         self.files[self.num_made - 1]))
                 new_org = Organism(new_cell, id_generator, self.name,
                                    composition_space)

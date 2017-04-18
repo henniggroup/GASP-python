@@ -958,9 +958,13 @@ class Pool(object):
         worst_value = best_organisms[-1].value
 
         # compute the fitnesses of the organisms in this subset
-        for organism in best_organisms:
-            organism.fitness = (organism.value - worst_value)/(best_value -
-                                                               worst_value)
+        if best_value == worst_value:  # in case they're all on the convex hull
+            for organism in best_organisms:
+                organism.fitness = 1.0
+        else:
+            for organism in best_organisms:
+                organism.fitness = (organism.value - worst_value)/(
+                    best_value - worst_value)
 
         # assign fitnesses of zero to organisms not in this subset
         for organism in self.to_list():
