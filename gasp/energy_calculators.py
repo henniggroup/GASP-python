@@ -266,7 +266,7 @@ class LammpsEnergyCalculator(object):
         # check that the total energy isn't unphysically large
         # (can be a problem for empirical potentials)
         epa = total_energy/organism.cell.num_sites
-        if epa < -100:
+        if epa < -50:
             print('Discarding organism {} due to unphysically large energy: '
                   '{} eV/atom.'.format(organism.id, str(epa)))
             dictionary[key] = None
