@@ -538,14 +538,14 @@ class Developer(object):
 
         Description:
             Scales the volume per atom of the organism to the average volume
-            per atom of the organisms in the promotion set, plus 10%.
+            per atom of the organisms in the promotion set.
         """
 
         # compute the volume to scale to
         vpa_sum = 0
         for org in pool.promotion_set:
             vpa_sum += org.cell.volume/len(org.cell.sites)
-        vpa_mean = 1.1*(vpa_sum/len(pool.promotion_set))
+        vpa_mean = vpa_sum/len(pool.promotion_set)
         num_atoms = len(organism.cell.sites)
         new_vol = vpa_mean*num_atoms
         # this is to suppress the warnings produced if the
@@ -581,7 +581,7 @@ class Developer(object):
                 in the decomposition.
 
             3. Scales the volume per atom of the organism to the computed
-                value, plus 10%.
+                value.
         """
 
         # make CompoundPhaseDiagram and PDAnalyzer objects
@@ -647,7 +647,6 @@ class Developer(object):
                         org.cell.sites))*fractions[i]
 
         # compute the new volume and scale to it
-        vpa_mean = 1.1*vpa_mean
         num_atoms = len(organism.cell.sites)
         new_vol = vpa_mean*num_atoms
         # this is to suppress the warnings produced if the

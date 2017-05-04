@@ -1101,7 +1101,7 @@ The `pair_style` and `pair_coeff` commands specify the empirical potential to us
 
 We found that using an initial relaxation step with the system under small pressure (as shown here) is helpful for ensuring relaxation with many empirical potentials.
 
-The energy landscapes defined by empirical potentials sometimes contain severely unphysical minima. To prevent such minima from derailing a structure search, the algorithm checks that the energy per atom computed by LAMMPS for each structure is not less than -100 eV/atom. If it is, the algorithm discards the structure and prints a message: *Discarding organism n due to unphysically large energy: x eV/atom*, where *n* is the organism number and *x* is the energy per atom. If GASP is being used to evaluate an empirical potential, problematic structures are likely to be important and can be found by checking for these messages in the output.
+The energy landscapes defined by empirical potentials sometimes contain severely unphysical minima. To prevent such minima from derailing a structure search, the algorithm checks that the energy per atom computed by LAMMPS for each structure is not less than -50 eV/atom. If it is, the algorithm discards the structure and prints a message: *Discarding organism n due to unphysically large energy: x eV/atom*, where *n* is the organism number and *x* is the energy per atom. If GASP is being used to evaluate an empirical potential, problematic structures are likely to be important and can be found by checking for these messages in the output.
 
 
 #### <a id="lammps_nonbulk"></a>Non-Bulk Structures
