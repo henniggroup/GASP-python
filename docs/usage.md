@@ -696,7 +696,7 @@ Specifies whether or not to allow structures with compositions equivalent to the
 
   * **per_species_mids** 
 
-Specifies the minimum interatomic distance constraints between different pairs of atom types. If not given, the mid for a pair of atom types is set to 75% of the sum of the radii of the two atoms. 
+Specifies the minimum interatomic distance constraints between different pairs of atom types. If not given, the mid for a pair of atom types is set to 60% of the sum of the radii of the two atoms. 
 
 Below is an example **Constraints** block containing the default values of the constraints, where the default mid's were computed by the algorithm from the atomic radii. 
 
@@ -710,9 +710,9 @@ Constraints:
     max_lattice_angle: 140.0
     allow_endpoints: True
     per_species_mids: 
-        Al Al: 1.875
-        Al Cu: 1.95
-        Cu Cu: 2.025
+        Al Al: 1.716
+        Al Cu: 1.626
+        Cu Cu: 1.536
 ~~~~  
 
 [Go back to Contents](#contents)
@@ -1217,7 +1217,7 @@ TODO: talk about a more useful script that resubmits the VASP job up to some num
 TODO: talk about how to make the callvasp script if each vasp calculation cannot be run directly, but has to be submitted to a queue as a job (like SLURM). 
 
 
-####<a id="vasp_nonbulk"></a>Non-Bulk Structures
+#### <a id="vasp_nonbulk"></a>Non-Bulk Structures
 
 As discussed [here](#nonbulk), one or more lattice vectors must be fixed when searching for non-bulk structures. However, VASP does not support selectively fixing certain lattice vectors as an option in the INCAR file. In order to fix specific lattice vectors during a VASP relaxation, the constr\_cell\_relax.F file must be modified to set some of the components of the stress tensor to zero, and VASP must be recompiled with the modified file. 
 

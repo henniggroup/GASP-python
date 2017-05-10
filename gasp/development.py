@@ -72,7 +72,7 @@ class Constraints(object):
         self.default_min_lattice_angle = 40
         self.default_max_lattice_angle = 140
         self.default_allow_endpoints = True
-        self.default_mid_factor = 0.7
+        self.default_mid_factor = 0.6
 
         # set to defaults
         if constraints_parameters in (None, 'default'):
