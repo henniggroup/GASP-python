@@ -698,6 +698,13 @@ class Pool(object):
         print('Populating the pool with the initial population...')
         organisms_list = initial_population.initial_population
 
+        # check that the initial population contains at least three organisms
+        if len(organisms_list) < 3:
+            print('The initial population must contain at least three '
+                  'organisms.')
+            print('Quitting...')
+            quit()
+
         # populate the promotion set and queue
         if composition_space.objective_function == 'epa':
             for organism in organisms_list:
