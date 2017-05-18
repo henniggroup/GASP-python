@@ -97,8 +97,8 @@ class VaspEnergyCalculator(object):
         # get a list of the element symbols in the sorted order
         symbols = []
         for site in organism.cell.sites:
-            symbols.append(site.specie.symbol)
-        symbols = list(set(symbols))
+            if site.specie.symbol not in symbols:
+                symbols.append(site.specie.symbol)
 
         # write the POTCAR file by concatenating the appropriate elemental
         # POTCAR files
