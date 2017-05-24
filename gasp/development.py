@@ -766,7 +766,7 @@ class RedundancyGuard(object):
     other organisms already seen by the algorithm.
     '''
 
-    def __init__(self, redundancy_parameters):
+    def __init__(self, redundancy_parameters, geometry):
         '''
         Makes a RedundancyGuard, and sets default parameter values if
         necessary.
@@ -778,6 +778,8 @@ class RedundancyGuard(object):
 
         Args:
             redundancy parameters: a dictionary of parameters
+
+            geometry: the Geometry object
         '''
 
         # defaults
@@ -876,10 +878,11 @@ class RedundancyGuard(object):
             ElementComparator())
 
         # make the MoleculeMatcher object
-        iso_mol_atom_mapper = IsomorphismMolAtomMapper()
-        self.molecule_matcher = MoleculeMatcher(self.rmsd_tol,
-                                                iso_mol_atom_mapper)
-        ob.obErrorLog.SetOutputLevel(0)  # to suppress openbabel warnings
+        if geometry.shape == 'cluster':
+            iso_mol_atom_mapper = IsomorphismMolAtomMapper()
+            self.molecule_matcher = MoleculeMatcher(self.rmsd_tol,
+                                                    iso_mol_atom_mapper)
+            ob.obErrorLog.SetOutputLevel(0)  # to suppress openbabel warnings
 
     def set_all_to_defaults(self):
         '''

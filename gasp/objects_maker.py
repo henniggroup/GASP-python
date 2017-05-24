@@ -83,9 +83,9 @@ def make_objects(parameters):
     # make the redundancy guard object
     if 'RedundancyGuard' in parameters:
         redundancy_guard = development.RedundancyGuard(
-            parameters['RedundancyGuard'])
+            parameters['RedundancyGuard'], geometry)
     else:
-        redundancy_guard = development.RedundancyGuard('default')
+        redundancy_guard = development.RedundancyGuard('default', geometry)
 
     objects_dict['redundancy_guard'] = redundancy_guard
 
