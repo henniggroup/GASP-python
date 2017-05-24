@@ -1063,12 +1063,12 @@ cd $dir_path
 lammps < $input_file
 ~~~~
 
-This script assumes that LAMMPS is installed, and that the LAMMPS executable (`lammps` command) is on user's the path.
+This script assumes that LAMMPS is installed, and that the LAMMPS executable (`lammps` command) is on the user's path.
 
 The genetic algorithm needs an input script in order to perform LAMMPS calculations. Here is an example input script that specifies an EAM potential for Al-Cu alloys: 
 
 ~~~~
-units		real
+units		metal	
 dimension	3
 atom_style	charge
 boundary	p p p
@@ -1109,7 +1109,7 @@ The energy landscapes defined by empirical potentials sometimes contain severely
 As discussed [here](#nonbulk), one or more lattice vectors must be fixed when searching for non-bulk structures. To achieve this with LAMMPS, the user must slightly modify the LAMMPS input script. In particular, the `fix` command must be changed so that only the specified lattice vectors are allowed to relax, while the others are fixed. The `boundary` command may also be changed for non-bulk calculations. Here is an example LAMMPS input script for two-dimensional sheets:
 
 ~~~~
-units		real
+units	 	metal	
 dimension	3
 atom_style	charge
 boundary	p p f
@@ -1133,7 +1133,7 @@ The options following the `boundary` command tell LAMMPS to use periodic boundar
 Here is an example LAMMPS input script for one-dimensional wires:
 
 ~~~~
-units		real
+units		metal	
 dimension	3
 atom_style	charge
 boundary	f f p
@@ -1157,7 +1157,7 @@ The options following the `boundary` command tell LAMMPS to use periodic boundar
 For zero-dimensional clusters, no periodic boundary conditions are needed, and the `fix` command can simply be omitted to prevent all three lattice vectors from being relaxed:
 
 ~~~~
-units		real
+units		metal	
 dimension	3
 atom_style	charge
 boundary	f f f

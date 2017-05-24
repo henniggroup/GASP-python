@@ -17,7 +17,7 @@ If pymatgen is already installed, steps 1-3 may be skipped.
 1. Install conda 
 ----------------
 
-Download and install the version of conda for your operating system from http://conda.pydata.org/miniconda.html. Although GASP is compatible with both Python 2.7 and 3.5, pymatgen recommends using Python 3.5. 
+Download and install the version of conda for your operating system from http://conda.pydata.org/miniconda.html. Although GASP is compatible with both Python 2.7 and 3.6, pymatgen recommends using Python 3.6. 
 
 For Windows, make sure you have the Miniconda3 installer, and simply double-click the .exe file. 
 
@@ -39,7 +39,7 @@ After completing the installation, create a new terminal in order for the enviro
 
 To create a new conda environment named 'my_gasp', type::
 
-    conda create --name my_gasp python=3.5
+    conda create --name my_gasp python=3.6
 
 When conda asks you::
 
