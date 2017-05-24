@@ -125,7 +125,7 @@ CompositionSpace:
 
 In this case, the algorithm searches for the phase diagram of the Al-Cu system, and the quantity the algorithm seeks to minimize is the distance of structures from the best known convex hull of the system. The endpoints define the range of allowed compositions, and they need not be elemental.  
 
-If multiple endpoints are given, the algorithm will not search for structures with compositions at the endpoints, but rather for structures with compositions between the endpoints. Therefore, reference structures with compositions at the endpoints must be provided to the algorithm in the initial population. See the [InitialPopulation](#initialpopulation) keyword. 
+If multiple endpoints are given, reference structures with compositions at the endpoints must be provided in the initial population. See the [InitialPopulation](#initialpopulation) keyword. 
 
 [Go back to Contents](#contents)
 
