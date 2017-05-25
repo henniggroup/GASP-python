@@ -1097,7 +1097,7 @@ and
 
 In addition, the input script must use the `dump` command to print the relaxed structure to a file called `dump.atom`, from which the algorithm parses the relaxed structure.
 
-The `pair_style` and `pair_coeff` commands specify the empirical potential to use in the energy calculations. In most cases, the user must only replace these two lines to specify the desired potential, and this example input script should work.
+The `pair_style` and `pair_coeff` commands specify the empirical potential to use in the energy calculations. Note that the element symbols must appear at the end of line containing the `pair_coeff` command, as shown above. In most cases, the user must only replace these two lines to specify the desired potential, and this example input script should work.
 
 We found that using an initial relaxation step with the system under small pressure (as shown here) is helpful for ensuring relaxation with many empirical potentials.
 
