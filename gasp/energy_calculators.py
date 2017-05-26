@@ -470,9 +470,9 @@ class LammpsEnergyCalculator(object):
         for i in range(num_atoms):
             atom_info = lines[9 + i].split()
             types.append(int(atom_info[1]))
-            relaxed_cart_coords.append([float(atom_info[2]),
-                                        float(atom_info[3]),
-                                        float(atom_info[4])])
+            relaxed_cart_coords.append([float(atom_info[2]) - xlo,
+                                        float(atom_info[3]) - ylo,
+                                        float(atom_info[4])] - zlo)
 
         # read the atom types and corresponding atomic masses from in.data
         with open(data_in_path, 'r') as data_in:
