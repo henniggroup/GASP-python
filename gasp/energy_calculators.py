@@ -342,15 +342,20 @@ class LammpsEnergyCalculator(object):
 
         # get a list of the elements from the lammps input script to
         # preserve their order of appearance
-        num_atoms = len(composition_space.get_all_elements())
-        with open(self.input_script, 'r') as f:
-            lines = f.readlines()
-        for line in lines:
-            if 'pair_coeff' in line:
-                element_symbols = line.split()[-1*num_atoms:]
-        all_elements = []
-        for symbol in element_symbols:
-            all_elements.append(Element(symbol))
+        # TODO: not all formats give the element symbols at the end of the line
+        #       containing the pair_coeff keyword. Find a better way.
+        num_elements = len(composition_space.get_all_elements())
+        if num_elements == 1:
+            all_elements = composition_space.get_all_elements()
+        else:
+            with open(self.input_script, 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    if 'pair_coeff' in line:
+                        element_symbols = line.split()[-1*num_elements:]
+                all_elements = []
+                for symbol in element_symbols:
+                    all_elements.append(Element(symbol))
 
         # get the dictionary of atomic masses - set the atom types to the order
         # of their appearance in the lammps input script
