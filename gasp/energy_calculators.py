@@ -472,7 +472,7 @@ class LammpsEnergyCalculator(object):
             types.append(int(atom_info[1]))
             relaxed_cart_coords.append([float(atom_info[2]) - xlo,
                                         float(atom_info[3]) - ylo,
-                                        float(atom_info[4])] - zlo)
+                                        float(atom_info[4]) - zlo])
 
         # read the atom types and corresponding atomic masses from in.data
         with open(data_in_path, 'r') as data_in:
