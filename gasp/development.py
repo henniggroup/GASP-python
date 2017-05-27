@@ -771,10 +771,12 @@ class RedundancyGuard(object):
         Makes a RedundancyGuard, and sets default parameter values if
         necessary.
 
-        TODO: currently using pymatgen's structure matcher for comparing sheet
-            and wire structures. It assumes periodic boundary conditions in all
-            three dimensions, so not ideal. Using pymatgen's molecule matcher
-            for clusters.
+        TODO: currently using pymatgen's structure matcher for comparing bulk
+            and sheet structures, both pymatgen's structure matcher and
+            molecule matcher for comparing wires, and only the molecule matcher
+            for clusters. The sheet and wire cases aren't ideal, since the
+            structure matcher assumes periodicity in all three dimensions, and
+            the molecule matcher assumes no periodicity.
 
         Args:
             redundancy parameters: a dictionary of parameters
@@ -878,7 +880,7 @@ class RedundancyGuard(object):
             ElementComparator())
 
         # make the MoleculeMatcher object
-        if geometry.shape == 'cluster':
+        if geometry.shape == 'cluster' or geometry.shape == 'wire':
             iso_mol_atom_mapper = IsomorphismMolAtomMapper()
             self.molecule_matcher = MoleculeMatcher(self.rmsd_tol,
                                                     iso_mol_atom_mapper)
@@ -961,11 +963,45 @@ class RedundancyGuard(object):
 
         # use the molecule matcher for cluster searches
         if geometry.shape == 'cluster':
-            mol1 = Molecule(org1.cell.species, org1.cell.cart_coords)
-            mol2 = Molecule(org2.cell.species, org2.cell.cart_coords)
-            return self.molecule_matcher.fit(mol1, mol2)
+            return self.match_molecules(org1.cell, org2.cell)
+        elif geometry.shape == 'wire':
+            molecules_match = self.match_molecules(org1.cell, org2.cell)
+            structures_match = self.match_structures(org1.cell, org2.cell)
+            return molecules_match or structures_match
         else:
-            return self.structure_matcher.fit(org1.cell, org2.cell)
+            return self.match_structures(org1.cell, org2.cell)
+
+    def match_structures(self, cell1, cell2):
+        '''
+        Compares two cells to determine if they are redundant using pymatgen's
+        comparison algorithm that assumes periodicity in all directions.
+
+        Returns a boolean indicating whether the cells are redundant.
+
+        Args:
+            cell1: the first Cell
+
+            cell2: the second Cell
+        '''
+
+        return self.structure_matcher.fit(cell1, cell2)
+
+    def match_molecules(self, cell1, cell2):
+        '''
+        Compares two cells to determine if they are redundant using pymatgen's
+        comparison algorithm that assumes no periodicity in any direction.
+
+        Returns a boolean indicating whether the cells are redundant.
+
+        Args:
+            cell1: the first Cell
+
+            cell2: the second Cell
+        '''
+
+        mol1 = Molecule(cell1.species, cell1.cart_coords)
+        mol2 = Molecule(cell2.species, cell2.cart_coords)
+        return self.molecule_matcher.fit(mol1, mol2)
 
 
 class Geometry(object):

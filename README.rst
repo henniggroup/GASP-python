@@ -70,7 +70,7 @@ Install numpy, scipy, matplotlib and pymatgen with pip::
     pip install matplotlib
     pip install pymatgen
 
-When searching for clusters, GASP uses features of pymatgen that depend on openbabel. So if you plan to use GASP to search for clusters, install openbabel in your conda environment::
+When searching for clusters and wires, GASP uses features of pymatgen that depend on openbabel. So if you plan to use GASP to search for clusters or wires, install openbabel in your conda environment::
 
    conda install -c openbabel openbabel
 
