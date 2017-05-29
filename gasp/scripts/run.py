@@ -111,22 +111,21 @@ def main():
                             whole_pop.append(copy.deepcopy(new_organism))
                             geometry.pad(new_organism.cell)
                             stopping_criteria.update_calc_counter()
-                            thread_index = len(threads)
+                            index = len(threads)
                             thread = threading.Thread(
                                 target=energy_calculator.do_energy_calculation,
                                 args=[new_organism, relaxed_organisms,
-                                      thread_index, composition_space])
+                                      index, composition_space])
                             thread.start()
                             threads.append(thread)
 
             # process finished calculations and start new ones
             else:
-                for thread in threads:
+                for index, thread in enumerate(threads):
                     if not thread.is_alive():
                         num_finished_calcs += 1
-                        thread_index = threads.index(thread)
-                        relaxed_organism = relaxed_organisms[thread_index]
-                        relaxed_organisms[thread_index] = None
+                        relaxed_organism = relaxed_organisms[index]
+                        relaxed_organisms[index] = None
 
                         # take care of relaxed organism
                         if relaxed_organism is not None:
@@ -200,14 +199,13 @@ def main():
                                             copy.deepcopy(new_organism))
                                         geometry.pad(new_organism.cell)
                                         stopping_criteria.update_calc_counter()
-                                        thread = threading.Thread(
+                                        new_thread = threading.Thread(
                                             target=energy_calculator.do_energy_calculation,
                                             args=[new_organism,
-                                                  relaxed_organisms,
-                                                  thread_index,
+                                                  relaxed_organisms, index,
                                                   composition_space])
-                                        thread.start()
-                                        threads[thread_index] = thread
+                                        new_thread.start()
+                                        threads[index] = new_thread
                                         started_new_calc = True
 
     # depending on how the loop above exited, update bookkeeping
@@ -219,14 +217,13 @@ def main():
     num_to_get = num_calcs_at_once  # number of threads left to handle
     handled_indices = []  # the indices of the threads we've already handled
     while num_to_get > 0:
-        for thread in threads:
-            thread_index = threads.index(thread)
-            if not thread.is_alive() and thread_index not in handled_indices:
+        for index, thread in enumerate(threads):
+            if not thread.is_alive() and index not in handled_indices:
                 num_finished_calcs += 1
-                relaxed_organism = relaxed_organisms[thread_index]
+                relaxed_organism = relaxed_organisms[index]
                 num_to_get = num_to_get - 1
-                handled_indices.append(thread_index)
-                relaxed_organisms[thread_index] = None
+                handled_indices.append(index)
+                relaxed_organisms[index] = None
 
                 # take care of relaxed organism
                 if relaxed_organism is not None:
@@ -288,22 +285,21 @@ def main():
         whole_pop.append(copy.deepcopy(unrelaxed_offspring))
         geometry.pad(unrelaxed_offspring.cell)
         stopping_criteria.update_calc_counter()
-        thread_index = len(threads)
-        thread = threading.Thread(
+        index = len(threads)
+        new_thread = threading.Thread(
             target=energy_calculator.do_energy_calculation,
-            args=[unrelaxed_offspring, relaxed_organisms, thread_index,
+            args=[unrelaxed_offspring, relaxed_organisms, index,
                   composition_space])
-        thread.start()
-        threads.append(thread)
+        new_thread.start()
+        threads.append(new_thread)
 
     # process finished calculations and start new ones
     while not stopping_criteria.are_satisfied:
-        for thread in threads:
+        for index, thread in enumerate(threads):
             if not thread.is_alive():
                 num_finished_calcs += 1
-                thread_index = threads.index(thread)
-                relaxed_offspring = relaxed_organisms[thread_index]
-                relaxed_organisms[thread_index] = None
+                relaxed_offspring = relaxed_organisms[index]
+                relaxed_organisms[index] = None
 
                 # take care of relaxed offspring organism
                 if relaxed_offspring is not None:
@@ -383,26 +379,25 @@ def main():
                     whole_pop.append(copy.deepcopy(unrelaxed_offspring))
                     geometry.pad(unrelaxed_offspring.cell)
                     stopping_criteria.update_calc_counter()
-                    thread = threading.Thread(
+                    new_thread = threading.Thread(
                         target=energy_calculator.do_energy_calculation,
                         args=[unrelaxed_offspring, relaxed_organisms,
-                              thread_index, composition_space])
-                    thread.start()
-                    threads[thread_index] = thread
+                              index, composition_space])
+                    new_thread.start()
+                    threads[index] = new_thread
 
     # process all the calculations that were still running when the
     # stopping criteria were achieved
     num_to_get = num_calcs_at_once  # how many threads we have left to handle
     handled_indices = []  # the indices of the threads we've already handled
     while num_to_get > 0:
-        for thread in threads:
-            thread_index = threads.index(thread)
-            if not thread.is_alive() and thread_index not in handled_indices:
+        for index, thread in enumerate(threads):
+            if not thread.is_alive() and index not in handled_indices:
                 num_finished_calcs += 1
-                relaxed_offspring = relaxed_organisms[thread_index]
-                num_to_get = num_to_get - 1
-                handled_indices.append(thread_index)
-                relaxed_organisms[thread_index] = None
+                relaxed_offspring = relaxed_organisms[index]
+                num_to_get -= 1
+                handled_indices.append(index)
+                relaxed_organisms[index] = None
 
                 # take care of relaxed offspring organism
                 if relaxed_offspring is not None:
