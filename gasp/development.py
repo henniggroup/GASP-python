@@ -935,14 +935,12 @@ class RedundancyGuard(object):
                               'looks like organism {} '.format(new_organism.id,
                                                                organism.id))
                         return organism
-                    # if specified, check how close their epa's are
-                    if self.epa_diff > 0:
-                        if abs(new_organism.epa -
-                               organism.epa) < self.epa_diff:
-                            print('Organism {} failed energy per atom '
-                                  'redundancy - looks like organism '
-                                  '{} '.format(new_organism.id, organism.id))
-                            return organism
+                    # check how close their epa's are
+                    if abs(new_organism.epa - organism.epa) < self.epa_diff:
+                        print('Organism {} failed energy per atom redundancy '
+                              '- looks like organism {} '.format(
+                                  new_organism.id, organism.id))
+                        return organism
         return None
 
     def check_structures(self, org1, org2, geometry):
@@ -966,25 +964,10 @@ class RedundancyGuard(object):
             return self.match_molecules(org1.cell, org2.cell)
         elif geometry.shape == 'wire':
             molecules_match = self.match_molecules(org1.cell, org2.cell)
-            structures_match = self.match_structures(org1.cell, org2.cell)
+            structures_match = self.structure_matcher.fit(org1.cell, org2.cell)
             return molecules_match or structures_match
         else:
-            return self.match_structures(org1.cell, org2.cell)
-
-    def match_structures(self, cell1, cell2):
-        '''
-        Compares two cells to determine if they are redundant using pymatgen's
-        comparison algorithm that assumes periodicity in all directions.
-
-        Returns a boolean indicating whether the cells are redundant.
-
-        Args:
-            cell1: the first Cell
-
-            cell2: the second Cell
-        '''
-
-        return self.structure_matcher.fit(cell1, cell2)
+            return self.structure_matcher.fit(org1.cell, org2.cell)
 
     def match_molecules(self, cell1, cell2):
         '''

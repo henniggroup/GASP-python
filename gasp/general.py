@@ -1536,7 +1536,7 @@ class CompositionFitnessWeight(object):
         """
 
         # default values
-        self.default_max_weight = 0.3
+        self.default_max_weight = 0.5
         self.default_power = 1
 
         # if entire CompositionFitnessWeight block was left blank or set to

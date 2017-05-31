@@ -391,7 +391,7 @@ The entire block is optional, and it is only used for phase diagram searches.
 
    * **max_weight**
 
-Specifies the maximum weight to give to the composition fitness (when the first parent is located at an enpoint of the composition space). Must lie between 0.0 and 1.0. Optional, and defaults to 0.3.
+Specifies the maximum weight to give to the composition fitness (when the first parent is located at an enpoint of the composition space). Must lie between 0.0 and 1.0. Optional, and defaults to 0.5.
 
    * **power**
 
@@ -760,9 +760,11 @@ Specifies whether the matching algorithm should try to match structures with dif
 
 Specifies the RMSD difference threshold for whether two clusters are considered different. This value is passed to the pymatgen.analysis.molecule_matcher.MoleculeMatcher class as the *tolerance* parameter. Only used when searching for clusters (see the [Geometry](#geometry) keyword). Optional, and defaults to 2.0.  
 
+We have observed that pymatgen's molecule matcher doesn't always identify duplicate clusters. For this reason, it can be helpful to set the **epa_diff** keyword (see below) to a small nonzero value when searching for clusters. 
+
    * **epa_diff**
 
-Specifies the tolerance for comparing structures based on their energies per atom, in addition to their structures. Structures are considered equivalent if their energies per atom (eV/atom) are within the value of **epa_diff** of each other. Optional, and defaults to 0.0 (only equivalent if energies per atom are identical).
+Specifies the tolerance for comparing structures based on their energies per atom, in addition to their structures. Structures are considered equivalent if the absolute value of the difference between their energies per atom (eV/atom) is less than the value of **epa_diff**. Optional, and defaults to 0.0 (never equivalent based on energies per atom). For cluster searches, we recommend using a small nonzero value (e.g., 0.00001).
 
 Below is an example **RedundancyGuard** block containing the default values of the parameters. 
 
@@ -773,6 +775,7 @@ RedundancyGuard:
     site_tol: 0.1 
     use_primitive_cell: True
     attempt_supercell: True
+    rmsd_tol: 2.0
     epa_diff: 0.0 
 ~~~~
 
