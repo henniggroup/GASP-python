@@ -498,7 +498,7 @@ Specifies the (average) fraction of atoms in the parent structure that are pertu
 
    * **sigma_atomic_coord_perturbation**
 
-Specifies the distribution from which the random atomic perturbations are drawn. In particular, atoms are shifted along each Cartesian coordinate by amounts (in Angstroms) drawn from a Gaussian distribution with mean zero and standard deviation equal to the value passed to **sigma_atomic_coord_perturbation**. Optional, and defaults to 0.5. 
+Specifies the distribution from which the random atomic perturbations are drawn. In particular, atoms are shifted along each Cartesian coordinate by amounts (in Angstroms) drawn from a Gaussian distribution with mean zero and standard deviation equal to the value passed to **sigma_atomic_coord_perturbation**. Optional, and defaults to 1.0. 
 
    * **max_atomic_coord_perturbation**
 

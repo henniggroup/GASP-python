@@ -637,7 +637,7 @@ class StructureMut(object):
         self.default_frac_atoms_perturbed = 1.0
         # the standard deviation of the perturbation of an atomic coordinate
         # (in Angstroms)
-        self.default_sigma_atomic_coord_perturbation = 0.5
+        self.default_sigma_atomic_coord_perturbation = 1.0
         # the maximum allowed perturbation of an atomic coordinate
         # (in Angstroms)
         self.default_max_atomic_coord_perturbation = 5.0
