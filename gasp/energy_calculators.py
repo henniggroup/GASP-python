@@ -111,9 +111,10 @@ class VaspEnergyCalculator(object):
 
         # run 'callvasp' script as a subprocess to run VASP
         print('Starting VASP calculation on organism {} '.format(organism.id))
+        devnull = open(os.devnull, 'w')
         try:
-            subprocess.call(['callvasp', job_dir_path],
-                            stderr=subprocess.STDOUT)
+            subprocess.call(['callvasp', job_dir_path], stdout=devnull,
+                            stderr=devnull)
         except:
             print('Error running VASP on organism {} '.format(organism.id))
             dictionary[key] = None
