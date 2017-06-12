@@ -39,6 +39,8 @@ def print_parameters(objects_dict):
     energy_calculator = objects_dict['energy_calculator']
     pool = objects_dict['pool']
     variations = objects_dict['variations']
+    surrogate_model = objects_dict['surrogate_model']
+    sm_output_interpreter = objects_dict['sm_output_interpreter']
 
     # make the file where the parameters will be printed
     with open(os.getcwd() + '/ga_parameters', 'w') as parameters_file:
@@ -83,6 +85,14 @@ def print_parameters(objects_dict):
                                       energy_calculator.potcar_files[key] +
                                       '\n')
         parameters_file.write('\n')
+
+        # write the surrogate model, if one is being used
+        if surrogate_model.name != 'dummy':
+            parameters_file.write('SurrogateModel: \n')
+            parameters_file.write('    ' + surrogate_model.name + ': \n')
+            if surrogate_model.name == 'shreyas':
+                pass
+                # TODO: print model-specific keywords and values here
 
         # write the number of energy calculations to run at once
         parameters_file.write('NumCalcsAtOnce: ' + str(num_calcs_at_once) +

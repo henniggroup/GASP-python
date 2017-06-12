@@ -17,6 +17,7 @@ from gasp import variations
 from gasp import energy_calculators
 from gasp import organism_creators
 from gasp import development
+from gasp import surrogate_models
 
 from pymatgen.core.structure import Structure
 
@@ -247,6 +248,29 @@ def make_objects(parameters):
     pool.selection = selection
     pool.comp_fitness_weight = comp_fitness_weight
     objects_dict['pool'] = pool
+
+    # make the surrogate model and surrogate model output interpreter
+    temp_dir_path = os.getcwd() + objects_dict['run_dir_name'] + '/temp/'
+    if 'SurrogateModel' not in parameters:
+        surrogate_model = surrogate_models.DummyModel(None, temp_dir_path)
+        sm_output_interpreter = surrogate_models.SMOutputInterpreter(None)
+    elif parameters['SurrogateModel'] in (None, 'default'):
+        surrogate_model = surrogate_models.DummyModel(None, temp_dir_path)
+        sm_output_interpreter = surrogate_models.SMOutputInterpreter(None)
+    elif 'shreyas_model' in parameters['SurrogateModel']:
+        if objects_dict['energy_calculator'].name != 'vasp':
+            print('Shreyas surrogate model only works if VASP is used for the '
+                  'energy calculations.')
+            print('Quitting...')
+            quit()
+        # TODO: create instances of ShreyasModel and SMOutputInterpreter here
+        # TODO: check for issues with the model input parameters here, and
+        # print error messages if needed
+
+    # TODO: other models go here
+
+    objects_dict['surrogate_model'] = surrogate_model
+    objects_dict['sm_output_interpreter'] = sm_output_interpreter
 
     return objects_dict
 

@@ -12,7 +12,7 @@ This module contains classes that correspond to surrogate models, which
 estimate the energy per atom and/or relaxed structure of an organism before
 its energy is actually computed with an external energy code.
 
-With the exception of OutputInterpreter, all classes in this module must
+With the exception of SMOutputInterpreter, all classes in this module must
 implement the following three methods:
 
 add_relaxed_organism()
@@ -21,7 +21,10 @@ predict_relaxed_cell()
 
 1. ShreyasModel: predicts energies using Shreyas' machine learning model
 
-2. OutputInterpreter: interprets the output of the surrogate model
+2. DummyModel: dummy model in case no surrogate is specified in the input file.
+    Does nothing.
+
+2. SMOutputInterpreter: interprets the output of the surrogate model
 
 """
 
@@ -49,8 +52,9 @@ class ShreyasModel(object):
                 job directories where the energy calculations are done
         """
 
-        # TODO: implement me
-        pass
+        # TODO: implement me. It would be good to give default parameter values
+        #    here if possible.
+        self.name = 'shreyas'
 
     def add_relaxed_organism(self, relaxed_organism):
         """
@@ -96,7 +100,26 @@ class ShreyasModel(object):
         return None
 
 
-class OutputInterpreter(object):
+class DummyModel(object):
+    """
+    Dummy model to use if no surrogate is specified in the input file.
+    """
+
+    def __init__(self, model_params, temp_dir_path):
+        self.name = 'dummy'
+        pass
+
+    def add_relaxed_organism(self, relaxed_organism):
+        pass
+
+    def predict_epa(self, unrelaxed_organism):
+        return None
+
+    def predict_relaxed_cell(self, unrelaxed_organism):
+        return None
+
+
+class SMOutputInterpreter(object):
     """
     To interpret the output of surrogate models.
     """
@@ -141,7 +164,7 @@ class OutputInterpreter(object):
         """
 
         # first check if the predicted epa is None
-        if predicted_epa is None:
+        if predicted_epa is None or len(current_population) == 0:
             return True
 
         # for fixed-composition searches

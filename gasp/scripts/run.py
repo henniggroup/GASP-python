@@ -59,6 +59,8 @@ def main():
     pool = objects_dict['pool']
     variations = objects_dict['variations']
     id_generator = objects_dict['id_generator']
+    surrogate_model = objects_dict['surrogate_model']
+    sm_output_interpreter = objects_dict['sm_output_interpreter']
 
     # make the run directory and move into it
     garun_dir = str(os.getcwd()) + '/' + run_dir_name
@@ -110,14 +112,27 @@ def main():
                             # whole_pop don't change upon relaxation
                             whole_pop.append(copy.deepcopy(new_organism))
                             geometry.pad(new_organism.cell)
-                            stopping_criteria.update_calc_counter()
-                            index = len(threads)
-                            thread = threading.Thread(
-                                target=energy_calculator.do_energy_calculation,
-                                args=[new_organism, relaxed_organisms,
-                                      index, composition_space])
-                            thread.start()
-                            threads.append(thread)
+                            # check the surrogate model's prediction
+                            predicted_epa = surrogate_model.predict_epa(
+                                new_organism)
+                            if sm_output_interpreter.is_below_threshold(
+                                    new_organism, predicted_epa,
+                                    composition_space,
+                                    initial_population.initial_population):
+                                predicted_cell = \
+                                    surrogate_model.predict_relaxed_cell(
+                                        new_organism)
+                                if predicted_cell is not None:
+                                    new_organism.cell = predicted_cell
+                                # do the energy calculation
+                                stopping_criteria.update_calc_counter()
+                                index = len(threads)
+                                thread = threading.Thread(
+                                    target=energy_calculator.do_energy_calculation,
+                                    args=[new_organism, relaxed_organisms,
+                                          index, composition_space])
+                                thread.start()
+                                threads.append(thread)
 
             # process finished calculations and start new ones
             else:
@@ -169,6 +184,13 @@ def main():
                                     print('Number of energy calculations so '
                                           'far: {} '.format(
                                               num_finished_calcs))
+                                    # give a copy of the padded organism to the
+                                    # surrogate model
+                                    org_copy = copy.deepcopy(relaxed_organism)
+                                    geometry.pad(org_copy.cell)
+                                    surrogate_model.add_relaxed_organism(
+                                        org_copy)
+                                    # update creator status if needed
                                     if creator.is_successes_based and \
                                             relaxed_organism.made_by == \
                                             creator.name:
@@ -194,19 +216,33 @@ def main():
                                     redundant_organism = \
                                         redundancy_guard.check_redundancy(
                                             new_organism, whole_pop, geometry)
-                                    if redundant_organism is None:  # not redundant
+                                    if redundant_organism is None:
+                                        # not redundant
                                         whole_pop.append(
                                             copy.deepcopy(new_organism))
                                         geometry.pad(new_organism.cell)
-                                        stopping_criteria.update_calc_counter()
-                                        new_thread = threading.Thread(
-                                            target=energy_calculator.do_energy_calculation,
-                                            args=[new_organism,
-                                                  relaxed_organisms, index,
-                                                  composition_space])
-                                        new_thread.start()
-                                        threads[index] = new_thread
-                                        started_new_calc = True
+                                        # check the surrogate model prediction
+                                        predicted_epa = surrogate_model.predict_epa(
+                                            new_organism)
+                                        if sm_output_interpreter.is_below_threshold(
+                                                new_organism, predicted_epa,
+                                                composition_space,
+                                                initial_population.initial_population):
+                                            predicted_cell = surrogate_model.predict_relaxed_cell(
+                                                new_organism)
+                                            if predicted_cell is not None:
+                                                new_organism.cell = predicted_cell
+                                            # do the energy calculation
+                                            stopping_criteria.update_calc_counter()
+                                            new_thread = threading.Thread(
+                                                target=energy_calculator.do_energy_calculation,
+                                                args=[new_organism,
+                                                      relaxed_organisms,
+                                                      index,
+                                                      composition_space])
+                                            new_thread.start()
+                                            threads[index] = new_thread
+                                            started_new_calc = True
 
     # depending on how the loop above exited, update bookkeeping
     if not stopping_criteria.are_satisfied:
@@ -259,6 +295,11 @@ def main():
                                                    progress)
                             print('Number of energy calculations so far: '
                                   '{} '.format(num_finished_calcs))
+                            # give a copy of the padded organism to the
+                            # surrogate model
+                            org_copy = copy.deepcopy(relaxed_organism)
+                            geometry.pad(org_copy.cell)
+                            surrogate_model.add_relaxed_organism(org_copy)
 
     # check if the stopping criteria were already met when making the initial
     # population
@@ -284,14 +325,23 @@ def main():
             developer, redundancy_guard, composition_space, constraints)
         whole_pop.append(copy.deepcopy(unrelaxed_offspring))
         geometry.pad(unrelaxed_offspring.cell)
-        stopping_criteria.update_calc_counter()
-        index = len(threads)
-        new_thread = threading.Thread(
-            target=energy_calculator.do_energy_calculation,
-            args=[unrelaxed_offspring, relaxed_organisms, index,
-                  composition_space])
-        new_thread.start()
-        threads.append(new_thread)
+        # check the surrogate model's prediction
+        predicted_epa = surrogate_model.predict_epa(new_organism)
+        if sm_output_interpreter.is_below_threshold(
+                new_organism, predicted_epa, composition_space,
+                initial_population.initial_population):
+            predicted_cell = surrogate_model.predict_relaxed_cell(new_organism)
+            if predicted_cell is not None:
+                new_organism.cell = predicted_cell
+            # do the energy calculation
+            stopping_criteria.update_calc_counter()
+            index = len(threads)
+            new_thread = threading.Thread(
+                target=energy_calculator.do_energy_calculation,
+                args=[unrelaxed_offspring, relaxed_organisms,
+                      index, composition_space])
+            new_thread.start()
+            threads.append(new_thread)
 
     # process finished calculations and start new ones
     while not stopping_criteria.are_satisfied:
@@ -368,6 +418,11 @@ def main():
                                                    progress)
                             print('Number of energy calculations so far: '
                                   '{} '.format(num_finished_calcs))
+                            # give a copy of the padded organism to the
+                            # surrogate model
+                            org_copy = copy.deepcopy(relaxed_organism)
+                            geometry.pad(org_copy.cell)
+                            surrogate_model.add_relaxed_organism(org_copy)
 
                 # make another offspring organism
                 if not stopping_criteria.are_satisfied:
@@ -378,13 +433,23 @@ def main():
                             composition_space, constraints)
                     whole_pop.append(copy.deepcopy(unrelaxed_offspring))
                     geometry.pad(unrelaxed_offspring.cell)
-                    stopping_criteria.update_calc_counter()
-                    new_thread = threading.Thread(
-                        target=energy_calculator.do_energy_calculation,
-                        args=[unrelaxed_offspring, relaxed_organisms,
-                              index, composition_space])
-                    new_thread.start()
-                    threads[index] = new_thread
+                    # check the surrogate model's prediction
+                    predicted_epa = surrogate_model.predict_epa(new_organism)
+                    if sm_output_interpreter.is_below_threshold(
+                            new_organism, predicted_epa, composition_space,
+                            initial_population.initial_population):
+                        predicted_cell = surrogate_model.predict_relaxed_cell(
+                            new_organism)
+                        if predicted_cell is not None:
+                            new_organism.cell = predicted_cell
+                        # do the energy calculation
+                        stopping_criteria.update_calc_counter()
+                        new_thread = threading.Thread(
+                            target=energy_calculator.do_energy_calculation,
+                            args=[unrelaxed_offspring, relaxed_organisms,
+                                  index, composition_space])
+                        new_thread.start()
+                        threads[index] = new_thread
 
     # process all the calculations that were still running when the
     # stopping criteria were achieved
