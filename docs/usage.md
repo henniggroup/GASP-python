@@ -746,7 +746,7 @@ Specifies the lattice angle tolerance, in degrees. This value is passed to the p
 
    * **site_tol**
 
-Specifies the tolerance for the locations of the atoms in the structure, in Angstroms. It is defined as the fraction of the average free length per atom in the structure, where the average free length per atom is the cube root of the average volume per atom of the structure. This value is passed to the pymatgen.analysis.structure_matcher.StructureMatcher class as the *stol* parameter. Optional, and defaults to 0.1.
+Specifies the tolerance for the locations of the atoms in the structure. It is defined as the fraction of the average free length per atom in the structure, where the average free length per atom is the cube root of the average volume per atom of the structure. This value is passed to the pymatgen.analysis.structure_matcher.StructureMatcher class as the *stol* parameter. Optional, and defaults to 0.1.
 
    * **use_primitive_cell**
 
