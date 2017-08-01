@@ -797,7 +797,7 @@ class RedundancyGuard(object):
         # whether to check if structures are equal to supercells of each other
         self.default_attempt_supercell = True
         # RMSD tolerance for comparing clusters
-        self.default_rmsd_tol = 2.0
+        self.default_rmsd_tol = 0.1
         # the epa difference interval
         self.default_epa_diff = 0.0
 

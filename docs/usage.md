@@ -758,9 +758,9 @@ Specifies whether the matching algorithm should try to match structures with dif
 
    * **rmsd_tol**
 
-Specifies the RMSD difference threshold for whether two clusters are considered different. This value is passed to the pymatgen.analysis.molecule_matcher.MoleculeMatcher class as the *tolerance* parameter. Only used when searching for clusters (see the [Geometry](#geometry) keyword). Optional, and defaults to 2.0.  
+Specifies the RMSD difference threshold for whether two clusters are considered different. This value is passed to the pymatgen.analysis.molecule_matcher.MoleculeMatcher class as the *tolerance* parameter. Only used when searching for clusters or wires (see the [Geometry](#geometry) keyword). Optional, and defaults to 0.1.  
 
-We have observed that pymatgen's molecule matcher doesn't always identify duplicate clusters. For this reason, it can be helpful to set the **epa_diff** keyword (see below) to a small nonzero value when searching for clusters. 
+We have observed that pymatgen's molecule matcher doesn't always identify duplicate clusters, and it also sometimes gives false positives. We have chosen a fairly conservative tolerance for the default to help prevent false positives. To not miss duplicates that aren't identified by the molecule matcher, we recommend using the **epa_diff** keyword (see below) and setting it to a small nonzero value when searching for clusters or wires. 
 
    * **epa_diff**
 
