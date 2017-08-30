@@ -4,24 +4,24 @@ Files to run a genetic algorithm structure search for Au clusters containing 13 
 Description of files
 ====================
 
-**ga_input.yaml** 
+ga_input.yaml 
 
 	Main input file for GASP. See the `usage file`_ for descriptions of each keyword and option. 
 
 .. _usage file: ../../docs/usage.md
 
 
-**in.min** 
+in.min 
 
 	LAMMPS input script.
 
 
-**Au_u3.eam** 
+Au_u3.eam 
 
 	LAMMPS file containing the EAM potential.
 
 
-**calllammps** 
+calllammps 
 
 	Script called by GASP to run a LAMMPS calculation.
 
@@ -56,3 +56,4 @@ When we ran this search, GASP found a cluster forming a perfect icosahedron (sho
 	:height: 429 px
 	:width: 375 px
 	:scale: 50 %
+	:align: center
