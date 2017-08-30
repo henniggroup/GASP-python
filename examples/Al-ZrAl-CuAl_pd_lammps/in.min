@@ -1,0 +1,17 @@
+units		metal	
+dimension	3
+atom_style	charge
+boundary	p p p
+read_data	in.data
+
+pair_style eam/alloy
+pair_coeff * *  /location/of/ZrCuAl.eam.alloy Zr Al Cu
+
+neigh_modify one 5000
+minimize 0.0 1.0e-8 1 1
+fix 1 all box/relax tri 1e4 vmax 0.001
+minimize 0.0 1.0e-8 1000000 10000000 
+dump myDump all atom 100000000000000 dump.atom
+dump_modify myDump sort 1 scale no 
+fix 1 all box/relax tri 0 vmax 0.001
+minimize 0.0 1.0e-8 1000000 10000000 

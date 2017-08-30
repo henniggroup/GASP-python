@@ -1,0 +1,17 @@
+CompositionSpace: 
+    - ZrAl
+    - CuAl
+    - Al 
+
+EnergyCode: 
+    lammps:
+        input_script: /location/of/in.min
+
+InitialPopulation:
+    from_files:
+        path_to_folder: /location/of/ref_states/
+    random:
+        number: 102
+
+StoppingCriteria: 
+    num_energy_calcs: 3000

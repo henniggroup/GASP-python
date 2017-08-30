@@ -46,7 +46,7 @@ Note that we assume GASP-python and LAMMPS are already installed on your system.
 
 5. Move calllammps to a location in your system's PATH and make it executable.  
 
-6. To start the search and pipe the output to a file called ga_output, move into the folder containing ga_input.yaml and type::
+6. To start the search and save the output to a file called ga_output, move into the folder containing ga_input.yaml and type::
 
 	run.py ga_input.yaml 2>&1 | tee ga_output
 
