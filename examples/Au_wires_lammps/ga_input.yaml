@@ -1,0 +1,28 @@
+CompositionSpace: 
+    - Au 
+
+EnergyCode: 
+    lammps:
+        input_script: /location/of/in.min
+
+InitialPopulation:
+    random:
+        number: 20
+
+Pool:
+    size: 15
+    num_promoted: 2
+
+Constraints: 
+    max_num_atoms: 30 
+    max_lattice_length: 50 
+
+Geometry: 
+    shape: wire 
+    max_size: 5 
+
+RedundancyGuard:
+    epa_diff: 0.00001
+
+StoppingCriteria: 
+    num_energy_calcs: 1500
