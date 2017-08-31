@@ -50,7 +50,7 @@ Note that we assume GASP-python and LAMMPS are already installed on your system.
 
 	run.py ga_input.yaml 2>&1 | tee ga_output
 
-When we ran this search, GASP found a wire structure composed of 5 atom rings surrounding a central linear chain (shown below) to have the lowest energy. 
+When we ran this search, GASP found a wire structure composed of 5-atom rings surrounding a central linear chain (shown below) to have the lowest energy. 
 
 .. image:: wire.png
 	:height: 164 px

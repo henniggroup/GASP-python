@@ -1,0 +1,15 @@
+#!/bin/bash
+# script to run gulp
+# usage: callgulp /path/to/gulp/input/file
+
+# get the name of the input file, without the path
+input_file=$(basename $1)
+
+# get the path to the job directory containing the input file
+dir_path=$(dirname $1)
+
+# move into the job directory
+cd $dir_path
+
+# run gulp on the input file
+/location/of/gulp/binary < $input_file
