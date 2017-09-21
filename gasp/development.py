@@ -27,9 +27,8 @@ from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element, DummySpecie
 from pymatgen.core.structure import Molecule
 from pymatgen.core.sites import Site
-from pymatgen.phasediagram.maker import CompoundPhaseDiagram
-from pymatgen.phasediagram.entries import PDEntry
-from pymatgen.phasediagram.analyzer import PDAnalyzer
+from pymatgen.analysis.phase_diagram import CompoundPhaseDiagram
+from pymatgen.analysis.phase_diagram import PDEntry
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.analysis.molecule_matcher import IsomorphismMolAtomMapper, \
     MoleculeMatcher
@@ -584,13 +583,12 @@ class Developer(object):
                 value.
         """
 
-        # make CompoundPhaseDiagram and PDAnalyzer objects
+        # make CompoundPhaseDiagram object
         pdentries = []
         for org in pool.promotion_set:
             pdentries.append(PDEntry(org.composition, org.total_energy))
         compound_pd = CompoundPhaseDiagram(pdentries,
                                            composition_space.endpoints)
-        pdanalyzer = PDAnalyzer(compound_pd)
 
         # transform the organism's composition
         transformed_entry = compound_pd.transform_entries(
@@ -618,7 +616,7 @@ class Developer(object):
 
         # make Composition object with dummy species, get decomposition
         dummy_comp = Composition(dummy_species_amounts)
-        decomp = pdanalyzer.get_decomposition(dummy_comp)
+        decomp = compound_pd.get_decomposition(dummy_comp)
 
         # get original compositions and amounts from the decomposition
         fractions = []

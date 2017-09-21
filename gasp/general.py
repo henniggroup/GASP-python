@@ -41,9 +41,9 @@ from pymatgen.core.structure import Structure, Molecule
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element, DummySpecie
-from pymatgen.phasediagram.maker import CompoundPhaseDiagram
-from pymatgen.phasediagram.entries import PDEntry
-from pymatgen.phasediagram.analyzer import PDAnalyzer
+from pymatgen.analysis.phase_diagram import CompoundPhaseDiagram
+from pymatgen.analysis.phase_diagram import PDEntry
+#from pymatgen.analysis.phase_diagram import PDAnalyzer
 from pymatgen.transformations.standard_transformations import \
     RotationTransformation
 
@@ -149,7 +149,6 @@ class Organism(object):
                 pdentries.append(PDEntry(endpoint, -10))
             compound_pd = CompoundPhaseDiagram(pdentries,
                                                composition_space.endpoints)
-            pdanalyzer = PDAnalyzer(compound_pd)
 
             # transform the organism's composition
             transformed_entry = compound_pd.transform_entries(
@@ -180,7 +179,7 @@ class Organism(object):
 
             # make Composition object with dummy species, get decomposition
             dummy_comp = Composition(dummy_species_amounts)
-            decomp = pdanalyzer.get_decomposition(dummy_comp)
+            decomp = compound_pd.get_decomposition(dummy_comp)
 
             # get amounts of the decomposition in terms of the (untransformed)
             # composition space endpoints
@@ -921,9 +920,6 @@ class Pool(object):
         compound_pd = CompoundPhaseDiagram(pdentries_list,
                                            composition_space.endpoints)
 
-        # create a pd analyzer object from the compound phase diagram
-        pd_analyzer = PDAnalyzer(compound_pd)
-
         # transform the pdentries and put them in a dictionary, with the
         # organism id's as the keys
         transformed_pdentries = {}
@@ -934,7 +930,7 @@ class Pool(object):
         # put the values in a dictionary, with the organism id's as the keys
         values = {}
         for org_id in pdentries:
-            values[org_id] = pd_analyzer.get_e_above_hull(
+            values[org_id] = compound_pd.get_e_above_hull(
                 transformed_pdentries[org_id])
 
         # assign values to the organisms
