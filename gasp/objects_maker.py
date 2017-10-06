@@ -351,14 +351,6 @@ def make_organism_creators(parameters, composition_space, constraints):
                                     endpoint.reduced_composition) and \
                                     endpoint not in provided_endpoints:
                                 provided_endpoints.append(endpoint)
-                    # check if we got them all
-                    for endpoint in composition_space.endpoints:
-                        if endpoint not in provided_endpoints:
-                            print('Error: valid structure files not provided '
-                                  'to the initial population for all '
-                                  'endpoints of the composition space.')
-                            print('Quitting...')
-                            quit()
                 initial_organism_creators.append(files_organism_creator)
 
         # TODO: if other organism creators are used, they should be
