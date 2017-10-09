@@ -14,6 +14,7 @@ used by the genetic algorithm during the search.
 
 from gasp import general
 from gasp import population
+from gasp import geometry as geo
 from gasp import variations
 from gasp import energy_calculators
 from gasp import organism_creators
@@ -66,10 +67,21 @@ def make_objects(parameters):
     objects_dict['constraints'] = constraints
 
     # make the geometry object
-    if 'Geometry' in parameters:
-        geometry = development.Geometry(parameters['Geometry'])
+    if 'Geometry' not in parameters:
+        geometry = geo.Bulk()
+    elif parameters['Geometry'] in (None, 'default'):
+        geometry = geo.Bulk()
+    elif 'shape' not in parameters['Geometry']:
+        geometry = geo.Bulk()
+    elif parameters['Geometry']['shape'] == 'cluster':
+        geometry = geo.Cluster(parameters['Geometry'])
+    elif parameters['Geometry']['shape'] == 'wire':
+        geometry = geo.Wire(parameters['Geometry'])
+    elif parameters['Geometry']['shape'] == 'sheet':
+        geometry = geo.Sheet(parameters['Geometry'])
+    # TODO: add any other non-bulk geometries here
     else:
-        geometry = development.Geometry('default')
+        geometry = geo.Bulk()
 
     objects_dict['geometry'] = geometry
 
