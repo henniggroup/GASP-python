@@ -7,8 +7,7 @@ from __future__ import division, unicode_literals, print_function
 """
 Population module:
 
-This module contains classes that classes used to hold the population of
-organisms.
+This module contains classes used to hold the population of organisms.
 
 1. InitialPopulation: represents the initial population of organisms,
         produced from one or more of the organism creators
