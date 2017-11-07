@@ -1,0 +1,15 @@
+units		real
+dimension	3
+atom_style	charge
+boundary	f f f
+read_data	in.data
+
+pair_style eam 
+pair_coeff * * /location/of/Au_u3.eam  ## Au 
+
+neigh_modify one 5000
+minimize 0.0 1.0e-8 1 1
+minimize 0.0 1.0e-8 1000000 10000000 
+dump myDump all atom 100000000000000 dump.atom
+dump_modify myDump sort 1 scale no 
+minimize 0.0 1.0e-8 1000000 10000000 

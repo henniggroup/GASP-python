@@ -14,6 +14,7 @@ Usage: python run.py /path/to/gasp/input/file
 """
 
 from gasp import general
+from gasp import population
 from gasp import objects_maker
 from gasp import parameters_printer
 
@@ -80,7 +81,7 @@ def main():
     whole_pop = []
     num_finished_calcs = 0
     threads = []
-    initial_population = general.InitialPopulation(run_dir_name)
+    initial_population = population.InitialPopulation(run_dir_name)
 
     # To temporarily hold relaxed organisms. The key to each relaxed organism
     # is the index of the Thread in the list threads that did the energy

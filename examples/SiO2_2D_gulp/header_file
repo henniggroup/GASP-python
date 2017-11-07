@@ -1,0 +1,2 @@
+opti conj
+switch_minimiser bfgs gnorm 0.02

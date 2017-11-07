@@ -1,0 +1,11 @@
+CompositionSpace: 
+    - SiO2
+
+EnergyCode: 
+    gulp: 
+        header_file: /location/of/header_file
+        potential_file: /location/of/potential_file
+
+Geometry: 
+    shape: sheet 
+    max_size: 5

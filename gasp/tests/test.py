@@ -10,8 +10,10 @@ This module contains the unit tests for GASP.
 
 """
 
-from gasp import general, development, variations, energy_calculators, \
-    organism_creators, objects_maker
+from gasp import general, development, variations, population, \
+    energy_calculators, organism_creators, objects_maker
+
+from gasp import geometry as geo
 
 from pymatgen.core.periodic_table import Element
 
@@ -64,7 +66,7 @@ class TestMating(unittest.TestCase):
         old_volume = copy.deepcopy(cell.lattice.volume)
 
         # test with bulk geometry
-        geometry = development.Geometry({'shape': 'bulk'})
+        geometry = geo.Bulk()
         self.mating.double_parent(cell, geometry)
         self.assertEqual(round(cell.lattice.a, 5),
                          round(2*old_lattice_lengths[0], 5))
@@ -123,7 +125,7 @@ class TestMating(unittest.TestCase):
         self.assertEqual(cell.num_sites, 2*old_num_atoms)
 
         # test with sheet geometry
-        geometry = development.Geometry({'shape': 'sheet'})
+        geometry = geo.Sheet({'shape': 'sheet'})
         lattice = [[1, 0, 0], [0, 2, 0], [0, 0, 3]]
         cell = general.Cell(lattice, species, coords)
         old_lattice_lengths = copy.deepcopy(cell.lattice.abc)
@@ -187,7 +189,7 @@ class TestMating(unittest.TestCase):
         self.assertEqual(cell.num_sites, 2*old_num_atoms)
 
         # test with wire geometry
-        geometry = development.Geometry({'shape': 'wire'})
+        geometry = geo.Wire({'shape': 'wire'})
         lattice = [[1, 0, 0], [0, 2, 0], [0, 0, 3]]
         cell = general.Cell(lattice, species, coords)
         old_lattice_lengths = copy.deepcopy(cell.lattice.abc)
@@ -235,7 +237,7 @@ class TestMating(unittest.TestCase):
         self.assertEqual(cell.num_sites, 2*old_num_atoms)
 
         # test with cluster geometry and a random lattice
-        geometry = development.Geometry({'shape': 'cluster'})
+        geometry = geo.Cluster({'shape': 'cluster'})
         lattice = [
             [random.uniform(-5, 5), random.uniform(-5, 5),
              random.uniform(-5, 5)],
@@ -260,7 +262,13 @@ class TestMating(unittest.TestCase):
     def test_grow_parent_cell(self):
         # non-cluster geometry
         shape = random.choice(['bulk', 'sheet', 'wire'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'bulk':
+            geometry = geo.Bulk()
+        elif shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+
         species_1 = [Element('Cu')]
         coords_1 = [[0.5, 0.5, 0.5]]
         lattice_1 = [[3, 0, 0], [0, 3, 0], [0, 0, 3]]
@@ -341,7 +349,7 @@ class TestMating(unittest.TestCase):
                          round(old_volume_2, 5))
 
         # cluster geometry
-        geometry = development.Geometry({'shape': 'cluster'})
+        geometry = geo.Cluster({'shape': 'cluster'})
         species_1 = [Element('Cu')]
         coords_1 = [[0.5, 0.5, 0.5]]
         lattice_1 = [[3, 0, 0], [0, 3, 0], [0, 0, 3]]
@@ -454,7 +462,14 @@ class TestMating(unittest.TestCase):
 
         # make the geometry and constraints
         shape = random.choice(['bulk', 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'bulk':
+            geometry = geo.Bulk()
+        elif shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
         composition_space = general.CompositionSpace(['Cu', 'Al'])
         constraints = development.Constraints(None, composition_space)
 
@@ -484,7 +499,7 @@ class TestMating(unittest.TestCase):
         old_num_atoms = copy.deepcopy(cell.num_sites)
 
         # test with bulk geometry and random lattice vector index
-        geometry = development.Geometry({'shape': 'bulk'})
+        geometry = geo.Bulk()
         vector_index = random.choice([0, 1, 2])
         self.mating.do_random_shift(cell, vector_index, geometry, random)
         self.assertEqual(round(cell.lattice.volume, 5), round(old_volume, 5))
@@ -495,7 +510,7 @@ class TestMating(unittest.TestCase):
                 self.assertTrue(coord < 1.0)
 
         # test with sheet geometry and lattice vector index for shift
-        geometry = development.Geometry({'shape': 'sheet'})
+        geometry = geo.Sheet({'shape': 'sheet'})
         vector_index = random.choice([0, 1])
         self.mating.do_random_shift(cell, vector_index, geometry, random)
         self.mating.do_random_shift(cell, vector_index, geometry, random)
@@ -516,7 +531,7 @@ class TestMating(unittest.TestCase):
         self.assertTrue(np.array_equal(cell.frac_coords, old_frac_coords))
 
         # test with wire geometry and lattice vector index for shift
-        geometry = development.Geometry({'shape': 'wire'})
+        geometry = geo.Wire({'shape': 'wire'})
         vector_index = 2
         self.mating.do_random_shift(cell, vector_index, geometry, random)
         self.mating.do_random_shift(cell, vector_index, geometry, random)
@@ -537,7 +552,7 @@ class TestMating(unittest.TestCase):
         self.assertTrue(np.array_equal(cell.frac_coords, old_frac_coords))
 
         # test with cluster geometry and random lattice vector index (no shift)
-        geometry = development.Geometry({'shape': 'cluster'})
+        geometry = geo.Cluster({'shape': 'cluster'})
         vector_index = random.choice([0, 1, 2])
         old_frac_coords = cell.frac_coords
         self.mating.do_random_shift(cell, vector_index, geometry, random)
@@ -558,20 +573,20 @@ class TestMating(unittest.TestCase):
         constraints = development.Constraints(None, composition_space)
 
         # test with bulk geometry
-        geometry = development.Geometry({'shape': 'bulk'})
+        geometry = geo.Bulk()
         self.mating.do_random_rotation(cell, geometry, constraints, random)
         self.assertEqual(cell.num_sites, old_num_atoms)
         self.assertTrue(np.array_equal(cell.frac_coords, old_frac_coords))
 
         # test with sheet geometry
-        geometry = development.Geometry({'shape': 'sheet'})
+        geometry = geo.Sheet({'shape': 'sheet'})
         old_frac_coords = cell.frac_coords
         self.mating.do_random_rotation(cell, geometry, constraints, random)
         self.assertEqual(cell.num_sites, old_num_atoms)
         self.assertTrue(np.array_equal(cell.frac_coords, old_frac_coords))
 
         # test with wire geometry
-        geometry = development.Geometry({'shape': 'wire'})
+        geometry = geo.Wire({'shape': 'wire'})
         self.mating.do_random_rotation(cell, geometry, constraints, random)
         self.assertEqual(cell.num_sites, old_num_atoms)
         for site_coords in cell.frac_coords:
@@ -580,7 +595,7 @@ class TestMating(unittest.TestCase):
                 self.assertTrue(coord < 1.0)
 
         # test with cluster geometry
-        geometry = development.Geometry({'shape': 'cluster'})
+        geometry = geo.Cluster({'shape': 'cluster'})
         self.mating.do_random_rotation(cell, geometry, constraints, random)
         self.assertEqual(cell.num_sites, old_num_atoms)
         for site_coords in cell.frac_coords:
@@ -608,7 +623,14 @@ class TestMating(unittest.TestCase):
         lattice = [[3, 0, 0], [0, 3, 0], [0, 0, 3]]
         cell = general.Cell(lattice, species, coords)
         shape = random.choice(['bulk', 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
         composition_space = general.CompositionSpace(['Cu', 'Al'])
         constraints = development.Constraints(None, composition_space)
         geometry.unpad(cell, constraints)
@@ -625,7 +647,14 @@ class TestMating(unittest.TestCase):
         lattice = [[3, 0, 0], [0, 3, 0], [0, 0, 3]]
         cell = general.Cell(lattice, species, coords)
         shape = random.choice(['bulk', 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
         composition_space = general.CompositionSpace(['Cu', 'Al'])
         constraints = development.Constraints(None, composition_space)
         geometry.unpad(cell, constraints)
@@ -642,7 +671,14 @@ class TestMating(unittest.TestCase):
         lattice = [[3, 0, 0], [0, 3, 0], [0, 0, 3]]
         cell = general.Cell(lattice, species, coords)
         shape = random.choice(['bulk', 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
         composition_space = general.CompositionSpace(['Cu', 'Al'])
         constraints = development.Constraints(None, composition_space)
         geometry.unpad(cell, constraints)
@@ -657,7 +693,14 @@ class TestMating(unittest.TestCase):
         lattice = [[3, 0, 0], [0, 3, 0], [0, 0, 3]]
         cell = general.Cell(lattice, species, coords)
         shape = random.choice(['bulk', 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
         composition_space = general.CompositionSpace(['Cu', 'Al'])
         constraints = development.Constraints(None, composition_space)
         geometry.unpad(cell, constraints)
@@ -672,7 +715,14 @@ class TestMating(unittest.TestCase):
         lattice = [[3, 0, 0], [0, 3, 0], [0, 0, 3]]
         cell = general.Cell(lattice, species, coords)
         shape = random.choice(['bulk', 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
         composition_space = general.CompositionSpace(['Cu', 'Al'])
         constraints = development.Constraints(None, composition_space)
         geometry.unpad(cell, constraints)
@@ -687,7 +737,14 @@ class TestMating(unittest.TestCase):
         lattice = [[3, 0, 0], [0, 3, 0], [0, 0, 3]]
         cell = general.Cell(lattice, species, coords)
         shape = random.choice(['bulk', 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
         composition_space = general.CompositionSpace(['Cu', 'Al'])
         constraints = development.Constraints(None, composition_space)
         geometry.unpad(cell, constraints)
@@ -701,8 +758,15 @@ class TestMating(unittest.TestCase):
         composition_space = general.CompositionSpace(['AlCu'])
         constraints = development.Constraints(None, composition_space)
         shape = random.choice(['bulk,' 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
-        initial_population = general.InitialPopulation('doesnt_matter')
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -713,7 +777,7 @@ class TestMating(unittest.TestCase):
             if random_org is not None:
                 random_org.epa = random.random() - 2  # just make up an epa
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         composition_fitness_weight = general.CompositionFitnessWeight(None)
@@ -731,8 +795,15 @@ class TestMating(unittest.TestCase):
         composition_space = general.CompositionSpace(['Al', 'Cu'])
         constraints = development.Constraints(None, composition_space)
         shape = random.choice(['bulk,' 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
-        initial_population = general.InitialPopulation('doesnt_matter')
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -764,7 +835,7 @@ class TestMating(unittest.TestCase):
                 random_org.total_energy = \
                     random_org.epa*random_org.cell.num_sites
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         composition_fitness_weight = general.CompositionFitnessWeight(None)
@@ -802,7 +873,14 @@ class TestStructureMut(unittest.TestCase):
         cell = general.Cell(lattice, species, coords)
         old_cell = copy.deepcopy(cell)
         shape = random.choice(['bulk', 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
         composition_space = general.CompositionSpace(['Cu', 'Al'])
         constraints = development.Constraints(None, composition_space)
         geometry.unpad(cell, constraints)
@@ -828,8 +906,15 @@ class TestStructureMut(unittest.TestCase):
         composition_space = general.CompositionSpace(['AlCu'])
         constraints = development.Constraints(None, composition_space)
         shape = random.choice(['bulk,' 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
-        initial_population = general.InitialPopulation('doesnt_matter')
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -840,7 +925,7 @@ class TestStructureMut(unittest.TestCase):
             if random_org is not None:
                 random_org.epa = random.random() - 2  # just make up an epa
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         composition_fitness_weight = general.CompositionFitnessWeight(None)
@@ -861,8 +946,15 @@ class TestStructureMut(unittest.TestCase):
         composition_space = general.CompositionSpace(['Al', 'Cu'])
         constraints = development.Constraints(None, composition_space)
         shape = random.choice(['bulk,' 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
-        initial_population = general.InitialPopulation('doesnt_matter')
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -894,7 +986,7 @@ class TestStructureMut(unittest.TestCase):
                 random_org.total_energy = \
                     random_org.epa*random_org.cell.num_sites
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         composition_fitness_weight = general.CompositionFitnessWeight(None)
@@ -1168,8 +1260,15 @@ class TestNumAtomsMut(unittest.TestCase):
         composition_space = general.CompositionSpace(['AlCu'])
         constraints = development.Constraints(None, composition_space)
         shape = random.choice(['bulk,' 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
-        initial_population = general.InitialPopulation('doesnt_matter')
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -1180,7 +1279,7 @@ class TestNumAtomsMut(unittest.TestCase):
             if random_org is not None:
                 random_org.epa = random.random() - 2  # just make up an epa
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         composition_fitness_weight = general.CompositionFitnessWeight(None)
@@ -1201,8 +1300,15 @@ class TestNumAtomsMut(unittest.TestCase):
         composition_space = general.CompositionSpace(['Al', 'Cu'])
         constraints = development.Constraints(None, composition_space)
         shape = random.choice(['bulk,' 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
-        initial_population = general.InitialPopulation('doesnt_matter')
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -1234,7 +1340,7 @@ class TestNumAtomsMut(unittest.TestCase):
                 random_org.total_energy = \
                     random_org.epa*random_org.cell.num_sites
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         composition_fitness_weight = general.CompositionFitnessWeight(None)
@@ -1271,7 +1377,7 @@ class TestPermutation(unittest.TestCase):
         # need to make a Pool object to pass as an argument to the method
         composition_space = general.CompositionSpace(['AlCu'])
         constraints = development.Constraints(None, composition_space)
-        initial_population = general.InitialPopulation('doesnt_matter')
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -1281,7 +1387,7 @@ class TestPermutation(unittest.TestCase):
             if random_org is not None:
                 random_org.epa = random.random() - 2  # just make up an epa
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         pool.add_initial_population(initial_population, composition_space)
@@ -1394,8 +1500,15 @@ class TestPermutation(unittest.TestCase):
         composition_space = general.CompositionSpace(['AlCu'])
         constraints = development.Constraints(None, composition_space)
         shape = random.choice(['bulk,' 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
-        initial_population = general.InitialPopulation('doesnt_matter')
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -1406,7 +1519,7 @@ class TestPermutation(unittest.TestCase):
             if random_org is not None:
                 random_org.epa = random.random() - 2  # just make up an epa
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         composition_fitness_weight = general.CompositionFitnessWeight(None)
@@ -1427,8 +1540,15 @@ class TestPermutation(unittest.TestCase):
         composition_space = general.CompositionSpace(['Al', 'Cu'])
         constraints = development.Constraints(None, composition_space)
         shape = random.choice(['bulk,' 'sheet', 'wire', 'cluster'])
-        geometry = development.Geometry({'shape': shape})
-        initial_population = general.InitialPopulation('doesnt_matter')
+        if shape == 'sheet':
+            geometry = geo.Sheet({'shape': shape})
+        elif shape == 'wire':
+            geometry = geo.Wire({'shape': shape})
+        elif shape == 'cluster':
+            geometry = geo.Cluster({'shape': shape})
+        else:
+            geometry = geo.Bulk()
+        initial_population = population.InitialPopulation('doesnt_matter')
         random_org_creator = organism_creators.RandomOrganismCreator(
             None, composition_space, constraints)
         id_generator = general.IDGenerator()
@@ -1460,7 +1580,7 @@ class TestPermutation(unittest.TestCase):
                 random_org.total_energy = \
                     random_org.epa*random_org.cell.num_sites
                 initial_population.add_organism(random_org, composition_space)
-        pool = general.Pool(None, composition_space, 'doesnt_matter')
+        pool = population.Pool(None, composition_space, 'doesnt_matter')
         selection = general.SelectionProbDist(None, 20)
         pool.selection = selection
         composition_fitness_weight = general.CompositionFitnessWeight(None)

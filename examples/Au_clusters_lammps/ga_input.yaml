@@ -1,0 +1,21 @@
+CompositionSpace: 
+    - Au 
+
+EnergyCode: 
+    lammps:
+        input_script: /location/of/in.min
+
+Constraints: 
+    min_num_atoms: 13 
+    max_num_atoms: 13
+    max_lattice_length: 40 
+
+Geometry: 
+    shape: cluster 
+    max_size: 50
+
+RedundancyGuard:
+    epa_diff: 0.00001
+
+StoppingCriteria: 
+    num_energy_calcs: 1000 

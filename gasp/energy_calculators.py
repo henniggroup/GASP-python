@@ -374,9 +374,8 @@ class LammpsEnergyCalculator(object):
                                  atoms_data)
 
         # write the data to a file
-        # This method doesn't write the tilts, so we have to add those. It also
-        # writes the molecule id of each atom, so we have to remove those
-        lammps_data.write_data_file(job_dir_path + '/in.data')
+        # This method doesn't write the tilts, so we have to add those.
+        lammps_data.write_file(job_dir_path + '/in.data')
 
         # read the in.data file as a list of strings
         with open(job_dir_path + '/in.data', 'r') as f:
@@ -391,23 +390,6 @@ class LammpsEnergyCalculator(object):
         # build the string containing the tilts and add it
         tilts_string = str(xy) + ' ' + str(xz) + ' ' + str(yz) + ' xy xz yz\n'
         lines.insert(insertion_index, tilts_string)
-
-        # get the index of the line where the atoms info starts
-        atoms_index = 0
-        for line in lines:
-            if 'Atoms' in line:
-                atoms_index = lines.index(line) + 2
-
-        # remove the the molecule id's
-        for i in range(len(organism.cell.sites)):
-            split_line = lines[atoms_index + i].split()
-            del split_line[1]
-            modified_line = ''
-            for item in split_line:
-                modified_line = modified_line + item + ' '
-            modified_line = modified_line + '\n'
-            lines[atoms_index + i] = modified_line
-        lines[-1] = lines[-1] + '\n'
 
         # overwrite the in.data file with the new contents, including the tilts
         with open(job_dir_path + '/in.data', 'w') as f:

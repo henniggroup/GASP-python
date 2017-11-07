@@ -746,7 +746,7 @@ Specifies the lattice angle tolerance, in degrees. This value is passed to the p
 
    * **site_tol**
 
-Specifies the tolerance for the locations of the atoms in the structure, in Angstroms. It is defined as the fraction of the average free length per atom in the structure, where the average free length per atom is the cube root of the average volume per atom of the structure. This value is passed to the pymatgen.analysis.structure_matcher.StructureMatcher class as the *stol* parameter. Optional, and defaults to 0.1.
+Specifies the tolerance for the locations of the atoms in the structure. It is defined as the fraction of the average free length per atom in the structure, where the average free length per atom is the cube root of the average volume per atom of the structure. This value is passed to the pymatgen.analysis.structure_matcher.StructureMatcher class as the *stol* parameter. Optional, and defaults to 0.1.
 
    * **use_primitive_cell**
 
@@ -758,9 +758,9 @@ Specifies whether the matching algorithm should try to match structures with dif
 
    * **rmsd_tol**
 
-Specifies the RMSD difference threshold for whether two clusters are considered different. This value is passed to the pymatgen.analysis.molecule_matcher.MoleculeMatcher class as the *tolerance* parameter. Only used when searching for clusters (see the [Geometry](#geometry) keyword). Optional, and defaults to 2.0.  
+Specifies the RMSD difference threshold for whether two clusters are considered different. This value is passed to the pymatgen.analysis.molecule_matcher.MoleculeMatcher class as the *tolerance* parameter. Only used when searching for clusters or wires (see the [Geometry](#geometry) keyword). Optional, and defaults to 0.1.  
 
-We have observed that pymatgen's molecule matcher doesn't always identify duplicate clusters. For this reason, it can be helpful to set the **epa_diff** keyword (see below) to a small nonzero value when searching for clusters. 
+We have observed that pymatgen's molecule matcher doesn't always identify duplicate clusters, and it also sometimes gives false positives. We have chosen a fairly conservative tolerance for the default to help prevent false positives. To not miss duplicates that aren't identified by the molecule matcher, we recommend using the **epa_diff** keyword (see below) and setting it to a small nonzero value when searching for clusters or wires. 
 
    * **epa_diff**
 
@@ -1247,7 +1247,7 @@ SUBROUTINE CONSTR_CELL_RELAX(FCELL)
 USE prec
 REAL(q) FCELL(3,3)
 
-SAVE=FCELL(1,1)
+SAVE=FCELL(3,3)
 FCELL=0 
 FCELL(3,3)=SAVE
 
