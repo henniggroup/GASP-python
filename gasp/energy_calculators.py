@@ -24,12 +24,13 @@ from gasp.general import Cell
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.periodic_table import Element
-from pymatgen.io.lammps.data import LammpsData
+from pymatgen.io.lammps.data import LammpsData, ForceField, Topology
 import pymatgen.command_line.gulp_caller as gulp_caller
 
 import shutil
 import subprocess
 import os
+import collections
 
 
 class VaspEnergyCalculator(object):
@@ -334,67 +335,41 @@ class LammpsEnergyCalculator(object):
         xhi = lattice_coords[0][0]
         yhi = lattice_coords[1][1]
         zhi = lattice_coords[2][2]
-        box_size = [[0.0, xhi], [0.0, yhi], [0.0, zhi]]
+        box_bounds = [[0.0, xhi], [0.0, yhi], [0.0, zhi]]
 
         # get xy, xz and yz from the lattice vectors
         xy = lattice_coords[1][0]
         xz = lattice_coords[2][0]
         yz = lattice_coords[2][1]
+        box_tilts = [xy, xz, yz]
 
-        # get a list of the elements from the lammps input script to
-        # preserve their order of appearance
+        # parse the element symbols and atom_style from the lammps input
+        # script, preserving the order in which the element symbols appear
         # TODO: not all formats give the element symbols at the end of the line
         #       containing the pair_coeff keyword. Find a better way.
+        elements_dict = collections.OrderedDict()
         num_elements = len(composition_space.get_all_elements())
         if num_elements == 1:
-            all_elements = composition_space.get_all_elements()
+            single_element = composition_space.get_all_elements()
+            elements_dict[single_element[0].symbol] = single_element[0]
         else:
             with open(self.input_script, 'r') as f:
                 lines = f.readlines()
                 for line in lines:
                     if 'pair_coeff' in line:
                         element_symbols = line.split()[-1*num_elements:]
-                all_elements = []
+                    elif 'atom_style' in line:
+                        atom_style_in_script = line.split()[1]
                 for symbol in element_symbols:
-                    all_elements.append(Element(symbol))
+                    elements_dict[symbol] = Element(symbol)
 
-        # get the dictionary of atomic masses - set the atom types to the order
-        # of their appearance in the lammps input script
-        atomic_masses_dict = {}
-        for i in range(len(all_elements)):
-            atomic_masses_dict[all_elements[i].symbol] = [
-                i + 1, float(all_elements[i].atomic_mass)]
-
-        # get the atoms data
-        atoms_data = LammpsData.get_atoms_data(
-            organism.cell, atomic_masses_dict, set_charge=True)
-
-        # make a LammpsData object
-        lammps_data = LammpsData(box_size, atomic_masses_dict.values(),
-                                 atoms_data)
-
-        # write the data to a file
-        # This method doesn't write the tilts, so we have to add those.
+        # make a LammpsData object and use it write the in.data file
+        force_field = ForceField(elements_dict.items())
+        topology = Topology(organism.cell.sites)
+        lammps_data = LammpsData.from_ff_and_topologies(
+            force_field, [topology], box_bounds, box_tilts,
+            atom_style=atom_style_in_script)
         lammps_data.write_file(job_dir_path + '/in.data')
-
-        # read the in.data file as a list of strings
-        with open(job_dir_path + '/in.data', 'r') as f:
-            lines = f.readlines()
-
-        # find the location to insert the tilts
-        insertion_index = 0
-        for line in lines:
-            if 'zhi' in line:
-                insertion_index = lines.index(line) + 1
-
-        # build the string containing the tilts and add it
-        tilts_string = str(xy) + ' ' + str(xz) + ' ' + str(yz) + ' xy xz yz\n'
-        lines.insert(insertion_index, tilts_string)
-
-        # overwrite the in.data file with the new contents, including the tilts
-        with open(job_dir_path + '/in.data', 'w') as f:
-            for line in lines:
-                f.write('%s' % line)
 
     def get_relaxed_cell(self, atom_dump_path, data_in_path, element_symbols):
         """
