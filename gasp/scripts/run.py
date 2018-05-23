@@ -24,6 +24,7 @@ import random
 import yaml
 import sys
 import os
+import datetime
 
 
 def main():
@@ -61,8 +62,21 @@ def main():
     variations = objects_dict['variations']
     id_generator = objects_dict['id_generator']
 
-    # make the run directory and move into it
+    # get the path to the run directory - append date and time if
+    # the given or default run directory already exists
     garun_dir = str(os.getcwd()) + '/' + run_dir_name
+    if os.path.isdir(garun_dir):
+        print('Directory {} already exists'.format(garun_dir))
+        time = datetime.datetime.now().time()
+        date = datetime.datetime.now().date()
+        current_date = str(date.month) + '_' + str(date.day) + '_' + \
+            str(date.year)
+        current_time = str(time.hour) + '_' + str(time.minute) + '_' + \
+            str(time.second)
+        garun_dir += '_' + current_date + '_' + current_time
+        print('Setting the run directory to {}'.format(garun_dir))
+
+    # make the run directory and move into it
     os.mkdir(garun_dir)
     os.chdir(garun_dir)
 

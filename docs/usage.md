@@ -317,6 +317,8 @@ RunTitle: <string>
 
 Specifies the name of the search. Optional, and if not specified, the algorithm will write its output to a directory called 'garun'. If specified, the algorithm will write its output to a directory called 'garun\_*run\_title*', where *run\_title* is the name given after the **RunTitle** keyword. 
 
+If a directory already exists with the same name as the output directory (e.g., from a previous search), the algorithm will write its output to a directory with the date and time appended to the name.
+
 [Go back to Contents](#contents)
 
 
@@ -864,7 +866,7 @@ Specifies that the algorithm should terminate when a structure has been found th
 
 ### <a id="diskoutput"></a>Output to disk
 
-The primary output of the algorithm is placed into a directory structure. The root of this structure can be specified with the [RunTitle](#runtitle) keyword in the main input file. If the [RunTitle](#runtitle) keyword is not specified, then the root directory is named 'garun'.
+The primary output of the algorithm is placed into a directory structure. The root of this structure can be specified with the [RunTitle](#runtitle) keyword in the main input file. If the [RunTitle](#runtitle) keyword is not specified, then the root directory is named 'garun'. If a directory called 'garun' already exists, then the root directory is named 'garun\_*date\_time*', where *date\_time* is the current date and time.
 
 Inside this directory are a number of POSCAR files, each of which holds a single structure. They are named after their organism ID. These are written after each organism has been added to the population, so the structures are relaxed and satisfy the constraints.
 
