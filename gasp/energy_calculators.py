@@ -24,7 +24,7 @@ from gasp.general import Cell
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.periodic_table import Element
-from pymatgen.io.lammps.data import LammpsData, ForceField, Topology
+from pymatgen.io.lammps.data import LammpsData, LammpsBox, ForceField, Topology
 import pymatgen.command_line.gulp_caller as gulp_caller
 
 import shutil
@@ -324,7 +324,7 @@ class LammpsEnergyCalculator(object):
         Args:
             organism: the Organism whose structure to write
 
-            job_dir_path: the path the job directory (as a string) where the
+            job_dir_path: path to the job directory (as a string) where the
                 file will be written
 
             composition_space: the CompositionSpace of the search
@@ -342,6 +342,9 @@ class LammpsEnergyCalculator(object):
         xz = lattice_coords[2][0]
         yz = lattice_coords[2][1]
         box_tilts = [xy, xz, yz]
+
+        # make a LammpsBox object from the bounds and tilts
+        lammps_box = LammpsBox(box_bounds, tilt=box_tilts)
 
         # parse the element symbols and atom_style from the lammps input
         # script, preserving the order in which the element symbols appear
@@ -367,7 +370,7 @@ class LammpsEnergyCalculator(object):
         force_field = ForceField(elements_dict.items())
         topology = Topology(organism.cell.sites)
         lammps_data = LammpsData.from_ff_and_topologies(
-            force_field, [topology], box_bounds, box_tilts,
+            lammps_box, force_field, [topology],
             atom_style=atom_style_in_script)
         lammps_data.write_file(job_dir_path + '/in.data')
 
