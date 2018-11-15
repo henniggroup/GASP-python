@@ -352,19 +352,23 @@ class LammpsEnergyCalculator(object):
         #       containing the pair_coeff keyword. Find a better way.
         elements_dict = collections.OrderedDict()
         num_elements = len(composition_space.get_all_elements())
-        if num_elements == 1:
+
+        is_single_element = (num_elements == 1)
+        if is_single_element:
             single_element = composition_space.get_all_elements()
             elements_dict[single_element[0].symbol] = single_element[0]
-        else:
-            with open(self.input_script, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    if 'pair_coeff' in line:
-                        element_symbols = line.split()[-1*num_elements:]
-                    elif 'atom_style' in line:
-                        atom_style_in_script = line.split()[1]
-                for symbol in element_symbols:
-                    elements_dict[symbol] = Element(symbol)
+
+        with open(self.input_script, 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                if 'atom_style' in line:
+                    atom_style_in_script = line.split()[1]
+                elif not is_single_element and 'pair_coeff' in line:
+                    element_symbols = line.split()[-1*num_elements:]
+
+        if not is_single_element:
+            for symbol in element_symbols:
+                elements_dict[symbol] = Element(symbol)
 
         # make a LammpsData object and use it write the in.data file
         force_field = ForceField(elements_dict.items())
