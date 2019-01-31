@@ -147,10 +147,10 @@ Richard G. Hennig
 How to cite
 ===========
 
-If you use the GASP code, please cite it:
+DOI: 10.5281/zenodo.2554076
 
-BibTex entry:
-```
+BibTex entry for the Github repository::
+
    @misc{GASP-Python,
      title        = {Genetic algorithm for structure and phase prediction},
      author       = {B. C. Revard, W. W. Tipton, and R. G. Hennig},
@@ -161,4 +161,3 @@ BibTex entry:
      url          = {https://github.com/henniggroup/GASP-python},
      doi          = {10.5281/zenodo.2554076}
    }
-'''
