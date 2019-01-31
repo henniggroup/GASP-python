@@ -132,11 +132,33 @@ GASP-python is released under the MIT License::
 Contributing
 ============
 
-We try to follow the PEP8 coding style used by pymatgen: http://pymatgen.org/contributing.html#coding-guidelines
+We try to follow the PEP8 coding style used by pymatgen: http://pymatgen.org/contributing.html#coding-guidelines.
 
 Authors
 =======
 
 Benjamin Revard
 
+William W. Tipton
+
 Richard G. Hennig    
+
+
+How to cite
+===========
+
+If you use the GASP code, please cite it:
+
+BibTex entry:
+```
+   @misc{GASP-Python,
+     title        = {Genetic algorithm for structure and phase prediction},
+     author       = {B. C. Revard, W. W. Tipton, and R. G. Hennig},
+     year         = 2018,
+     publisher    = {GitHub},
+     journal      = {GitHub repository},
+     howpublished = {\url{https://github.com/henniggroup/GASP-python}},
+     url          = {https://github.com/henniggroup/GASP-python},
+     doi          = {10.5281/zenodo.2554076}
+   }
+'''
