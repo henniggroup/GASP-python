@@ -538,13 +538,13 @@ class GulpEnergyCalculator(object):
             self.lattice_flags = None
         # relax a, b and gamma but not c, alpha and beta
         elif geometry.shape == 'sheet':
-            self.lattice_flags = ' 1 1 0 0 0 1'
+            self.lattice_flags = '1 1 0 0 0 1'
         # relax c, but not a, b, alpha, beta and gamma
         elif geometry.shape == 'wire':
-            self.lattice_flags = ' 0 0 1 0 0 0'
+            self.lattice_flags = '0 0 1 0 0 0'
         # don't relax any of the lattice parameters
         elif geometry.shape == 'cluster':
-            self.lattice_flags = ' 0 0 0 0 0 0'
+            self.lattice_flags = '0 0 0 0 0 0'
 
     def get_shells(self):
         """
@@ -684,6 +684,17 @@ class GulpEnergyCalculator(object):
             cation_shell_flg=self.cations_shell, symm_flg=False)
         structure_lines = structure_lines.split('\n')
         del structure_lines[-1]  # remove empty line that gets added
+
+        # GULP errors out if too many decimal places in lattice parameters
+        lattice_parameters = structure_lines[1].split()
+        for i in range(len(lattice_parameters)):
+            lattice_parameters[i] = round(float(lattice_parameters[i]), 10)
+
+        rounded_lattice_parameters = ""
+        for lattice_parameter in lattice_parameters:
+            rounded_lattice_parameters += str(lattice_parameter)
+            rounded_lattice_parameters += " "
+        structure_lines[1] = rounded_lattice_parameters
 
         # add flags for relaxing lattice parameters and ion positions
         if self.lattice_flags is not None:
