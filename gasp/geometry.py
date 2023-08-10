@@ -158,7 +158,7 @@ class Sheet(object):
                                   [0.0, 0.0, layer_thickness + pad_amount]])
 
         # modify the cell to correspond to the padded lattice
-        cell.modify_lattice(padded_lattice)
+        cell.lattice=padded_lattice
         site_indices = []
         for i in range(len(cell.sites)):
             site_indices.append(i)
@@ -204,7 +204,7 @@ class Sheet(object):
                                     [0.0, 0.0, layer_thickness + max_mid]])
 
         # modify the cell to correspond to the unpadded lattice
-        cell.modify_lattice(unpadded_lattice)
+        cell.lattice=unpadded_lattice
         site_indices = []
         for i in range(len(cell.sites)):
             site_indices.append(i)
@@ -324,7 +324,7 @@ class Wire(object):
                                   [0, y_extent + pad_amount, 0], [0, 0, cz]])
 
         # modify the cell to correspond to the padded lattice
-        cell.modify_lattice(padded_lattice)
+        cell.lattice=padded_lattice
         site_indices = []
         for i in range(len(cell.sites)):
             site_indices.append(i)
@@ -377,7 +377,7 @@ class Wire(object):
                                     [0.0, 0.0, cz]])
 
         # modify the cell to correspond to the unpadded lattice
-        cell.modify_lattice(unpadded_lattice)
+        cell.lattice=unpadded_lattice
         site_indices = []
         for i in range(len(cell.sites)):
             site_indices.append(i)
@@ -512,7 +512,7 @@ class Cluster(object):
                                   [0, 0, z_extent + pad_amount]])
 
         # modify the cell to correspond to the padded lattice
-        cell.modify_lattice(padded_lattice)
+        cell.lattice=padded_lattice
         site_indices = []
         for i in range(len(cell.sites)):
             site_indices.append(i)
@@ -567,7 +567,7 @@ class Cluster(object):
                                     [0.0, 0.0, z_extent + max_mid]])
 
         # modify the cell to correspond to the unpadded lattice
-        cell.modify_lattice(unpadded_lattice)
+        cell.lattice=unpadded_lattice
         site_indices = []
         for i in range(len(cell.sites)):
             site_indices.append(i)

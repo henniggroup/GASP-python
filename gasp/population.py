@@ -51,9 +51,9 @@ class InitialPopulation():
         Args:
             organism_to_add: the Organism to add to the initial population
         """
-
         organism_to_add.cell.sort()
-        organism_to_add.cell.to('poscar', os.getcwd() + '/POSCAR.' +
+        
+        organism_to_add.cell.to(fmt='poscar', filename=os.getcwd() + '/POSCAR.' +
                                 str(organism_to_add.id))
         print('Adding organism {} to the initial population'.format(
             organism_to_add.id))
@@ -73,8 +73,8 @@ class InitialPopulation():
         """
 
         new_org.cell.sort()
-        new_org.cell.to('poscar', os.getcwd() + '/POSCAR.' +
-                        str(new_org.id))
+        new_org.cell.to(fmt='poscar', filename=os.getcwd() + '/POSCAR.' +
+                                str(new_org.id))
         print('Replacing organism {} with organism {} in the initial '
               'population'.format(old_org.id, new_org.id))
 
@@ -364,7 +364,7 @@ class Pool(object):
 
         self.num_adds = self.num_adds + 1
         organism_to_add.cell.sort()
-        organism_to_add.cell.to('poscar', os.getcwd() + '/POSCAR.' +
+        organism_to_add.cell.to(fmt='poscar', filename=os.getcwd() + '/POSCAR.' +
                                 str(organism_to_add.id))
         organism_to_add.is_active = True
 
@@ -453,7 +453,7 @@ class Pool(object):
             old_org.id, new_org.id))
 
         new_org.cell.sort()
-        new_org.cell.to('poscar', os.getcwd() + '/POSCAR.' + str(new_org.id))
+        new_org.cell.to(fmt='poscar', filename=os.getcwd() + '/POSCAR.' + str(new_org.id))
 
         # set new objective function value
         if composition_space.objective_function == 'epa':

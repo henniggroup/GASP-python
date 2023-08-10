@@ -391,11 +391,11 @@ class Mating(object):
             # get the site contributions of each parent
             for site in parent_cell_1.sites:
                 if site.frac_coords[cut_vector_index] <= cut_location:
-                    species_from_parent_1.append(site.species_and_occu)
+                    species_from_parent_1.append(site.species)
                     frac_coords_from_parent_1.append(site.frac_coords)
             for site in parent_cell_2.sites:
                 if site.frac_coords[cut_vector_index] > cut_location:
-                    species_from_parent_2.append(site.species_and_occu)
+                    species_from_parent_2.append(site.species)
                     frac_coords_from_parent_2.append(site.frac_coords)
 
         # combine the information for the sites contributed by each parent
@@ -408,8 +408,8 @@ class Mating(object):
                                  np.array(parent_cell_2.lattice.abc))
         offspring_angles = 0.5*(np.array(parent_cell_1.lattice.angles) +
                                 np.array(parent_cell_2.lattice.angles))
-        offspring_lattice = Lattice.from_lengths_and_angles(offspring_lengths,
-                                                            offspring_angles)
+        offspring_lattice = Lattice.from_parameters(a=offspring_lengths[0],b=offspring_lengths[1],c=offspring_lengths[2],
+                                                    alpha=offspring_angles[0],beta=offspring_angles[1],gamma=offspring_angles[2])
 
         # make the offspring cell
         return Cell(offspring_lattice, offspring_species,
@@ -527,7 +527,7 @@ class Mating(object):
         # Cartesian atomic site coordinates
         species = cell.species
         cartesian_coords = cell.cart_coords
-        cell.modify_lattice(rotated_cell.lattice)
+        cell.lattice=rotated_cell.lattice
         site_indices = []
         for i in range(len(cell.sites)):
             site_indices.append(i)
@@ -846,7 +846,7 @@ class StructureMut(object):
         new_b = strain_matrix.dot(cell.lattice.matrix[1])
         new_c = strain_matrix.dot(cell.lattice.matrix[2])
         new_lattice = Lattice([new_a, new_b, new_c])
-        cell.modify_lattice(new_lattice)
+        cell.lattice=new_lattice
 
 
 class NumAtomsMut(object):
