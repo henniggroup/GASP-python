@@ -38,7 +38,7 @@ def main():
 
     try:
         with open(input_file, 'r') as f:
-            parameters = yaml.load(f)
+            parameters = yaml.safe_load(f)
     except:
         print('Error reading input file.')
         print('Quitting...')

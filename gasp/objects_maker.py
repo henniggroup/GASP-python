@@ -439,6 +439,9 @@ def make_energy_calculator(parameters, geometry, composition_space):
     elif 'vasp' in parameters['EnergyCode']:
         return make_vasp_energy_calculator(parameters, composition_space,
                                            geometry)
+    elif 'quantum_espresso' in parameters['EnergyCode']:
+        return make_quantum_espresso_energy_calculator(parameters,
+                                           geometry)
     else:
         print('The given energy code name is invalid.')
         print('Quitting...')
@@ -652,6 +655,45 @@ def make_vasp_energy_calculator(parameters, composition_space, geometry):
         return energy_calculators.VaspEnergyCalculator(
                 incar_path, kpoints_path, potcar_paths, geometry)
 
+
+def make_quantum_espresso_energy_calculator(parameters, geometry):
+    """
+    Returns a VaspEnergyCalculator object, or quits if one cannot be made.
+
+    Args:
+        parameters: the dictionary produced by calling yaml.load() on the input
+            file
+
+        geometry: the Geometry for the search
+    """
+
+    if parameters['EnergyCode']['quantum_espresso'] is None:
+        print('No quantum_espresso input files given.')
+        print('Quitting...')
+        quit()
+    else:
+        # the INCAR file
+        if 'qe_calc_settings' not in parameters['EnergyCode']['quantum_espresso']:
+            print('An qe_calc_settings file must be provided. Please use the "qe_calc_settings" '
+                  'keyword.')
+            print('Quitting...')
+            quit()
+        elif parameters['EnergyCode']['quantum_espresso']['qe_calc_settings'] is None:
+            print('No qe_calc_settings file was given after the "qe_calc_settings" keyword. Please '
+                  'provide one.')
+            print('Quitting...')
+            quit()
+        else:
+            # get the path to the INCAR file
+            qe_calc_setting_path = parameters['EnergyCode']['quantum_espresso']['qe_calc_settings']
+            # check that the INCAR file exists
+            if not os.path.exists(qe_calc_setting_path):
+                print('The given qe_calc_settings file does not exist.')
+                print('Quitting...')
+                quit()
+
+        return energy_calculators.QEEnergyCalculator(
+                qe_calc_setting_path, geometry)
 
 def make_stopping_criteria(parameters, composition_space):
     """

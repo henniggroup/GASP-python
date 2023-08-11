@@ -4,6 +4,8 @@
 
 from __future__ import division, unicode_literals, print_function
 
+import yaml
+
 
 """
 Energy Calculators module:
@@ -32,6 +34,125 @@ import subprocess
 import os
 import collections
 
+from pymatgen.io.ase import AseAtomsAdaptor
+from ase.calculators.calculator import kptdensity2monkhorstpack as kdens2mp
+from ase.calculators.espresso import Espresso
+from ase.io import read
+
+class QEEnergyCalculator(object):
+    """
+    Calculates the energy of an organism using VASP.
+    """
+
+    def __init__(self, qe_calc_setting_yaml, geometry):
+        '''
+        Makes a QuantumEspressoEnergyCalculator.
+
+        Args:
+            pwi_file: the path to the pwi file
+
+            geometry: the Geometry of the search
+        '''
+
+        self.name = 'quantum_espresso'
+
+        # paths to the INCAR, KPOINTS and POTCARs files
+        self.AAA = AseAtomsAdaptor()
+        self.qe_dft_calc = qe_calc_setting_yaml
+        with open(self.qe_dft_calc,'r') as f:
+            self.calc_config=yaml.safe_load(f)
+
+    def do_energy_calculation(self, organism, dictionary, key,
+                              composition_space):
+        """
+        Calculates the energy of an organism using Quantum Espresso, and stores the relaxed
+        organism in the provided dictionary at the provided key. If the
+        calculation fails, stores None in the dictionary instead.
+
+        Args:
+            organism: the Organism whose energy we want to calculate
+
+            dictionary: a dictionary in which to store the relaxed Organism
+
+            key: the key specifying where to store the relaxed Organism in the
+                dictionary
+
+            composition_space: the CompositionSpace of the search
+
+        Precondition: the garun directory and temp subdirectory exist, and we
+            are currently located inside the garun directory
+
+        TODO: maybe use the custodian package for error handling
+        """
+
+        # make the job directory
+        job_dir_path = str(os.getcwd()) + '/temp/' + str(organism.id)
+        os.mkdir(job_dir_path)
+        
+        pwi_path = job_dir_path + '/' + str(organism.id) + '.pwi'
+        self.write_input_file(organism,pwi_path)
+
+        # write out the unrelaxed structure to a poscar file
+        organism.cell.to(fmt='poscar', filename=job_dir_path + '/POSCAR.' +
+                         str(organism.id) + '_unrelaxed')
+
+        # run 'callqe' script as a subprocess to run Quantum Espresso
+        print('Starting quantum espresso calculation on organism {} '.format(organism.id))
+        # devnull = open(os.devnull, 'w')
+        try:
+            subprocess.run(['callqe', pwi_path],
+                            )
+        except:
+            print('Error running Quantum Espresso on organism {} '.format(organism.id))
+            dictionary[key] = None
+            return
+
+        # parse the relaxed structure from the CONTCAR file
+        try:
+            ase_relaxed_cell = read(job_dir_path + '/' + str(organism.id) + '.pwi.pwo')
+            relaxed_cell = self.AAA.get_structure(ase_relaxed_cell)
+            #relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
+        except:
+            print('Error reading structure of organism {} from pwo file '.format(organism.id))
+            dictionary[key] = None
+            return
+
+        # check if the qe calculation converged
+        converged = False
+        with open(job_dir_path + '/' + str(organism.id) + '.pwi.pwo') as f:
+            for line in f:
+                if 'JOB' in line and 'DONE.' in line:
+                    converged = True
+        if not converged:
+            print('QE relaxation of organism {} did not converge '.format(
+                organism.id))
+            dictionary[key] = None
+            return
+        enthalpy = ase_relaxed_cell.get_potential_energy()
+        organism.cell = relaxed_cell
+        organism.total_energy = enthalpy
+        organism.epa = enthalpy/organism.cell.num_sites
+        print('Setting energy of organism {} to {} '
+              'eV/atom '.format(organism.id, organism.epa))
+        dictionary[key] = organism
+
+    def write_input_file(self,organism,pwi_path):
+        ase_atoms = self.AAA.get_atoms(organism.cell)
+
+        # calc data
+        input_data = self.calc_config["input_data"]
+        pseudopotentials = self.calc_config["pseudopotentials"]
+        if self.calc_config["kpts"]:
+            kpts = tuple(self.calc_config["kpts"])
+        else:
+            kpts = kdens2mp(ase_atoms, kptdensity=3.5, even=True)
+        calc_obj = Espresso(
+            input_data=input_data,
+            pseudopotentials=pseudopotentials,
+            kpts=kpts,
+            label=str(pwi_path),
+        )
+        calc_obj.write_input(ase_atoms)
 
 class VaspEnergyCalculator(object):
     """
