@@ -1,0 +1,21 @@
+input_data:  
+  control:
+    calculation: "vc-relax"
+    pseudo_dir: "/ocean/projects/cts180021p/jpu/SSSP_1.2.1_PBE_efficiency/"
+    outdir: './out/'
+    verbosity: 'high'
+    disk_io: 'none'
+  system:
+    ecutwfc: 80
+    occupations: 'smearing'
+    smearing: 'gauss'
+    degauss: 0.01
+  electrons: 
+    electron_maxstep: 1000
+    conv_thr: 1.0e-7
+    mixing_beta: 0.1
+pseudopotentials:
+  Li: "li_pbe_v1.4.uspp.F.UPF"
+  Al: "Al.pbe-n-kjpaw_psl.1.0.0.UPF"
+  Mg: "Mg.pbe-n-kjpaw_psl.0.3.0.UPF"
+kpts:

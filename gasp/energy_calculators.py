@@ -38,13 +38,16 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from ase.calculators.calculator import kptdensity2monkhorstpack as kdens2mp
 from ase.calculators.espresso import Espresso
 from ase.io import read
+import threading
 
-class QEEnergyCalculator(object):
+import time
+
+class QEEnergyCalculator(threading.Thread):
     """
     Calculates the energy of an organism using VASP.
     """
 
-    def __init__(self, qe_calc_setting_yaml, geometry):
+    def __init__(self, qe_calc_setting_yaml, slurm_script_template, ncore, geometry):
         '''
         Makes a QuantumEspressoEnergyCalculator.
 
@@ -53,14 +56,17 @@ class QEEnergyCalculator(object):
 
             geometry: the Geometry of the search
         '''
-
+        super(QEEnergyCalculator, self).__init__()
         self.name = 'quantum_espresso'
+        self.slurm_script_template = slurm_script_template
+        self.ncore_base = ncore
 
         # paths to the INCAR, KPOINTS and POTCARs files
         self.AAA = AseAtomsAdaptor()
         self.qe_dft_calc = qe_calc_setting_yaml
         with open(self.qe_dft_calc,'r') as f:
             self.calc_config=yaml.safe_load(f)
+        self.job_id = None
 
     def do_energy_calculation(self, organism, dictionary, key,
                               composition_space):
@@ -84,13 +90,19 @@ class QEEnergyCalculator(object):
 
         TODO: maybe use the custodian package for error handling
         """
-
+        self._stop_event = threading.Event()
         # make the job directory
         job_dir_path = str(os.getcwd()) + '/temp/' + str(organism.id)
         os.mkdir(job_dir_path)
         
-        pwi_path = job_dir_path + '/' + str(organism.id) + '.pwi'
+        pwi_path = job_dir_path + '/' + str(organism.id)
         self.write_input_file(organism,pwi_path)
+
+        shutil.copy(self.slurm_script_template, job_dir_path)
+        slurm_script_name = os.path.basename(self.slurm_script_template)
+
+        self.create_slurm_script(slurm_script_name,pwi_path)
+        os.makedirs(job_dir_path+'/'+'outputs_slurm')
 
         # write out the unrelaxed structure to a poscar file
         organism.cell.to(fmt='poscar', filename=job_dir_path + '/POSCAR.' +
@@ -99,17 +111,39 @@ class QEEnergyCalculator(object):
         # run 'callqe' script as a subprocess to run Quantum Espresso
         print('Starting quantum espresso calculation on organism {} '.format(organism.id))
         # devnull = open(os.devnull, 'w')
-        try:
-            subprocess.run(['callqe', pwi_path],
-                            )
-        except:
-            print('Error running Quantum Espresso on organism {} '.format(organism.id))
-            dictionary[key] = None
-            return
-
+        # try:
+        #     self.submit_slurm_job()
+        #     subprocess.run(['callqe', pwi_path+'.pwi'],
+        #                     )
+        # except:
+        #     print('Error submitting Quantum Espresso on organism {} '.format(organism.id))
+        #     dictionary[key] = None
+        #     return
         # parse the relaxed structure from the CONTCAR file
+        #submit slurm job
+        # current_dir = os.getcwd()
+        # os.chdir(job_dir_path)
+        result=subprocess.run(['sbatch', 'run.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
+        self.job_id = result.stdout.decode().split()[-1]
+        # os.chdir(current_dir)
+        # running = True 
+        # while running:
+        #     err_file_path = job_dir_path+'/'+'outputs_slurm'+'/'+'err'
+        #     if os.path.exists(err_file_path):
+        #         with open(err_file_path,'r') as f:
+        #             for line in f:
+        #                 if 'Job' in line and 'Ended' in line:
+        #                     running = False
+        # Check the status regularly
+        while not self._stop_event.is_set():
+            status = self.check_job_status()
+            if status != "RUNNING":
+                break
+            time.sleep(10)
+            #need to manual cancel job from slurm if terminate run.py
         try:
-            ase_relaxed_cell = read(job_dir_path + '/' + str(organism.id) + '.pwi.pwo')
+            print(job_dir_path + '/' + str(organism.id) + '.pwo')
+            ase_relaxed_cell = read(job_dir_path + '/' + str(organism.id) + '.pwo')
             relaxed_cell = self.AAA.get_structure(ase_relaxed_cell)
             #relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
         except:
@@ -119,7 +153,7 @@ class QEEnergyCalculator(object):
 
         # check if the qe calculation converged
         converged = False
-        with open(job_dir_path + '/' + str(organism.id) + '.pwi.pwo') as f:
+        with open(job_dir_path + '/' + str(organism.id) + '.pwo') as f:
             for line in f:
                 if 'JOB' in line and 'DONE.' in line:
                     converged = True
@@ -136,9 +170,48 @@ class QEEnergyCalculator(object):
               'eV/atom '.format(organism.id, organism.epa))
         dictionary[key] = organism
 
+    def check_job_status(self):
+        # Check the status of the job using squeue
+        result = subprocess.run(['squeue', '-j', self.job_id], stdout=subprocess.PIPE)
+        lines = result.stdout.decode().split('\n')
+        if len(lines) > 2: # Job is still in the queue
+            return "RUNNING"
+        else:
+            return "FINISHED"
+
+    def stop(self):
+        self._stop_event.set()
+
+    def create_slurm_script(self,slurm_script_name,pwi_path):
+        dir_path = os.path.dirname(pwi_path)
+        base_name = os.path.basename(pwi_path)
+        
+        if self.natoms > 0 and self.natoms <= 16:
+            self.ncore = self.ncore_base * 1
+        elif self.natoms > 16 and self.natoms < 48:
+            self.ncore = self.ncore_base * 4
+        else:
+            self.ncore = self.ncore_base * 8
+        # elif self.natoms > 64:
+        #     self.ncore = self.ncore_base * 8
+
+        # Read the content of the file
+        with open(dir_path+'/'+slurm_script_name, 'r') as f:
+            content = f.read()
+        content = content.replace('100',str(self.ncore))
+
+        # Write the modified content back to the file
+        with open(dir_path+'/'+slurm_script_name, 'w') as f:
+            f.write(content)
+            f.write(f"cd {dir_path}\n\n")
+            f.write(f"mpirun -np {self.ncore} $qe7_pw < {base_name}.pwi > {base_name}.pwo\n\n")
+            f.write("echo ' '\n")
+            f.write("echo 'Job Ended'")
+
+
     def write_input_file(self,organism,pwi_path):
         ase_atoms = self.AAA.get_atoms(organism.cell)
-
+        self.natoms=len(ase_atoms)
         # calc data
         input_data = self.calc_config["input_data"]
         pseudopotentials = self.calc_config["pseudopotentials"]

@@ -491,7 +491,7 @@ class Developer(object):
         """
 
         if geometry.shape == 'bulk':
-            if not organism.cell.reduce_cell():
+            if not organism.cell.get_reduced_structure(reduction_algo="niggli"):
                 print('Niggli cell reduction failed on organism {} during '
                       'development '.format(organism.id))
                 return False

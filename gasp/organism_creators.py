@@ -664,10 +664,12 @@ class FileOrganismCreator(object):
         for cell_file in self.files:
             if cell_file.endswith('.cif') or cell_file.startswith(
                     'POSCAR'):
+                #print("TEST",str(self.path_to_folder) + "/" + str(cell_file))
                 try:
                     new_cell = Cell.from_file(
                         str(self.path_to_folder) + "/" + str(cell_file))
                     file_cells.append(new_cell)
+                    
                 except:
                     pass
         return file_cells

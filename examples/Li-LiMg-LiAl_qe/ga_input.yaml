@@ -1,0 +1,29 @@
+CompositionSpace: 
+    - LiMg
+    - LiAl
+    - Li
+
+EnergyCode: 
+    quantum_espresso:
+        qe_calc_settings: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/dft_bulk_calc_nokpts.yaml
+        slurm_template_path: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/run.sh
+        ncore: 16
+
+Constraints: 
+    min_num_atoms: 4 
+    max_num_atoms: 64
+    min_lattice_length: 3
+
+
+InitialPopulation:
+    from_files:
+        path_to_folder: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/ref_states
+    random:
+        number: 102
+
+StoppingCriteria: 
+    num_energy_calcs: 1000
+
+NumCalcsAtOnce: 5
+
+

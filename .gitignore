@@ -30,3 +30,5 @@ nosetests.xml
 .idea/*
 
 _build/*
+
+./examples/Li-LiMg-LiAl_qe/garun_*/*
