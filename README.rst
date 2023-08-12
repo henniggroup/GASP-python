@@ -1,5 +1,28 @@
 **This fork tries to setup quantum espresso interface**
 
+Updated instalation instrusctions (assuming you are git clone the repo):
+
+1. setup conda environment
+
+2. install pymatgen (I have updated the code to be compatible with pymatgen==2023.7.20)
+```
+conda install pymatgen -c conda-forge
+```
+
+3. install GASP using editable mode:
+```
+cd GASP-python
+pip install -e .
+```
+
+4. run the test and verify
+```
+cd ./gasp/tests
+python test.py
+```
+=========
+***below is old readme***
+
 GASP is a genetic algorithm for structure and phase prediction written in Python and interfaced to GULP_, LAMMPS_ and VASP_. It can search for the structures of clusters, 2D materials, wires, and bulk materials and do both fixed-composition and phase diagram searches.
 
 .. _VASP: http://www.vasp.at/
