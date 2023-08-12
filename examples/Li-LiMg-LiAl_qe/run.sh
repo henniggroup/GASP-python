@@ -16,9 +16,9 @@ echo "Job started on `hostname` at `date`"
 
 source ~/.bashrc
 source ~/exe/qe.sh
-source ~/exe/conda_init.sh
-
-conda activate gasp-qe
+# source ~/exe/conda_init.sh
+ 
+# conda activate gasp-qe
 
 # pwifile=$(ls tmp/*.pwi)
 # pwiarr=($pwifile)

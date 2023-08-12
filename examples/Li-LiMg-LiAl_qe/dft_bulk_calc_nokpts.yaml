@@ -1,6 +1,6 @@
 input_data:  
   control:
-    calculation: "scf"
+    calculation: "scf" #phase diagram consider not vc-relax
     pseudo_dir: "/ocean/projects/cts180021p/jpu/SSSP_1.2.1_PBE_efficiency/"
     outdir: './out/'
     verbosity: 'high'

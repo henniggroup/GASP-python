@@ -98,13 +98,9 @@ def main():
     relaxed_organisms = {}
 
     # populate the initial population
-    for creator in organism_creators:
+    for creator in organism_creators: #[from_files_organism, random_organism]
         print("Making {} organisms with {}".format(creator.number, creator.name))
         while not creator.is_finished and not stopping_criteria.are_satisfied:
-            # import time
-            # print('Sleep')
-            # time.sleep(30)
-            # print('Wake up')
             # start initial batch of energy calculations
             if len(threads) < num_calcs_at_once:
                 # make a new organism - keep trying until we get one
@@ -125,11 +121,11 @@ def main():
                             new_organism, whole_pop, geometry
                         )
                         if redundant_organism is None:  # no redundancy
-                            # add a copy to whole_pop so the organisms in
+                            # add a copy to whole_pop (population) so the organisms in
                             # whole_pop don't change upon relaxation
-                            whole_pop.append(copy.deepcopy(new_organism))
-                            geometry.pad(new_organism.cell)
-                            stopping_criteria.update_calc_counter()
+                            whole_pop.append(copy.deepcopy(new_organism)) #RAM bottleneck (TODO: make a database, instead of appending the list)
+                            geometry.pad(new_organism.cell) #Does nothing to bulk 
+                            stopping_criteria.update_calc_counter() #TODO: update calc count based on success run
                             index = len(threads)
                             thread = threading.Thread(
                                 target=energy_calculator.do_energy_calculation,

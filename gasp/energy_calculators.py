@@ -44,7 +44,7 @@ import time
 
 class QEEnergyCalculator(threading.Thread):
     """
-    Calculates the energy of an organism using VASP.
+    Calculates the energy of an organism using Quantum Espresso.
     """
 
     def __init__(self, qe_calc_setting_yaml, slurm_script_template, ncore, geometry):
@@ -61,12 +61,10 @@ class QEEnergyCalculator(threading.Thread):
         self.slurm_script_template = slurm_script_template
         self.ncore_base = ncore
 
-        # paths to the INCAR, KPOINTS and POTCARs files
-        self.AAA = AseAtomsAdaptor()
+        self.AAA = AseAtomsAdaptor() #pymatgen structure <-> ase atoms
         self.qe_dft_calc = qe_calc_setting_yaml
         with open(self.qe_dft_calc,'r') as f:
             self.calc_config=yaml.safe_load(f)
-        self.job_id = None
 
     def do_energy_calculation(self, organism, dictionary, key,
                               composition_space):
@@ -106,35 +104,13 @@ class QEEnergyCalculator(threading.Thread):
 
         # write out the unrelaxed structure to a poscar file
         organism.cell.to(fmt='poscar', filename=job_dir_path + '/POSCAR.' +
-                         str(organism.id) + '_unrelaxed')
+                         str(organism.id) + '_unrelaxed') #phase diagram not relevant
 
-        # run 'callqe' script as a subprocess to run Quantum Espresso
         print('Starting quantum espresso calculation on organism {} '.format(organism.id))
-        # devnull = open(os.devnull, 'w')
-        # try:
-        #     self.submit_slurm_job()
-        #     subprocess.run(['callqe', pwi_path+'.pwi'],
-        #                     )
-        # except:
-        #     print('Error submitting Quantum Espresso on organism {} '.format(organism.id))
-        #     dictionary[key] = None
-        #     return
-        # parse the relaxed structure from the CONTCAR file
-        #submit slurm job
-        # current_dir = os.getcwd()
-        # os.chdir(job_dir_path)
-        result=subprocess.run(['sbatch', 'run.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
+
+        result = subprocess.run(['sbatch', 'run.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
         job_id = result.stdout.decode().split()[-1]
-        # os.chdir(current_dir)
-        # running = True 
-        # while running:
-        #     err_file_path = job_dir_path+'/'+'outputs_slurm'+'/'+'err'
-        #     if os.path.exists(err_file_path):
-        #         with open(err_file_path,'r') as f:
-        #             for line in f:
-        #                 if 'Job' in line and 'Ended' in line:
-        #                     running = False
-        # Check the status regularly
+ 
         while True:
             status = self.check_job_status(job_id)
             if status != "RUNNING":
@@ -164,14 +140,15 @@ class QEEnergyCalculator(threading.Thread):
             dictionary[key] = None
             _stop_event.set()
             return
+        
         enthalpy = ase_relaxed_cell.get_potential_energy()
         organism.cell = relaxed_cell
         organism.total_energy = enthalpy
         organism.epa = enthalpy/organism.cell.num_sites
-        print('Setting energy of organism {} to {} '
-              'eV/atom '.format(organism.id, organism.epa))
+        # print('Setting energy of organism {} to {} '
+        #       'eV/atom '.format(organism.id, organism.epa))
         dictionary[key] = organism
-        _stop_event.set()
+        _stop_event.set() #turn off the thread
 
     def check_job_status(self,job_id):
         # Check the status of the job using squeue
@@ -187,24 +164,24 @@ class QEEnergyCalculator(threading.Thread):
         base_name = os.path.basename(pwi_path)
         
         if self.natoms > 0 and self.natoms <= 16:
-            self.ncore = self.ncore_base * 1
+            ncore = self.ncore_base * 1
         elif self.natoms > 16 and self.natoms < 48:
-            self.ncore = self.ncore_base * 4
+            ncore = self.ncore_base * 4
         else:
-            self.ncore = self.ncore_base * 8
+            ncore = self.ncore_base * 8
         # elif self.natoms > 64:
         #     self.ncore = self.ncore_base * 8
 
         # Read the content of the file
         with open(dir_path+'/'+slurm_script_name, 'r') as f:
             content = f.read()
-        content = content.replace('100',str(self.ncore))
+        content = content.replace('100',str(ncore))
 
         # Write the modified content back to the file
         with open(dir_path+'/'+slurm_script_name, 'w') as f:
             f.write(content)
             f.write(f"cd {dir_path}\n\n")
-            f.write(f"mpirun -np {self.ncore} $qe7_pw < {base_name}.pwi > {base_name}.pwo\n\n")
+            f.write(f"mpirun -np {ncore} $qe7_pw < {base_name}.pwi > {base_name}.pwo\n\n")
             f.write("echo ' '\n")
             f.write("echo 'Job Ended'")
 
@@ -218,7 +195,7 @@ class QEEnergyCalculator(threading.Thread):
         if self.calc_config["kpts"]:
             kpts = tuple(self.calc_config["kpts"])
         else:
-            kpts = kdens2mp(ase_atoms, kptdensity=3.5, even=True)
+            kpts = kdens2mp(ase_atoms, kptdensity=3.5, even=True) #TODO: kptdensity varies based on cell? 
         calc_obj = Espresso(
             input_data=input_data,
             pseudopotentials=pseudopotentials,

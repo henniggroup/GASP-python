@@ -21,7 +21,7 @@ InitialPopulation:
     from_files:
         path_to_folder: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/ref_states
     random:
-        number: 102 
+        number: 100
 
 StoppingCriteria: 
     num_energy_calcs: 3000
