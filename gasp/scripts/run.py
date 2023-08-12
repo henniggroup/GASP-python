@@ -105,7 +105,6 @@ def main():
         print('Making {} organisms with {}'.format(creator.number,
                                                    creator.name))
         while not creator.is_finished and not stopping_criteria.are_satisfied:
-
             # start initial batch of energy calculations
             if len(threads) < num_calcs_at_once:
                 # make a new organism - keep trying until we get one

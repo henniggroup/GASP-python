@@ -1,6 +1,6 @@
 input_data:  
   control:
-    calculation: "vc-relax"
+    calculation: "scf"
     pseudo_dir: "/ocean/projects/cts180021p/jpu/SSSP_1.2.1_PBE_efficiency/"
     outdir: './out/'
     verbosity: 'high'

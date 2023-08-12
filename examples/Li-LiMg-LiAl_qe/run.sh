@@ -2,7 +2,7 @@
 #SBATCH -J GASPtest # Job name
 #SBATCH -n 100 # Number of total cores
 #SBATCH -N 1 # Number of nodes
-#SBATCH --time=00-04:00:00
+#SBATCH --time=00-00:40:00
 #SBATCH -A cts180021p
 #SBATCH -p RM-shared
 ##SBATCH --nodelist=c024,c025

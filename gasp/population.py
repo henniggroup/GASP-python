@@ -306,17 +306,17 @@ class Pool(object):
                     self.queue.appendleft(organisms_list[i])
 
         elif composition_space.objective_function == 'pd':
-            try:
-                self.compute_pd_values(organisms_list, composition_space)
-            except:
-                print('Error: could not construct the phase diagram because '
-                      'there is not a structure at one or more of the '
-                      'composition space endpoints.')
-                print('One of the provided reference structures probably '
-                      'failed development, or else there was an error when '
-                      'calculating its energy. See previous output.')
-                print('Quitting...')
-                quit()
+            #try:
+            self.compute_pd_values(organisms_list, composition_space)
+            # except:
+            #     print('Error: could not construct the phase diagram because '
+            #           'there is not a structure at one or more of the '
+            #           'composition space endpoints.')
+            #     print('One of the provided reference structures probably '
+            #           'failed development, or else there was an error when '
+            #           'calculating its energy. See previous output.')
+            #     print('Quitting...')
+            #     quit()
 
             # assign the ones on the convex hull to the promotion set and the
             # rest to the queue

@@ -112,8 +112,12 @@ def make_objects(parameters):
 
     # if more than one organism creator, sort them so that the attempts-based
     # ones are at the front and the successes-based ones are at the back
+    def key_func(x):
+        print('x',x,x.is_successes_based)
+        return x.is_successes_based
     if len(initial_organism_creators) > 1:
-        initial_organism_creators.sort(key=lambda x: x.is_successes_based)
+        initial_organism_creators.sort(key=key_func)
+        #initial_organism_creators.sort(key=lambda x: x.is_successes_based)
 
     objects_dict['organism_creators'] = initial_organism_creators
 

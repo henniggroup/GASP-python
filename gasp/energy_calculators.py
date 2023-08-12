@@ -90,7 +90,7 @@ class QEEnergyCalculator(threading.Thread):
 
         TODO: maybe use the custodian package for error handling
         """
-        self._stop_event = threading.Event()
+        _stop_event = threading.Event()
         # make the job directory
         job_dir_path = str(os.getcwd()) + '/temp/' + str(organism.id)
         os.mkdir(job_dir_path)
@@ -124,7 +124,7 @@ class QEEnergyCalculator(threading.Thread):
         # current_dir = os.getcwd()
         # os.chdir(job_dir_path)
         result=subprocess.run(['sbatch', 'run.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
-        self.job_id = result.stdout.decode().split()[-1]
+        job_id = result.stdout.decode().split()[-1]
         # os.chdir(current_dir)
         # running = True 
         # while running:
@@ -135,20 +135,21 @@ class QEEnergyCalculator(threading.Thread):
         #                 if 'Job' in line and 'Ended' in line:
         #                     running = False
         # Check the status regularly
-        while not self._stop_event.is_set():
-            status = self.check_job_status()
+        while True:
+            status = self.check_job_status(job_id)
             if status != "RUNNING":
                 break
             time.sleep(10)
+            
             #need to manual cancel job from slurm if terminate run.py
         try:
-            print(job_dir_path + '/' + str(organism.id) + '.pwo')
             ase_relaxed_cell = read(job_dir_path + '/' + str(organism.id) + '.pwo')
             relaxed_cell = self.AAA.get_structure(ase_relaxed_cell)
             #relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
         except:
             print('Error reading structure of organism {} from pwo file '.format(organism.id))
             dictionary[key] = None
+            _stop_event.set()
             return
 
         # check if the qe calculation converged
@@ -161,6 +162,7 @@ class QEEnergyCalculator(threading.Thread):
             print('QE relaxation of organism {} did not converge '.format(
                 organism.id))
             dictionary[key] = None
+            _stop_event.set()
             return
         enthalpy = ase_relaxed_cell.get_potential_energy()
         organism.cell = relaxed_cell
@@ -169,18 +171,16 @@ class QEEnergyCalculator(threading.Thread):
         print('Setting energy of organism {} to {} '
               'eV/atom '.format(organism.id, organism.epa))
         dictionary[key] = organism
+        _stop_event.set()
 
-    def check_job_status(self):
+    def check_job_status(self,job_id):
         # Check the status of the job using squeue
-        result = subprocess.run(['squeue', '-j', self.job_id], stdout=subprocess.PIPE)
+        result = subprocess.run(['squeue', '-j', job_id], stdout=subprocess.PIPE)
         lines = result.stdout.decode().split('\n')
         if len(lines) > 2: # Job is still in the queue
             return "RUNNING"
         else:
             return "FINISHED"
-
-    def stop(self):
-        self._stop_event.set()
 
     def create_slurm_script(self,slurm_script_name,pwi_path):
         dir_path = os.path.dirname(pwi_path)

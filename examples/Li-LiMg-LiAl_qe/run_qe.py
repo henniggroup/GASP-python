@@ -101,6 +101,10 @@ def main():
     for creator in organism_creators:
         print("Making {} organisms with {}".format(creator.number, creator.name))
         while not creator.is_finished and not stopping_criteria.are_satisfied:
+            # import time
+            # print('Sleep')
+            # time.sleep(30)
+            # print('Wake up')
             # start initial batch of energy calculations
             if len(threads) < num_calcs_at_once:
                 # make a new organism - keep trying until we get one
@@ -135,6 +139,7 @@ def main():
                                     index,
                                     composition_space,
                                 ],
+                                name=str(index)
                             )
                             thread.start()
                             threads.append(thread)
@@ -142,6 +147,8 @@ def main():
             # process finished calculations and start new ones
             else:
                 for index, thread in enumerate(threads):
+                    # if not thread.is_alive():
+                    #     print(index,thread.is_alive())
                     if not thread.is_alive():
                         num_finished_calcs += 1
                         relaxed_organism = relaxed_organisms[index]
@@ -317,8 +324,10 @@ def main():
 
     # check if the stopping criteria were already met when making the initial
     # population
-    if stopping_criteria.are_satisfied:
-        quit()
+    # if stopping_criteria.are_satisfied:
+    #     print("Stopping criteria are satisfied.")
+    #     print('Quitting...')
+    #     quit()
 
     # populate the pool with the initial population
     pool.add_initial_population(initial_population, composition_space)

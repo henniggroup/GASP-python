@@ -32,3 +32,5 @@ nosetests.xml
 _build/*
 
 ./examples/Li-LiMg-LiAl_qe/garun_*/*
+
+__pycache__
