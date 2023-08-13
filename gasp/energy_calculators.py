@@ -163,12 +163,16 @@ class QEEnergyCalculator(threading.Thread):
         dir_path = os.path.dirname(pwi_path)
         base_name = os.path.basename(pwi_path)
         
-        if self.natoms > 0 and self.natoms <= 16:
+        if self.natoms > 0 and self.natoms <= 8:
             ncore = self.ncore_base * 1
-        elif self.natoms > 16 and self.natoms < 48:
+        elif self.natoms > 8 and self.natoms <= 16:
+            ncore = self.ncore_base * 2
+        elif self.natoms > 16 and self.natoms < 32:
             ncore = self.ncore_base * 4
         else:
             ncore = self.ncore_base * 8
+        if ncore > 64:
+            ncore = 64
         # elif self.natoms > 64:
         #     self.ncore = self.ncore_base * 8
 
@@ -195,7 +199,7 @@ class QEEnergyCalculator(threading.Thread):
         if self.calc_config["kpts"]:
             kpts = tuple(self.calc_config["kpts"])
         else:
-            kpts = kdens2mp(ase_atoms, kptdensity=3.5, even=True) #TODO: kptdensity varies based on cell? 
+            kpts = kdens2mp(ase_atoms, kptdensity=3, even=True) #TODO: kptdensity varies based on cell? 
         calc_obj = Espresso(
             input_data=input_data,
             pseudopotentials=pseudopotentials,
