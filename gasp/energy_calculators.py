@@ -161,13 +161,13 @@ class QEEnergyCalculator(threading.Thread):
 
         result = subprocess.run(['sbatch', 'run.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
         job_id = result.stdout.decode().split()[-1]
-
+        print(job_id,self.check_job_status(job_id))
         while True:
             status = self.check_job_status(job_id)
             if status != "RUNNING":
                 break
             time.sleep(10)
-
+        print(job_id,self.check_job_status(job_id))
         relax_output = job_dir_path + '/' + str(organism.id) + '_' + 'relax' + '.pwi.pwo'
         print(relax_output)
         try:

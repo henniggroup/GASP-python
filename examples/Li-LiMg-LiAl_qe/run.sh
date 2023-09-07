@@ -4,7 +4,7 @@
 #SBATCH -N 1 # Number of nodes
 #SBATCH --time=00-10:00:00
 #SBATCH -A cts180021p
-#SBATCH -p RM
+#SBATCH -p RM-shared
 ##SBATCH --nodelist=c024,c025
 ##SBATCH --mem=450GB # Memory pool for all cores in MB
 #SBATCH -e outputs_slurm/err #change the name of the err file 
