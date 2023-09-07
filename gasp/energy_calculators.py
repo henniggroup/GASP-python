@@ -107,7 +107,7 @@ class QEEnergyCalculator(threading.Thread):
         
         pwi_path = job_dir_path + '/' + str(organism.id)
         scale_lst = [0.9,0.95,1,1.05,1.1]
-        self.write_input_file(organism,pwi_path,'eos',scale_lst) #write eos input file 
+        self.write_input_file(organism,pwi_path,'scf',scale_lst) #write eos input file 
 
         shutil.copy(self.slurm_array_script_template, job_dir_path) #create run array shell script
         slurm_array_script_name = os.path.basename(self.slurm_array_script_template)
