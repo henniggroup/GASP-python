@@ -172,11 +172,8 @@ class QEEnergyCalculator(threading.Thread):
         print(relax_output)
         try:
             ase_relaxed_cell = read(relax_output)
-            print(1,ase_relaxed_cell)
             relaxed_cell = self.AAA.get_structure(ase_relaxed_cell)
-            print(2)
-            relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
-            print(3)
+
         except:
             print('Error reading structure of organism {} from relax pwo file '.format(organism.id))
             dictionary[key] = None
