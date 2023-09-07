@@ -128,7 +128,7 @@ class QEEnergyCalculator(threading.Thread):
             
         #need to manual cancel job from slurm if terminate run.py
         print(job_id,status)
-        eos_pwo_file_lst =[job_dir_path + '/' + str(organism.id) + '_' + str(i) + '.pwo' for i in [0.9,0.95,1,1.05,1]]
+        eos_pwo_file_lst =[job_dir_path + '/' + str(organism.id) + '_' + str(i) + '.pwi.pwo' for i in [0.9,0.95,1,1.05,1]]
         print(eos_pwo_file_lst)
         for eos_pwo_file in eos_pwo_file_lst:
             
@@ -168,7 +168,7 @@ class QEEnergyCalculator(threading.Thread):
                 break
             time.sleep(10)
 
-        relax_output = job_dir_path + '/' + str(organism.id) + '_' + 'relax' + '.pwo'
+        relax_output = job_dir_path + '/' + str(organism.id) + '_' + 'relax' + '.pwi.pwo'
         try:
             ase_relaxed_cell = read(relax_output)
             
