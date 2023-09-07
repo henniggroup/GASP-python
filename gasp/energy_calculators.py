@@ -129,6 +129,7 @@ class QEEnergyCalculator(threading.Thread):
         #need to manual cancel job from slurm if terminate run.py
         eos_pwo_file_lst =[job_dir_path + '/' + str(organism.id) + '_' + str(i) + '.pwo' for i in [0.9,0.95,1,1.05,1]]
         for eos_pwo_file in eos_pwo_file_lst:
+            print(eos_pwo_file)
             try:
                 _ = read(eos_pwo_file)
                 
