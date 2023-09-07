@@ -7,6 +7,7 @@ EnergyCode:
     quantum_espresso:
         qe_calc_settings: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/dft_bulk_calc_nokpts.yaml
         slurm_template_path: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/run.sh
+        slurm_array_template_path: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/run_array.sh
         ncore: 8
 
 Constraints: 
@@ -21,10 +22,10 @@ InitialPopulation:
     from_files:
         path_to_folder: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/ref_states
     random:
-        number: 100
+        number: 10
 
 StoppingCriteria: 
-    num_energy_calcs: 3000
+    num_energy_calcs: 20
 
 NumCalcsAtOnce: 50
 

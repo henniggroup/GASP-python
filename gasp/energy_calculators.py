@@ -38,16 +38,22 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from ase.calculators.calculator import kptdensity2monkhorstpack as kdens2mp
 from ase.calculators.espresso import Espresso
 from ase.io import read
+from ase.eos import EquationOfState
 import threading
 
 import time
+from copy import deepcopy
+
+from typing import List
+
+import numpy as np
 
 class QEEnergyCalculator(threading.Thread):
     """
     Calculates the energy of an organism using Quantum Espresso.
     """
 
-    def __init__(self, qe_calc_setting_yaml, slurm_script_template, ncore, geometry):
+    def __init__(self, qe_calc_setting_yaml,  slurm_script_template, slurm_array_script_template, ncore, geometry):
         '''
         Makes a QuantumEspressoEnergyCalculator.
 
@@ -59,6 +65,8 @@ class QEEnergyCalculator(threading.Thread):
         super(QEEnergyCalculator, self).__init__()
         self.name = 'quantum_espresso'
         self.slurm_script_template = slurm_script_template
+
+        self.slurm_array_script_template = slurm_array_script_template
         self.ncore_base = ncore
 
         self.AAA = AseAtomsAdaptor() #pymatgen structure <-> ase atoms
@@ -92,54 +100,85 @@ class QEEnergyCalculator(threading.Thread):
         # make the job directory
         job_dir_path = str(os.getcwd()) + '/temp/' + str(organism.id)
         os.mkdir(job_dir_path)
-        
-        pwi_path = job_dir_path + '/' + str(organism.id)
-        self.write_input_file(organism,pwi_path)
-
-        shutil.copy(self.slurm_script_template, job_dir_path)
-        slurm_script_name = os.path.basename(self.slurm_script_template)
-
-        self.create_slurm_script(slurm_script_name,pwi_path)
-        os.makedirs(job_dir_path+'/'+'outputs_slurm')
 
         # write out the unrelaxed structure to a poscar file
         organism.cell.to(fmt='poscar', filename=job_dir_path + '/POSCAR.' +
                          str(organism.id) + '_unrelaxed') #phase diagram not relevant
+        
+        pwi_path = job_dir_path + '/' + str(organism.id)
+        scale_lst = [0.9,0.95,1,1.05,1.1]
+        self.write_input_file(organism,pwi_path,'eos',scale_lst) #write eos input file 
+
+        shutil.copy(self.slurm_array_script_template, job_dir_path) #create run array shell script
+        slurm_array_script_name = os.path.basename(self.slurm_array_script_template)
+
+        self.create_slurm_script(slurm_array_script_name,pwi_path)
+        os.makedirs(job_dir_path+'/'+'outputs_slurm')
 
         print('Starting quantum espresso calculation on organism {} '.format(organism.id))
 
-        result = subprocess.run(['sbatch', 'run.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
+        result = subprocess.run(['sbatch', '--array=0-4', 'run_array.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
         job_id = result.stdout.decode().split()[-1]
- 
+
         while True:
             status = self.check_job_status(job_id)
             if status != "RUNNING":
                 break
             time.sleep(10)
             
-            #need to manual cancel job from slurm if terminate run.py
+        #need to manual cancel job from slurm if terminate run.py
+        eos_pwo_file_lst =[job_dir_path + '/' + str(organism.id) + '_' + str(i) + '.pwo' for i in [0.9,0.95,1,1.05,1]]
+        for eos_pwo_file in eos_pwo_file_lst:
+            try:
+                _ = read(eos_pwo_file)
+                
+                #relaxed_cell = self.AAA.get_structure(ase_relaxed_cell)
+                #relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
+            except:
+                print('Error reading structure of organism {} from eos pwo file '.format(organism.id))
+                dictionary[key] = None
+                _stop_event.set()
+                return
+        for eos_pwo_file in eos_pwo_file_lst:
+            self.check_convergence(eos_pwo_file,organism,dictionary,key,_stop_event)
+
+        scale = self.FitEOS(eos_pwo_file_lst,scale_lst)
+        if scale == False:
+            print('Error fitting eos of organism {}'.format(organism.id))
+            _stop_event.set()
+            return 
+        
+        #relax file 
+        self.write_input_file(organism,pwi_path,'relax',scale_lst=[scale],prefix_lst=['relax'])
+
+        shutil.copy(self.slurm_script_template, job_dir_path)
+        slurm_script_name = os.path.basename(self.slurm_script_template)
+
+        self.create_slurm_script(slurm_script_name,pwi_path)
+
+        result = subprocess.run(['sbatch', 'run.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
+        job_id = result.stdout.decode().split()[-1]
+
+        while True:
+            status = self.check_job_status(job_id)
+            if status != "RUNNING":
+                break
+            time.sleep(10)
+
+        relax_output = job_dir_path + '/' + str(organism.id) + '_' + 'relax' + '.pwo'
         try:
-            ase_relaxed_cell = read(job_dir_path + '/' + str(organism.id) + '.pwo')
+            ase_relaxed_cell = read(relax_output)
+            
             relaxed_cell = self.AAA.get_structure(ase_relaxed_cell)
-            #relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
+            relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
         except:
-            print('Error reading structure of organism {} from pwo file '.format(organism.id))
+            print('Error reading structure of organism {} from relax pwo file '.format(organism.id))
             dictionary[key] = None
             _stop_event.set()
             return
 
         # check if the qe calculation converged
-        converged = False
-        with open(job_dir_path + '/' + str(organism.id) + '.pwo') as f:
-            for line in f:
-                if 'JOB' in line and 'DONE.' in line:
-                    converged = True
-        if not converged:
-            print('QE relaxation of organism {} did not converge '.format(
-                organism.id))
-            dictionary[key] = None
-            _stop_event.set()
-            return
+        self.check_convergence(relax_output,organism,dictionary,key,_stop_event)
         
         enthalpy = ase_relaxed_cell.get_potential_energy()
         organism.cell = relaxed_cell
@@ -149,6 +188,53 @@ class QEEnergyCalculator(threading.Thread):
         #       'eV/atom '.format(organism.id, organism.epa))
         dictionary[key] = organism
         _stop_event.set() #turn off the thread
+
+    def check_convergence(self,output_path,organism,dictionary,key,_stop_event):
+        # check if the qe calculation converged
+        converged = False
+        with open(output_path) as f:
+            for line in f:
+                if 'JOB' in line and 'DONE.' in line:
+                    converged = True
+        if not converged:
+            print('QE calculation of organism {} did not converge '.format(
+                organism.id))
+            dictionary[key] = None
+            _stop_event.set()
+            return
+
+    def FitEOS(self,output_file_lst,scale_lst: List[float],eos_algorithm: str = "birch"):
+        es = []
+        vs = []
+        for file_name in output_file_lst:
+            try:
+                e = read(file_name).get_potential_energy()
+            except: continue
+            v = read(file_name).get_volume()
+            es.append(float(e))
+            vs.append(float(v))
+        eos = EquationOfState(vs, es, eos_algorithm)
+        v0, _, _ = eos.fit()
+        minvol = min(vs)
+        maxvol = max(vs)
+        # fig, ax = plt.subplots()
+        # if on_k8s:
+        #     eos.plot(f"{eos_plot_name}_eos.png", ax=ax)
+        # else:
+        #     eos.plot(f"{eos_plot_name}_eos.png",ax=ax)
+        # ax.set_xlabel(r"Volume ($\AA$)")
+        # ax.set_ylabel(r"Energy (eV)")
+        # plt.close(fig)
+        if not (minvol < v0 < maxvol):
+            return False
+        else:
+            scale_1_atoms_file_name =  np.array(output_file_lst)[np.array(scale_lst)==1][0]
+            atoms=read(scale_1_atoms_file_name)
+
+            v = atoms.get_volume()
+            scale = (v0 / v)**(1/3)
+
+            return float(scale)
 
     def check_job_status(self,job_id):
         # Check the status of the job using squeue
@@ -184,29 +270,37 @@ class QEEnergyCalculator(threading.Thread):
         # Write the modified content back to the file
         with open(dir_path+'/'+slurm_script_name, 'w') as f:
             f.write(content)
-            f.write(f"cd {dir_path}\n\n")
-            f.write(f"mpirun -np {ncore} $qe7_pw < {base_name}.pwi > {base_name}.pwo\n\n")
-            f.write("echo ' '\n")
-            f.write("echo 'Job Ended'")
+            # f.write(f"cd {dir_path}\n\n")
+            # f.write(f"mpirun -np {ncore} $qe7_pw < {base_name}.pwi > {base_name}.pwo\n\n")
+            # f.write("echo ' '\n")
+            # f.write("echo 'Job Ended'")
 
 
-    def write_input_file(self,organism,pwi_path):
+    def write_input_file(self,organism,pwi_path,calc_type: str, scale_lst: List[float] = [0.90,0.95,1,1.05,1.1],prefix_lst: List = [0.90,0.95,1,1.05,1.1]):
+
         ase_atoms = self.AAA.get_atoms(organism.cell)
         self.natoms=len(ase_atoms)
+        orig_cell = ase_atoms.get_cell()
         # calc data
         input_data = self.calc_config["input_data"]
+        input_data['control']['calculation'] = calc_type
         pseudopotentials = self.calc_config["pseudopotentials"]
-        if self.calc_config["kpts"]:
-            kpts = tuple(self.calc_config["kpts"])
-        else:
-            kpts = kdens2mp(ase_atoms, kptdensity=3, even=True) #TODO: kptdensity varies based on cell? 
-        calc_obj = Espresso(
-            input_data=input_data,
-            pseudopotentials=pseudopotentials,
-            kpts=kpts,
-            label=str(pwi_path),
-        )
-        calc_obj.write_input(ase_atoms)
+
+        for scale, prefix in zip(scale_lst,prefix_lst):
+            playdough_atoms = deepcopy(ase_atoms)
+            playdough_atoms.set_cell(orig_cell * scale, scale_atoms = True)
+
+            if self.calc_config["kpts"]:
+                kpts = tuple(self.calc_config["kpts"])
+            else:
+                kpts = kdens2mp(playdough_atoms, kptdensity=3, even=True) #TODO: kptdensity varies based on cell? 
+            calc_obj = Espresso(
+                input_data=input_data,
+                pseudopotentials=pseudopotentials,
+                kpts=kpts,
+                label='_'.join([str(pwi_path),str(prefix)]),
+            )
+            calc_obj.write_input(playdough_atoms)
 
 class VaspEnergyCalculator(object):
     """

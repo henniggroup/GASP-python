@@ -687,6 +687,7 @@ def make_quantum_espresso_energy_calculator(parameters, geometry):
             # get the path to the INCAR file
             qe_calc_setting_path = parameters['EnergyCode']['quantum_espresso']['qe_calc_settings']
             slurm_template_path = parameters['EnergyCode']['quantum_espresso']['slurm_template_path']
+            slurm_array_template_path = parameters['EnergyCode']['quantum_espresso']['slurm_array_template_path']
             ncore = parameters['EnergyCode']['quantum_espresso']['ncore']
             # check that the INCAR file exists
             if not os.path.exists(qe_calc_setting_path):
@@ -697,10 +698,14 @@ def make_quantum_espresso_energy_calculator(parameters, geometry):
                 print('The given slurm_template file does not exist.')
                 print('Quitting...')
                 quit()
+            if not os.path.exists(slurm_array_template_path):
+                print('The given slurm_array_template file does not exist.')
+                print('Quitting...')
+                quit()
             
 
         return energy_calculators.QEEnergyCalculator(
-                qe_calc_setting_path, slurm_template_path, ncore,geometry)
+                qe_calc_setting_path, slurm_template_path, slurm_array_template_path, ncore,geometry)
 
 def make_stopping_criteria(parameters, composition_space):
     """
