@@ -1,0 +1,32 @@
+CompositionSpace: 
+    - LiMg
+    - LiAl
+    - Li
+
+EnergyCode: 
+    quantum_espresso:
+        qe_calc_settings: /home/jiankunp/projects/GASP-python/examples/Li-LiMg-LiAl_qe_arjuna/dft_bulk_calc_nokpts.yaml
+        slurm_template_path: /home/jiankunp/projects/GASP-python/examples/Li-LiMg-LiAl_qe_arjuna/run.sh
+        slurm_array_template_path: /home/jiankunp/projects/GASP-python/examples/Li-LiMg-LiAl_qe_arjuna/run_array.sh
+        ncore: 8
+
+Constraints: 
+    min_num_atoms: 2
+    max_num_atoms: 40
+    min_lattice_length: 3
+    max_lattice_length: 40
+    allow_endpoints: False
+
+
+InitialPopulation:
+    from_files:
+        path_to_folder: /home/jiankunp/projects/GASP-python/examples/Li-LiMg-LiAl_qe_arjuna/ref_states
+    random:
+        number: 6
+
+StoppingCriteria: 
+    num_energy_calcs: 10
+
+NumCalcsAtOnce: 2
+
+

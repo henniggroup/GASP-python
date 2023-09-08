@@ -1,0 +1,324 @@
+Job started on e001 at Thu Sep  7 18:52:26 EDT 2023
+Making 5 organisms with file organism creator
+Making organism 1 from file: POSCAR.LiMg 
+Organisms left for file organism creator: 4 
+Making organism 2 from file: POSCAR.Li 
+Organisms left for file organism creator: 3 
+Starting quantum espresso calculation on organism 1 
+Starting quantum espresso calculation on organism 2 
+Adding organism 1 to the initial population
+Number of energy calculations so far: 1 
+Making organism 3 from file: POSCAR.Li2Al 
+Organisms left for file organism creator: 2 
+Starting quantum espresso calculation on organism 3 
+Adding organism 2 to the initial population
+Number of energy calculations so far: 2 
+Making organism 4 from file: POSCAR.Li5Mg 
+Organisms left for file organism creator: 1 
+Starting quantum espresso calculation on organism 4 
+Adding organism 3 to the initial population
+Number of energy calculations so far: 3 
+Making organism 5 from file: POSCAR.LiAl 
+Organisms left for file organism creator: 0 
+Making 6 organisms with random organism creator
+Starting quantum espresso calculation on organism 5 
+Adding organism 4 to the initial population
+Number of energy calculations so far: 4 
+Random organism creator making organism 6 
+Organism 6 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 7 
+Organism 7 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 8 
+Organism 8 failed min lattice length constraint 
+Random organism creator making organism 9 
+Organism 9 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 10 
+Organism 10 failed min lattice length constraint 
+Random organism creator making organism 11 
+Organism 11 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 12 
+Organism 12 failed min lattice length constraint 
+Random organism creator making organism 13 
+Organism 13 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 14 
+Starting quantum espresso calculation on organism 14 
+Adding organism 5 to the initial population
+Number of energy calculations so far: 5 
+Random organism creator making organism 15 
+Organism 15 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 16 
+Organism 16 failed min lattice length constraint 
+Random organism creator making organism 17 
+Organism 17 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 18 
+Organism 18 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 19 
+Organism 19 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 20 
+Organism 20 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 21 
+Organism 21 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 22 
+Organism 22 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 23 
+Organism 23 failed min lattice length constraint 
+Random organism creator making organism 24 
+Organism 24 lies outside the composition space 
+Random organism creator making organism 25 
+Organism 25 failed min lattice length constraint 
+Random organism creator making organism 26 
+Organism 26 failed min lattice length constraint 
+Random organism creator making organism 27 
+Organism 27 failed min lattice length constraint 
+Random organism creator making organism 28 
+Organism 28 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 29 
+Organism 29 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 30 
+Organism 30 failed min lattice length constraint 
+Random organism creator making organism 31 
+Organism 31 failed min lattice length constraint 
+Random organism creator making organism 32 
+Organism 32 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 33 
+Organism 33 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 34 
+Organism 34 failed min lattice length constraint 
+Random organism creator making organism 35 
+Organism 35 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 36 
+Organism 36 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 37 
+Organism 37 failed min lattice length constraint 
+Random organism creator making organism 38 
+Organism 38 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 39 
+Organism 39 failed min lattice length constraint 
+Random organism creator making organism 40 
+Organism 40 failed min lattice length constraint 
+Random organism creator making organism 41 
+Organism 41 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 42 
+Organism 42 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 43 
+Organism 43 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 44 
+Organism 44 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 45 
+Organism 45 failed min lattice length constraint 
+Random organism creator making organism 46 
+Organism 46 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 47 
+Organism 47 failed min lattice length constraint 
+Random organism creator making organism 48 
+Organism 48 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 49 
+Organism 49 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 50 
+Organism 50 failed min lattice length constraint 
+Random organism creator making organism 51 
+Organism 51 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 52 
+Organism 52 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 53 
+Organism 53 lies outside the composition space 
+Random organism creator making organism 54 
+Organism 54 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 55 
+Organism 55 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 56 
+Organism 56 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 57 
+Organism 57 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 58 
+Organism 58 failed min lattice length constraint 
+Random organism creator making organism 59 
+Organism 59 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 60 
+Organism 60 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 61 
+Organism 61 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 62 
+Organism 62 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 63 
+Organism 63 failed min lattice length constraint 
+Random organism creator making organism 64 
+Organism 64 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 65 
+Starting quantum espresso calculation on organism 65 
+Error fitting eos of organism 14
+Random organism creator making organism 66 
+Organism 66 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 67 
+Organism 67 failed min lattice length constraint 
+Random organism creator making organism 68 
+Organism 68 failed min lattice length constraint 
+Random organism creator making organism 69 
+Organism 69 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 70 
+Organism 70 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 71 
+Organism 71 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 72 
+Organism 72 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 73 
+Organism 73 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 74 
+Organism 74 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 75 
+Organism 75 failed min lattice length constraint 
+Random organism creator making organism 76 
+Organism 76 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 77 
+Organism 77 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 78 
+Organism 78 failed min lattice length constraint 
+Random organism creator making organism 79 
+Organism 79 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 80 
+Organism 80 failed min lattice length constraint 
+Random organism creator making organism 81 
+Organism 81 failed min lattice length constraint 
+Random organism creator making organism 82 
+Organism 82 failed min lattice length constraint 
+Random organism creator making organism 83 
+Organism 83 failed min lattice length constraint 
+Random organism creator making organism 84 
+Organism 84 failed min lattice length constraint 
+Random organism creator making organism 85 
+Organism 85 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 86 
+Organism 86 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 87 
+Organism 87 failed min lattice length constraint 
+Random organism creator making organism 88 
+Organism 88 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 89 
+Organism 89 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 90 
+Organism 90 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 91 
+Organism 91 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 92 
+Organism 92 failed min lattice length constraint 
+Random organism creator making organism 93 
+Organism 93 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 94 
+Organism 94 failed min lattice length constraint 
+Random organism creator making organism 95 
+Organism 95 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 96 
+Organism 96 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 97 
+Organism 97 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 98 
+Organism 98 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 99 
+Organism 99 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 100 
+Organism 100 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 101 
+Organism 101 failed min lattice length constraint 
+Random organism creator making organism 102 
+Organism 102 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 103 
+Organism 103 failed min lattice length constraint 
+Random organism creator making organism 104 
+Organism 104 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 105 
+Organism 105 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 106 
+Organism 106 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 107 
+Organism 107 failed min lattice length constraint 
+Random organism creator making organism 108 
+Organism 108 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 109 
+Organism 109 failed min lattice length constraint 
+Random organism creator making organism 110 
+Organism 110 failed min lattice length constraint 
+Random organism creator making organism 111 
+Organism 111 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 112 
+Organism 112 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 113 
+Organism 113 failed min lattice length constraint 
+Random organism creator making organism 114 
+Organism 114 failed min lattice length constraint 
+Random organism creator making organism 115 
+Organism 115 failed min lattice length constraint 
+Random organism creator making organism 116 
+Organism 116 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 117 
+Organism 117 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 118 
+Starting quantum espresso calculation on organism 118 
+Error fitting eos of organism 65
+Random organism creator making organism 119 
+Organism 119 failed min lattice length constraint 
+Random organism creator making organism 120 
+Organism 120 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 121 
+Organism 121 failed min lattice length constraint 
+Random organism creator making organism 122 
+Organism 122 failed min lattice length constraint 
+Random organism creator making organism 123 
+Organism 123 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 124 
+Organism 124 failed min lattice length constraint 
+Random organism creator making organism 125 
+Starting quantum espresso calculation on organism 125 
+Error fitting eos of organism 118
+Random organism creator making organism 126 
+Organism 126 failed min lattice length constraint 
+Random organism creator making organism 127 
+Organism 127 failed min lattice length constraint 
+Random organism creator making organism 128 
+Organism 128 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 129 
+Organism 129 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 130 
+Organism 130 lies outside the composition space 
+Random organism creator making organism 131 
+Organism 131 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 132 
+Organism 132 failed per-species minimum interatomic distance constraint 
+Random organism creator making organism 133 
+Organism 133 failed min lattice length constraint 
+Random organism creator making organism 134 
+Organism 134 failed min lattice length constraint 
+Random organism creator making organism 135 
+Starting quantum espresso calculation on organism 135 
+Error fitting eos of organism 125
+Error fitting eos of organism 135
+Populating the pool with the initial population...
+Summary of the initial population: 
+Organism 1 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 2 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 3 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 4 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 5 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Creating offspring organism 136 from parent organism 5 with the permutation variation 
+Organism 136 is at a composition space endpoint 
+Creating offspring organism 137 from parent organism 3 with the permutation variation 
+Creating offspring organism 138 from parent organism 4 with the number of atoms mutation variation 
+Starting quantum espresso calculation on organism 137 
+Starting quantum espresso calculation on organism 138 
+Adding organism 137 to the pool 
+Removing organism 137 from the pool 
+Summary of the pool:
+Organism 1 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 2 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 3 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 4 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 5 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Number of energy calculations so far: 11 
+Adding organism 138 to the pool 
+Removing organism 138 from the pool 
+Summary of the pool:
+Organism 1 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 2 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 3 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 4 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Organism 5 has value 0.0 and fitness 1.0 and selection probability 0.2 
+Number of energy calculations so far: 12 
