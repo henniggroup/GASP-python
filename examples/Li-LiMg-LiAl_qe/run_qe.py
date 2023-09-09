@@ -26,6 +26,8 @@ import sys
 import os
 import datetime
 
+from ase.db import connect
+
 
 def main():
     # get dictionaries from the input file (in yaml format)
@@ -78,6 +80,9 @@ def main():
     os.mkdir(garun_dir)
     os.chdir(garun_dir)
 
+    # make a running database
+    run_db = connect("run_db.db")
+
     # make the temp subdirectory where the energy calculations will be done
     os.mkdir(garun_dir + "/temp")
 
@@ -101,6 +106,7 @@ def main():
     for creator in organism_creators: #[from_files_organism, random_organism]
         print("Making {} organisms with {}".format(creator.number, creator.name))
         while not creator.is_finished and not stopping_criteria.are_satisfied:
+            stopping_criteria.update_calc_counter(num_finished_calcs)
             # start initial batch of energy calculations
             if len(threads) < num_calcs_at_once:
                 # make a new organism - keep trying until we get one
@@ -125,7 +131,7 @@ def main():
                             # whole_pop don't change upon relaxation
                             whole_pop.append(copy.deepcopy(new_organism)) #RAM bottleneck (TODO: make a database, instead of appending the list)
                             geometry.pad(new_organism.cell) #Does nothing to bulk 
-                            stopping_criteria.update_calc_counter() #TODO: update calc count based on success run
+                            #stopping_criteria.update_calc_counter() #TODO: update calc count based on success run
                             index = len(threads)
                             thread = threading.Thread(
                                 target=energy_calculator.do_energy_calculation,
@@ -133,7 +139,7 @@ def main():
                                     new_organism,
                                     relaxed_organisms,
                                     index,
-                                    composition_space,
+                                    run_db,
                                 ],
                                 name=str(index)
                             )
@@ -146,12 +152,13 @@ def main():
                     # if not thread.is_alive():
                     #     print(index,thread.is_alive())
                     if not thread.is_alive():
-                        num_finished_calcs += 1
+                        
                         relaxed_organism = relaxed_organisms[index]
                         relaxed_organisms[index] = None
 
                         # take care of relaxed organism
                         if relaxed_organism is not None:
+                            num_finished_calcs = run_db.get(garun_index = index).id
                             geometry.unpad(relaxed_organism.cell, constraints)
                             if developer.develop(
                                 relaxed_organism,
@@ -237,7 +244,6 @@ def main():
                                     if redundant_organism is None:  # not redundant
                                         whole_pop.append(copy.deepcopy(new_organism))
                                         geometry.pad(new_organism.cell)
-                                        stopping_criteria.update_calc_counter()
                                         new_thread = threading.Thread(
                                             target=energy_calculator.do_energy_calculation,
                                             args=[
@@ -264,7 +270,7 @@ def main():
         for index, thread in enumerate(threads):
             # print('TEST',index,thread.is_alive())
             if not thread.is_alive() and index not in handled_indices:
-                num_finished_calcs += 1
+                # num_finished_calcs += 1
                 relaxed_organism = relaxed_organisms[index]
                 num_to_get = num_to_get - 1
                 handled_indices.append(index)
@@ -272,6 +278,7 @@ def main():
 
                 # take care of relaxed organism
                 if relaxed_organism is not None:
+                    num_finished_calcs = run_db.get(garun_index = index).id
                     geometry.unpad(relaxed_organism.cell, constraints)
                     if developer.develop(
                         relaxed_organism, composition_space, constraints, geometry, pool
@@ -353,7 +360,7 @@ def main():
         )
         whole_pop.append(copy.deepcopy(unrelaxed_offspring))
         geometry.pad(unrelaxed_offspring.cell)
-        stopping_criteria.update_calc_counter()
+        # stopping_criteria.update_calc_counter()
         index = len(threads)
         new_thread = threading.Thread(
             target=energy_calculator.do_energy_calculation,
@@ -364,14 +371,16 @@ def main():
 
     # process finished calculations and start new ones
     while not stopping_criteria.are_satisfied:
+        stopping_criteria.update_calc_counter(num_finished_calcs)
         for index, thread in enumerate(threads):
             if not thread.is_alive():
-                num_finished_calcs += 1
+                # num_finished_calcs += 1
                 relaxed_offspring = relaxed_organisms[index]
                 relaxed_organisms[index] = None
 
                 # take care of relaxed offspring organism
                 if relaxed_offspring is not None:
+                    num_finished_calcs = run_db.get(garun_index = index).id
                     geometry.unpad(relaxed_offspring.cell, constraints)
                     if developer.develop(
                         relaxed_offspring,
@@ -472,7 +481,7 @@ def main():
                     )
                     whole_pop.append(copy.deepcopy(unrelaxed_offspring))
                     geometry.pad(unrelaxed_offspring.cell)
-                    stopping_criteria.update_calc_counter()
+                    # stopping_criteria.update_calc_counter()
                     new_thread = threading.Thread(
                         target=energy_calculator.do_energy_calculation,
                         args=[
@@ -492,7 +501,7 @@ def main():
     while num_to_get > 0:
         for index, thread in enumerate(threads):
             if not thread.is_alive() and index not in handled_indices:
-                num_finished_calcs += 1
+                # num_finished_calcs += 1
                 relaxed_offspring = relaxed_organisms[index]
                 num_to_get -= 1
                 handled_indices.append(index)
@@ -500,6 +509,7 @@ def main():
 
                 # take care of relaxed offspring organism
                 if relaxed_offspring is not None:
+                    num_finished_calcs = run_db.get(garun_index = index).id
                     geometry.unpad(relaxed_offspring.cell, constraints)
                     if developer.develop(
                         relaxed_offspring,

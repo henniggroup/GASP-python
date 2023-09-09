@@ -687,8 +687,12 @@ def make_quantum_espresso_energy_calculator(parameters, geometry):
             # get the path to the INCAR file
             qe_calc_setting_path = parameters['EnergyCode']['quantum_espresso']['qe_calc_settings']
             slurm_template_path = parameters['EnergyCode']['quantum_espresso']['slurm_template_path']
+            eos_fit_path = parameters['EnergyCode']['quantum_espresso']['eos_fit_template']
+            eos_fit_sbatch_path = parameters['EnergyCode']['quantum_espresso']['eos_fit_sbatch_template']
             slurm_array_template_path = parameters['EnergyCode']['quantum_espresso']['slurm_array_template_path']
             ncore = parameters['EnergyCode']['quantum_espresso']['ncore']
+            restart = bool(parameters['EnergyCode']['quantum_espresso']['restart'])
+            
             # check that the INCAR file exists
             if not os.path.exists(qe_calc_setting_path):
                 print('The given qe_calc_settings file does not exist.')
@@ -702,10 +706,27 @@ def make_quantum_espresso_energy_calculator(parameters, geometry):
                 print('The given slurm_array_template file does not exist.')
                 print('Quitting...')
                 quit()
+            if not os.path.exists(eos_fit_path):
+                print('The given eos_fit_template file does not exist.')
+                print('Quitting...')
+                quit()
+            if not os.path.exists(eos_fit_sbatch_path):
+                print('The given eos_fit_sbatch_template file does not exist.')
+                print('Quitting...')
+                quit()
+            if restart:
+                restart_db_path =  parameters['EnergyCode']['quantum_espresso']['restart_db']
+                if not os.path.exists(restart_db_path):
+                    print('The given restart_db file does not exist.')
+                    print('Quitting...')
+                    quit()  
+            else:
+                restart_db_path = None
+
             
 
         return energy_calculators.QEEnergyCalculator(
-                qe_calc_setting_path, slurm_template_path, slurm_array_template_path, ncore,geometry)
+                qe_calc_setting_path, slurm_template_path, slurm_array_template_path, ncore,eos_fit_path,eos_fit_sbatch_path,restart,restart_db_path)
 
 def make_stopping_criteria(parameters, composition_space):
     """

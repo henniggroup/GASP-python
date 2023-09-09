@@ -827,14 +827,14 @@ class StoppingCriteria(object):
             else:
                 self.num_energy_calcs = None
 
-    def update_calc_counter(self):
+    def update_calc_counter(self,num_finished_calc):
         """
         If num_energy_calcs stopping criteria is being used, increments calc
         counter and updates are_satisfied if necessary.
         """
         if self.num_energy_calcs is not None:
-            self.calc_counter += 1
-            if self.calc_counter >= self.num_energy_calcs:
+            #self.calc_counter += 1
+            if num_finished_calc >= self.num_energy_calcs:
                 self.are_satisfied = True
     def check_organism(self, organism, redundancy_guard, geometry):
         """

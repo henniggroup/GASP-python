@@ -38,7 +38,8 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from ase.calculators.calculator import kptdensity2monkhorstpack as kdens2mp
 from ase.calculators.espresso import Espresso
 from ase.io import read
-from ase.eos import EquationOfState
+from ase.db import connect
+
 import threading
 
 import time
@@ -53,7 +54,7 @@ class QEEnergyCalculator(threading.Thread):
     Calculates the energy of an organism using Quantum Espresso.
     """
 
-    def __init__(self, qe_calc_setting_yaml,  slurm_script_template, slurm_array_script_template, ncore, geometry):
+    def __init__(self, qe_calc_setting_yaml,  slurm_script_template, slurm_array_script_template, ncore, eos_fit_template,eos_fit_sbatch, restart,restart_db_pat):
         '''
         Makes a QuantumEspressoEnergyCalculator.
 
@@ -69,13 +70,18 @@ class QEEnergyCalculator(threading.Thread):
         self.slurm_array_script_template = slurm_array_script_template
         self.ncore_base = ncore
 
+        self.eos_fit_template = eos_fit_template
+        self.eos_fit_sbatch = eos_fit_sbatch
+
         self.AAA = AseAtomsAdaptor() #pymatgen structure <-> ase atoms
         self.qe_dft_calc = qe_calc_setting_yaml
         with open(self.qe_dft_calc,'r') as f:
             self.calc_config=yaml.safe_load(f)
+        if restart == True:
+            self.ase_db = connect(restart_db_path)
 
     def do_energy_calculation(self, organism, dictionary, key,
-                              composition_space):
+                              run_db):
         """
         Calculates the energy of an organism using Quantum Espresso, and stores the relaxed
         organism in the provided dictionary at the provided key. If the
@@ -120,11 +126,7 @@ class QEEnergyCalculator(threading.Thread):
         result = subprocess.run(['sbatch', '--array=0-4', 'run_array.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
         job_id = result.stdout.decode().split()[-1]
 
-        while True:
-            status = self.check_job_status(job_id)
-            if status != "RUNNING":
-                break
-            time.sleep(10)
+        self.check_job_status(job_id)
             
         #need to manual cancel job from slurm if terminate run.py
 
@@ -145,9 +147,12 @@ class QEEnergyCalculator(threading.Thread):
         for eos_pwo_file in eos_pwo_file_lst:
             self.check_convergence(eos_pwo_file,organism,dictionary,key,_stop_event)
 
-        scale = self.FitEOS(eos_pwo_file_lst,scale_lst)
-        if scale == False:
+
+
+        scale = self.FitEOS(job_dir_path)
+        if scale == 0:
             print('Error fitting eos of organism {}'.format(organism.id))
+            dictionary[key] = None
             _stop_event.set()
             return 
         
@@ -159,13 +164,10 @@ class QEEnergyCalculator(threading.Thread):
 
         self.create_slurm_script(slurm_script_name,pwi_path)
 
-        result = subprocess.run(['sbatch', 'run.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
+        result = subprocess.run(['sbatch', 'run_relax.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
         job_id = result.stdout.decode().split()[-1]
-        while True:
-            status = self.check_job_status(job_id)
-            if status != "RUNNING":
-                break
-            time.sleep(10)
+
+        self.check_job_status(job_id)
         relax_output = job_dir_path + '/' + str(organism.id) + '_' + 'relax' + '.pwi.pwo'
         try:
             ase_relaxed_cell = read(relax_output)
@@ -187,7 +189,10 @@ class QEEnergyCalculator(threading.Thread):
         # print('Setting energy of organism {} to {} '
         #       'eV/atom '.format(organism.id, organism.epa))
         dictionary[key] = organism
+        run_db.write(ase_relaxed_cell,garun_index = key)
         _stop_event.set() #turn off the thread
+
+
 
     def check_convergence(self,output_path,organism,dictionary,key,_stop_event):
         # check if the qe calculation converged
@@ -203,47 +208,33 @@ class QEEnergyCalculator(threading.Thread):
             _stop_event.set()
             return
 
-    def FitEOS(self,output_file_lst,scale_lst: List[float],eos_algorithm: str = "birch"):
-        es = []
-        vs = []
-        for file_name in output_file_lst:
-            try:
-                e = read(file_name).get_potential_energy()
-            except: continue
-            v = read(file_name).get_volume()
-            es.append(float(e))
-            vs.append(float(v))
-        eos = EquationOfState(vs, es, eos_algorithm)
-        v0, _, _ = eos.fit()
-        minvol = min(vs)
-        maxvol = max(vs)
-        # fig, ax = plt.subplots()
-        # if on_k8s:
-        #     eos.plot(f"{eos_plot_name}_eos.png", ax=ax)
-        # else:
-        #     eos.plot(f"{eos_plot_name}_eos.png",ax=ax)
-        # ax.set_xlabel(r"Volume ($\AA$)")
-        # ax.set_ylabel(r"Energy (eV)")
-        # plt.close(fig)
-        if not (minvol < v0 < maxvol):
-            return False
+    def check_job_status(self,job_id):
+        while True:
+            # Check the status of the job using squeue
+
+            result = subprocess.run(['squeue', '-j', job_id], stdout=subprocess.PIPE)
+            lines = result.stdout.decode().split('\n')
+            if len(lines) > 2: # Job is still in the queue
+                status = "RUNNING"
+            else:
+                status = "FINISHED"
+            if status != "RUNNING":
+                break
+            time.sleep(10)
+
+    def FitEOS(self,job_dir_path):
+        shutil.copy(self.eos_fit_template, job_dir_path) #create run array shell script
+        shutil.copy(self.eos_fit_sbatch, job_dir_path)
+        result = subprocess.run(['sbatch', 'run_eos.sh'],stdout=subprocess.PIPE,cwd=job_dir_path)
+        job_id = result.stdout.decode().split()[-1]
+        self.check_job_status(job_id)
+        with open("/".join([job_dir_path,"eos_fitting.txt"]),'r') as f:
+            scale=f.readline()
+        if scale == '0' or scale == '':
+            return 0
         else:
-            scale_1_atoms_file_name =  np.array(output_file_lst)[np.array(scale_lst)==1][0]
-            atoms=read(scale_1_atoms_file_name)
-
-            v = atoms.get_volume()
-            scale = (v0 / v)**(1/3)
-
             return float(scale)
 
-    def check_job_status(self,job_id):
-        # Check the status of the job using squeue
-        result = subprocess.run(['squeue', '-j', job_id], stdout=subprocess.PIPE)
-        lines = result.stdout.decode().split('\n')
-        if len(lines) > 2: # Job is still in the queue
-            return "RUNNING"
-        else:
-            return "FINISHED"
 
     def create_slurm_script(self,slurm_script_name,pwi_path):
         dir_path = os.path.dirname(pwi_path)

@@ -6,8 +6,11 @@ CompositionSpace:
 EnergyCode: 
     quantum_espresso:
         qe_calc_settings: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/dft_bulk_calc_nokpts.yaml
-        slurm_template_path: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/run.sh
+        slurm_template_path: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/run_relax.sh
         slurm_array_template_path: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/run_array.sh
+        eos_fit_template: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/fit_eos.py
+        eos_fit_sbatch_template: /ocean/projects/cts180021p/jpu/projects/GASP-python/examples/Li-LiMg-LiAl_qe/run_eos.sh
+        restart: False
         ncore: 8
 
 Constraints: 
@@ -27,6 +30,6 @@ InitialPopulation:
 StoppingCriteria: 
     num_energy_calcs: 20
 
-NumCalcsAtOnce: 50
+NumCalcsAtOnce: 5
 
 
