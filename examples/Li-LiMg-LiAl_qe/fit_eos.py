@@ -8,7 +8,7 @@ from glob import glob
 import numpy as np 
 
 
-def FitEOS(output_file_lst, str = "sjeos",write_to_disk=True):
+def FitEOS(output_file_lst, eos_algorithm:str = "sjeos",write_to_disk=True):
     es = []
     vs = []
     for file_name in output_file_lst:
