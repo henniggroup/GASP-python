@@ -130,22 +130,24 @@ class QEEnergyCalculator(threading.Thread):
             
         #need to manual cancel job from slurm if terminate run.py
 
-        eos_pwo_file_lst =[job_dir_path + '/' + str(organism.id) + '_' + str(i) + '.pwi.pwo' for i in [0.9,0.95,1,1.05,1]]
-
-        for eos_pwo_file in eos_pwo_file_lst:
+        #eos_pwo_file_lst =[job_dir_path + '/' + str(organism.id) + '_' + str(i) + '.pwi.pwo' for i in scale_lst]
+        #avail_scale = []
+        # for eos_pwo_file,scale in zip(eos_pwo_file_lst,scale_lst):
             
-            try:
-                _ = read(eos_pwo_file)
-                
-                #relaxed_cell = self.AAA.get_structure(ase_relaxed_cell)
-                #relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
-            except:
-                print('Error reading structure of organism {} from eos pwo file '.format(organism.id))
-                dictionary[key] = None
-                _stop_event.set()
-                return
-        for eos_pwo_file in eos_pwo_file_lst:
-            self.check_convergence(eos_pwo_file,organism,dictionary,key,_stop_event)
+        #     try:
+        #         _ = read(eos_pwo_file)
+        #         avail_scale 
+        #         #relaxed_cell = self.AAA.get_structure(ase_relaxed_cell)
+        #         #relaxed_cell = Cell.from_file(job_dir_path + '/CONTCAR')
+        #     except:
+        #         # print('Error reading structure of organism {} from eos pwo file '.format(organism.id))
+        #         # dictionary[key] = None
+        #         # _stop_event.set()
+        #         # return
+        #         continue
+
+        # for eos_pwo_file in eos_pwo_file_lst:
+        #     self.check_convergence(eos_pwo_file,organism,dictionary,key,_stop_event)
 
 
 
@@ -188,8 +190,8 @@ class QEEnergyCalculator(threading.Thread):
         organism.epa = enthalpy/organism.cell.num_sites
         # print('Setting energy of organism {} to {} '
         #       'eV/atom '.format(organism.id, organism.epa))
-        dictionary[key] = organism
-        run_db.write(ase_relaxed_cell,garun_index = key)
+        dictionary[key] = (organism,relax_output)
+        #run_db.write(ase_relaxed_cell,garun_index = int(organism.id))
         _stop_event.set() #turn off the thread
 
 

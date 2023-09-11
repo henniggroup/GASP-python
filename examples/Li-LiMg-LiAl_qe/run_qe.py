@@ -27,6 +27,7 @@ import os
 import datetime
 
 from ase.db import connect
+from ase.io import read
 
 
 def main():
@@ -156,9 +157,12 @@ def main():
                         relaxed_organism = relaxed_organisms[index]
                         relaxed_organisms[index] = None
 
+
                         # take care of relaxed organism
                         if relaxed_organism is not None:
-                            num_finished_calcs = run_db.get(garun_index = index).id
+                            ase_atom_path = relaxed_organism[1]
+                            relaxed_organism = relaxed_organism[0]
+                            num_finished_calcs = run_db.write(read(ase_atom_path),garun_index=int(relaxed_organism.id))
                             geometry.unpad(relaxed_organism.cell, constraints)
                             if developer.develop(
                                 relaxed_organism,
@@ -278,7 +282,9 @@ def main():
 
                 # take care of relaxed organism
                 if relaxed_organism is not None:
-                    num_finished_calcs = run_db.get(garun_index = index).id
+                    ase_atom_path = relaxed_organism[1]
+                    relaxed_organism = relaxed_organism[0]
+                    num_finished_calcs = run_db.write(read(ase_atom_path),garun_index=int(relaxed_organism.id))
                     geometry.unpad(relaxed_organism.cell, constraints)
                     if developer.develop(
                         relaxed_organism, composition_space, constraints, geometry, pool
@@ -380,7 +386,9 @@ def main():
 
                 # take care of relaxed offspring organism
                 if relaxed_offspring is not None:
-                    num_finished_calcs = run_db.get(garun_index = index).id
+                    ase_atom_path = relaxed_offspring[1]
+                    relaxed_offspring = relaxed_offspring[0]
+                    num_finished_calcs = run_db.write(read(ase_atom_path),garun_index=int(relaxed_offspring.id))
                     geometry.unpad(relaxed_offspring.cell, constraints)
                     if developer.develop(
                         relaxed_offspring,
@@ -509,7 +517,9 @@ def main():
 
                 # take care of relaxed offspring organism
                 if relaxed_offspring is not None:
-                    num_finished_calcs = run_db.get(garun_index = index).id
+                    ase_atom_path = relaxed_offspring[1]
+                    relaxed_offspring = relaxed_offspring[0]
+                    num_finished_calcs = run_db.write(read(ase_atom_path),garun_index=int(relaxed_offspring.id))
                     geometry.unpad(relaxed_offspring.cell, constraints)
                     if developer.develop(
                         relaxed_offspring,
